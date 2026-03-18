@@ -196,9 +196,10 @@ async function rest<T>(
   return JSON.parse(responseText) as T;
 }
 
-export async function fetchSlotsByDate(date: string) {
+export async function fetchSlotsByDate(date: string, token?: string) {
   return rest<any[]>(
-    `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category))&slot_date=eq.${date}&order=start_time.asc`
+    `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category))&slot_date=eq.${date}&order=start_time.asc`,
+    token ? { token } : undefined
   );
 }
 
