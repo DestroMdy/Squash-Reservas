@@ -149,7 +149,13 @@ async function rest<T>(
     return undefined as T;
   }
 
-  return (await response.json()) as T;
+  const responseText = await response.text();
+
+  if (!responseText.trim()) {
+    return undefined as T;
+  }
+
+  return JSON.parse(responseText) as T;
 }
 
 export async function fetchSlotsByDate(date: string) {
