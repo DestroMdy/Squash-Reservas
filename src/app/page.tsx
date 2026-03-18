@@ -1,6 +1,28 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { getSession } from "@/lib/supabase";
 
 export default function HomePage() {
+  const [isLogged, setIsLogged] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    function updateAuthState() {
+      const session = getSession();
+      setIsLogged(Boolean(session?.access_token));
+      setMounted(true);
+    }
+
+    updateAuthState();
+    window.addEventListener("sr-auth-change", updateAuthState);
+
+    return () => {
+      window.removeEventListener("sr-auth-change", updateAuthState);
+    };
+  }, []);
+
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-3xl items-center">
       <section className="card w-full p-8 sm:p-10">
@@ -18,15 +40,25 @@ export default function HomePage() {
         </div>
 
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Link href="/login" className="btn-primary text-center">
-            Ingresar
-          </Link>
-          <Link href="/schedule" className="btn-secondary text-center">
+          {!mounted ? null : !isLogged ? (
+            <Link href="/login" className="btn-primary text-center">
+              Ingresar
+            </Link>
+          ) : null}
+          <Link
+            href={isLogged ? "/schedule" : "/schedule"}
+            className={`${!mounted || !isLogged ? "btn-secondary" : "btn-primary"} text-center`}
+          >
             Ver agenda
           </Link>
           <Link href="/my-bookings" className="btn-secondary text-center">
             Mis reservas
           </Link>
+          {isLogged ? (
+            <Link href="/profile" className="btn-secondary text-center">
+              Mi perfil
+            </Link>
+          ) : null}
         </div>
       </section>
     </div>
