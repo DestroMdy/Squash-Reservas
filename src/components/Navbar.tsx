@@ -4,24 +4,28 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { getSession, signOut } from "@/lib/supabase";
 
+const ADMIN_EMAIL = "alann.freire@gmail.com";
+
 const navItems = [
   { href: "/schedule", label: "Agenda" },
   { href: "/my-bookings", label: "Mis reservas" },
   { href: "/profile", label: "Mi perfil" },
   { href: "/players", label: "Jugadores" },
-  { href: "/courts", label: "Canchas" },
-  { href: "/admin", label: "Admin" }
+  { href: "/courts", label: "Canchas" }
 ];
 
 export function Navbar() {
   const [mounted, setMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
+  const [isAdminUser, setIsAdminUser] = useState(false);
 
   useEffect(() => {
     setMounted(true);
 
     function updateAuth() {
-      setIsLogged(Boolean(getSession()?.access_token));
+      const session = getSession();
+      setIsLogged(Boolean(session?.access_token));
+      setIsAdminUser(session?.user?.email === ADMIN_EMAIL);
     }
 
     updateAuth();
@@ -81,6 +85,11 @@ export function Navbar() {
                 {item.label}
               </Link>
             ))}
+            {isAdminUser ? (
+              <Link href="/admin" className="btn-secondary whitespace-nowrap">
+                Admin
+              </Link>
+            ) : null}
           </div>
         </nav>
       </div>
