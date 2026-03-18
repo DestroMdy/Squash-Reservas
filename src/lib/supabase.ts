@@ -75,17 +75,21 @@ export function clearSession() {
   setSession(null);
 }
 
-export async function signUp(email: string, password: string) {
-  const response = await fetch(`${supabaseUrl}/auth/v1/signup`, {
+export async function signUp(
+  email: string,
+  password: string,
+  captchaToken: string
+) {
+  const response = await fetch("/api/auth/signup", {
     method: "POST",
-    headers: headers(),
-    body: JSON.stringify({ email, password })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password, captchaToken })
   });
 
-  const data = (await response.json()) as { error_description?: string };
+  const data = (await response.json()) as { error?: string };
 
   if (!response.ok) {
-    throw new Error(data.error_description || "No se pudo registrar");
+    throw new Error(data.error || "No se pudo registrar");
   }
 }
 
@@ -210,11 +214,35 @@ export async function fetchMyBookings(userId: string, token: string) {
   );
 }
 
+export async function fetchAllBookings(token: string) {
+  return rest<any[]>(
+    "bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,profiles(id,full_name,category),time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&order=created_at.desc",
+    { token }
+  );
+}
+
 export async function cancelBooking(bookingId: string, token: string) {
   await rest(`bookings?id=eq.${bookingId}&status=eq.confirmed`, {
     method: "PATCH",
     token,
     body: JSON.stringify({ status: "cancelled" }),
+    headers: { Prefer: "return=minimal" }
+  });
+}
+
+export async function updateBookingAsAdmin(
+  bookingId: string,
+  token: string,
+  payload: {
+    user_id: string;
+    status: "confirmed" | "cancelled" | "completed";
+    notes?: string | null;
+  }
+) {
+  await rest(`bookings?id=eq.${bookingId}`, {
+    method: "PATCH",
+    token,
+    body: JSON.stringify(payload),
     headers: { Prefer: "return=minimal" }
   });
 }
