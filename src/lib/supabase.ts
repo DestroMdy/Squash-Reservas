@@ -291,6 +291,26 @@ export async function createBooking(
   userId: string,
   token: string
 ) {
+  const cancelledBookings = await rest<any[]>(
+    `bookings?select=id&time_slot_id=eq.${timeSlotId}&status=eq.cancelled&limit=1`,
+    { token }
+  );
+
+  if (cancelledBookings.length > 0) {
+    await rest(`bookings?id=eq.${cancelledBookings[0].id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({
+        user_id: userId,
+        court_id: courtId,
+        time_slot_id: timeSlotId,
+        status: "confirmed"
+      }),
+      headers: { Prefer: "return=minimal" }
+    });
+    return;
+  }
+
   await rest("bookings", {
     method: "POST",
     token,
