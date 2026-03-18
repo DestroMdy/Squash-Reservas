@@ -9,8 +9,8 @@ import { Booking, Court, TimeSlot } from "../types/db";
 type SlotWithRelations = TimeSlot & {
   courts?: Court;
   bookings?:
-    | Pick<Booking, "id" | "status" | "user_id">[]
-    | Pick<Booking, "id" | "status" | "user_id">
+    | Pick<Booking, "id" | "status" | "user_id" | "profiles">[]
+    | Pick<Booking, "id" | "status" | "user_id" | "profiles">
     | null;
 };
 
@@ -152,6 +152,9 @@ export function ScheduleGrid({
             : "Disponible";
 
         const isCancelling = pendingCancelId === confirmedBooking?.id;
+        const playerName = confirmedBooking?.profiles?.full_name?.trim() || "Sin nombre";
+        const playerCategory =
+          confirmedBooking?.profiles?.category?.trim() || "Sin categoría";
 
         return (
           <article
@@ -179,6 +182,17 @@ export function ScheduleGrid({
                 <p className="text-sm text-slate-500">
                   Precio: ${Number(slot.price || 0).toLocaleString("es-AR")}
                 </p>
+
+                {confirmedBooking ? (
+                  <div className="rounded-xl bg-white/70 px-3 py-2 text-sm text-slate-700">
+                    <p>
+                      Jugador: <span className="font-medium">{playerName}</span>
+                    </p>
+                    <p>
+                      Categoría: <span className="font-medium">{playerCategory}</span>
+                    </p>
+                  </div>
+                ) : null}
 
                 {!canBookDate && !isReserved ? (
                   <p className="text-sm text-amber-700">

@@ -34,6 +34,7 @@ export interface Booking {
   status: BookingStatus;
   notes: string | null;
   created_at: string;
+  profiles?: Pick<Profile, "id" | "full_name" | "category"> | null;
   time_slots?: TimeSlot & { courts?: Court };
   courts?: Court;
 }
