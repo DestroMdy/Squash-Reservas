@@ -5,10 +5,22 @@ type RecaptchaVerification = {
   score?: number;
   action?: string;
   hostname?: string;
+  challenge_ts?: string;
   "error-codes"?: string[];
 };
 
 const RECAPTCHA_THRESHOLD = 0.5;
+
+function buildRecaptchaDebug(verification: RecaptchaVerification) {
+  return {
+    success: verification.success ?? false,
+    action: verification.action ?? null,
+    score: verification.score ?? null,
+    hostname: verification.hostname ?? null,
+    challenge_ts: verification.challenge_ts ?? null,
+    error_codes: verification["error-codes"] ?? []
+  };
+}
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -53,24 +65,34 @@ export async function POST(request: NextRequest) {
 
   const verification =
     (await verificationResponse.json()) as RecaptchaVerification;
+  const debug = buildRecaptchaDebug(verification);
 
   if (!verification.success) {
     return NextResponse.json(
-      { error: "No se pudo validar el captcha. Intenta nuevamente." },
+      {
+        error: "No se pudo validar el captcha.",
+        debug
+      },
       { status: 400 }
     );
   }
 
   if (verification.action !== "register") {
     return NextResponse.json(
-      { error: "La validación del captcha no corresponde al registro." },
+      {
+        error: "La validación del captcha no corresponde al registro.",
+        debug
+      },
       { status: 400 }
     );
   }
 
   if ((verification.score ?? 0) < RECAPTCHA_THRESHOLD) {
     return NextResponse.json(
-      { error: "El registro fue bloqueado por validación anti-bots." },
+      {
+        error: "El registro fue bloqueado por validación anti-bots.",
+        debug
+      },
       { status: 400 }
     );
   }
@@ -80,7 +102,10 @@ export async function POST(request: NextRequest) {
     verification.hostname !== request.nextUrl.hostname
   ) {
     return NextResponse.json(
-      { error: "El captcha fue emitido para otro dominio." },
+      {
+        error: "El captcha fue emitido para otro dominio.",
+        debug
+      },
       { status: 400 }
     );
   }
