@@ -200,6 +200,15 @@ export async function fetchBookingStats(token: string) {
   };
 }
 
+export async function fetchLatestConfirmedBooking(token: string) {
+  const data = await rest<any[]>(
+    "bookings?select=id,created_at,status,time_slots(slot_date,start_time,end_time),courts(name)&status=eq.confirmed&order=created_at.desc&limit=1",
+    { token }
+  );
+
+  return data[0];
+}
+
 export async function fetchCourts(token?: string) {
   return rest<any[]>(
     "courts?select=id,name,is_active&order=name.asc",

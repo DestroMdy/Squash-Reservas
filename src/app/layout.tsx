@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { AdminBookingNotifier } from "@/components/AdminBookingNotifier";
 import { Navbar } from "@/components/Navbar";
 import "./globals.css";
 
@@ -30,6 +31,7 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="bg-slate-50 text-slate-900">
+        <AdminBookingNotifier />
         <Navbar />
         <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
       </body>
