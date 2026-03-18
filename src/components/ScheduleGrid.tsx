@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { cancelBooking, getSession, isProfileComplete } from "../lib/supabase";
 import { canBookSlot } from "../lib/time-rules";
 import { Booking, Court, TimeSlot } from "../types/db";
-import { getSession, isProfileComplete } from "../lib/supabase";
 
 type SlotWithRelations = TimeSlot & {
   courts?: Court;
@@ -22,6 +22,7 @@ export function ScheduleGrid({
   selectedDate: string;
 }) {
   const [pendingSlotId, setPendingSlotId] = useState<string | null>(null);
+  const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
 
@@ -75,6 +76,24 @@ export function ScheduleGrid({
       alert(error instanceof Error ? error.message : "Error al reservar");
     } finally {
       setPendingSlotId(null);
+    }
+  }
+
+  async function cancel(bookingId: string) {
+    try {
+      setPendingCancelId(bookingId);
+      const token = getSession()?.access_token;
+
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      await cancelBooking(bookingId, token);
+      window.location.reload();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "No se pudo cancelar");
+    } finally {
+      setPendingCancelId(null);
     }
   }
 
@@ -132,6 +151,8 @@ export function ScheduleGrid({
             ? "Ocupado"
             : "Disponible";
 
+        const isCancelling = pendingCancelId === confirmedBooking?.id;
+
         return (
           <article
             key={slot.id}
@@ -172,20 +193,28 @@ export function ScheduleGrid({
                 ) : null}
               </div>
 
-              <div className="sm:min-w-[140px]">
-                <button
-                  disabled={disabled || pendingSlotId === slot.id}
-                  className="btn-primary w-full"
-                  onClick={() => reserve(slot.id)}
-                >
-                  {isMine
-                    ? "Reservado"
-                    : isReserved
+              <div className="sm:min-w-[160px]">
+                {isMine && confirmedBooking ? (
+                  <button
+                    disabled={isCancelling}
+                    className="btn-secondary w-full border-blue-300 bg-white text-blue-700 hover:bg-blue-100"
+                    onClick={() => cancel(confirmedBooking.id)}
+                  >
+                    {isCancelling ? "Cancelando..." : "Cancelar reserva"}
+                  </button>
+                ) : (
+                  <button
+                    disabled={disabled || pendingSlotId === slot.id}
+                    className="btn-primary w-full"
+                    onClick={() => reserve(slot.id)}
+                  >
+                    {isReserved
                       ? "No disponible"
                       : pendingSlotId === slot.id
                         ? "Reservando..."
                         : "Reservar"}
-                </button>
+                  </button>
+                )}
               </div>
             </div>
           </article>
