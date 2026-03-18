@@ -8,7 +8,10 @@ import { getSession, isProfileComplete } from "../lib/supabase";
 
 type SlotWithRelations = TimeSlot & {
   courts?: Court;
-  bookings?: Pick<Booking, "id" | "status" | "user_id">[] | null;
+  bookings?:
+    | Pick<Booking, "id" | "status" | "user_id">[]
+    | Pick<Booking, "id" | "status" | "user_id">
+    | null;
 };
 
 export function ScheduleGrid({
@@ -58,7 +61,10 @@ export function ScheduleGrid({
         body: JSON.stringify({ slotId })
       });
 
-      const payload = (await response.json()) as { error?: string };
+      const responseText = await response.text();
+      const payload = responseText.trim()
+        ? (JSON.parse(responseText) as { error?: string })
+        : {};
 
       if (!response.ok) {
         throw new Error(payload.error || "No se pudo reservar");
@@ -91,7 +97,11 @@ export function ScheduleGrid({
       ) : null}
 
       {slots.map((slot) => {
-        const bookings = Array.isArray(slot.bookings) ? slot.bookings : [];
+        const bookings = Array.isArray(slot.bookings)
+          ? slot.bookings
+          : slot.bookings
+            ? [slot.bookings]
+            : [];
 
         const confirmedBooking = bookings.find(
           (booking) => booking.status === "confirmed"
