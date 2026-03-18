@@ -53,7 +53,7 @@ export function Navbar() {
             />
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-                Club de Squash
+                La Martineta
               </p>
               <p className="truncate text-xl font-bold leading-tight text-slate-900">
                 Squash Reservas
