@@ -66,7 +66,7 @@ export default function PlayersPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Link href="/" className="btn-secondary">
-        ← Volver al inicio
+        {"← Volver al inicio"}
       </Link>
 
       <SectionTitle

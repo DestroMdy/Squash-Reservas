@@ -81,7 +81,7 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <Link href="/" className="btn-secondary">
-        ← Volver al inicio
+        {"← Volver al inicio"}
       </Link>
 
       <SectionTitle
