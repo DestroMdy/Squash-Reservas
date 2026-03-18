@@ -1,7 +1,7 @@
 "use client";
 
 import Script from "next/script";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { signInWithPassword, signUp } from "@/lib/supabase";
 
 declare global {
@@ -21,14 +21,26 @@ export function AuthForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [recaptchaLoaded, setRecaptchaLoaded] = useState(false);
+  const [recaptchaReady, setRecaptchaReady] = useState(false);
+
+  useEffect(() => {
+    if (!recaptchaLoaded || !window.grecaptcha) {
+      return;
+    }
+
+    window.grecaptcha.ready(() => {
+      setRecaptchaReady(true);
+    });
+  }, [recaptchaLoaded]);
 
   async function runRecaptcha(action: string) {
     if (!recaptchaSiteKey) {
       throw new Error("El registro está temporalmente deshabilitado.");
     }
 
-    if (!window.grecaptcha) {
-      throw new Error("No se pudo cargar reCAPTCHA. Intenta nuevamente.");
+    if (!window.grecaptcha || !recaptchaReady) {
+      throw new Error("reCAPTCHA todavía no terminó de cargar.");
     }
 
     return new Promise<string>((resolve, reject) => {
@@ -38,12 +50,14 @@ export function AuthForm() {
             action
           });
 
-          if (!token) {
+          const normalizedToken = token?.trim();
+
+          if (!normalizedToken) {
             reject(new Error("No se pudo validar reCAPTCHA."));
             return;
           }
 
-          resolve(token);
+          resolve(normalizedToken);
         } catch {
           reject(new Error("No se pudo validar reCAPTCHA."));
         }
@@ -75,10 +89,11 @@ export function AuthForm() {
 
   return (
     <div className="card mx-auto max-w-md p-6">
-      {mode === "register" && recaptchaSiteKey ? (
+      {recaptchaSiteKey ? (
         <Script
           src={`https://www.google.com/recaptcha/api.js?render=${recaptchaSiteKey}`}
           strategy="afterInteractive"
+          onLoad={() => setRecaptchaLoaded(true)}
         />
       ) : null}
 
@@ -127,12 +142,18 @@ export function AuthForm() {
           />
         </div>
 
-        <button type="submit" className="btn-primary w-full" disabled={loading}>
+        <button
+          type="submit"
+          className="btn-primary w-full"
+          disabled={loading || (mode === "register" && !recaptchaReady)}
+        >
           {loading
             ? "Procesando..."
             : mode === "login"
               ? "Ingresar"
-              : "Crear cuenta"}
+              : !recaptchaReady
+                ? "Cargando seguridad..."
+                : "Crear cuenta"}
         </button>
       </form>
 
