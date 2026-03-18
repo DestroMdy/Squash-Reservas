@@ -2,6 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { canBookSlot } from "@/lib/time-rules";
 import { createBooking, fetchSlot, getUser, hasConfirmedBooking } from "@/lib/supabase";
 
+function normalizeBookingError(error: unknown) {
+  if (
+    error instanceof Error &&
+    (error.message.includes("bookings_time_slot_id_key") ||
+      error.message.includes("23505"))
+  ) {
+    return "El turno ya fue reservado por otro usuario.";
+  }
+
+  return error instanceof Error ? error.message : "Error al reservar";
+}
+
 export async function POST(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
   const token = authHeader?.replace("Bearer ", "");
@@ -46,9 +58,11 @@ export async function POST(request: NextRequest) {
     await createBooking(slot.id, slot.court_id, user.id, token);
     return NextResponse.json({ ok: true });
   } catch (error) {
+    const message = normalizeBookingError(error);
+
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Error al reservar" },
-      { status: 400 }
+      { error: message },
+      { status: message.includes("reservado") ? 409 : 400 }
     );
   }
 }

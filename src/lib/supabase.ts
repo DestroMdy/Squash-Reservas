@@ -6,6 +6,14 @@ export interface SessionData {
   user?: { id: string; email?: string };
 }
 
+type SupabaseErrorPayload = {
+  code?: string;
+  details?: string | null;
+  hint?: string | null;
+  message?: string;
+  error?: string;
+};
+
 const STORAGE_KEY = "sr_session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -17,6 +25,25 @@ function headers(token?: string) {
     Authorization: token ? `Bearer ${token}` : `Bearer ${anonKey}`,
     "Content-Type": "application/json"
   };
+}
+
+function normalizeSupabaseError(error: SupabaseErrorPayload | string | null | undefined) {
+  if (!error) {
+    return "Error en Supabase";
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (
+    error.code === "23505" ||
+    error.message?.includes("bookings_time_slot_id_key")
+  ) {
+    return "El turno ya fue reservado por otro usuario.";
+  }
+
+  return error.error || error.message || "Error en Supabase";
 }
 
 export function getSession(): SessionData | null {
@@ -137,12 +164,23 @@ async function rest<T>(
       clearSession();
       window.location.href = "/login";
     }
+
     throw new Error("Tu sesión expiró. Iniciá sesión nuevamente.");
   }
 
   if (!response.ok) {
     const errorBody = await response.text();
-    throw new Error(errorBody || "Error en Supabase");
+
+    if (!errorBody.trim()) {
+      throw new Error("Error en Supabase");
+    }
+
+    try {
+      const parsedError = JSON.parse(errorBody) as SupabaseErrorPayload;
+      throw new Error(normalizeSupabaseError(parsedError));
+    } catch {
+      throw new Error(normalizeSupabaseError(errorBody));
+    }
   }
 
   if (response.status === 204) {
