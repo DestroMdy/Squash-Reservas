@@ -86,10 +86,23 @@ export async function signUp(
     body: JSON.stringify({ email, password, captchaToken })
   });
 
-  const data = (await response.json()) as { error?: string };
+  const data = (await response.json()) as {
+    error?: string;
+    debug?: {
+      success?: boolean;
+      action?: string | null;
+      score?: number | null;
+      hostname?: string | null;
+      challenge_ts?: string | null;
+      error_codes?: string[];
+    };
+  };
 
   if (!response.ok) {
-    throw new Error(data.error || "No se pudo registrar");
+    const debugMessage = data.debug
+      ? ` debug=${JSON.stringify(data.debug)}`
+      : "";
+    throw new Error((data.error || "No se pudo registrar") + debugMessage);
   }
 }
 
