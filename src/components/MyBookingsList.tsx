@@ -135,11 +135,11 @@ function BookingCard({
           >
             {loadingId === booking.id ? "Cancelando..." : "Cancelar reserva"}
           </button>
-        ) : (
+        ) : isUpcoming ? (
           <div className="text-sm text-slate-500">
-            {state === "upcoming" ? "No cancelable" : "Sin acciones"}
+            No cancelable
           </div>
-        )}
+        ) : null}
       </div>
     </article>
   );
