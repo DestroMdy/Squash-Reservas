@@ -353,43 +353,25 @@ export async function updateBookingAsAdmin(
   });
 }
 
-function getAvatarStoragePath(avatarUrl: string | null | undefined) {
-  if (!avatarUrl) return null;
-
-  const marker = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
-  const index = avatarUrl.indexOf(marker);
-
-  if (index === -1) {
-    return null;
-  }
-
-  return avatarUrl.slice(index + marker.length);
-}
-
 export async function deleteProfileAsAdmin(
   profile: { id: string; avatar_url?: string | null },
   token: string
 ) {
-  const avatarPath = getAvatarStoragePath(profile.avatar_url);
-
-  if (avatarPath) {
-    await fetch(
-      `${supabaseUrl}/storage/v1/object/${AVATAR_BUCKET}/${avatarPath}`,
-      {
-        method: "DELETE",
-        headers: {
-          apikey: anonKey,
-          Authorization: `Bearer ${token}`
-        }
-      }
-    );
-  }
-
-  await rest(`profiles?id=eq.${profile.id}`, {
+  const response = await fetch(`/api/admin/players/${profile.id}`, {
     method: "DELETE",
-    token,
-    headers: { Prefer: "return=minimal" }
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
   });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo eliminar el perfil.");
+  }
 }
 
 export async function promoteProfileToAdmin(profileId: string, token: string) {
