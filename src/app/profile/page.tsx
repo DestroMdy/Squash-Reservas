@@ -85,8 +85,12 @@ export default function ProfilePage() {
 
       setAvatarUrl(uploadedUrl);
       setNoticeMessage("Foto actualizada");
-    } catch {
-      setNoticeMessage("No se pudo subir la foto");
+    } catch (error) {
+      setNoticeMessage(
+        error instanceof Error
+          ? error.message
+          : "No se pudo subir la foto. Usá JPG, PNG o WebP de hasta 5 MB."
+      );
     } finally {
       setUploadingPhoto(false);
       event.target.value = "";
@@ -145,7 +149,7 @@ export default function ProfilePage() {
                 {uploadingPhoto ? "Subiendo..." : "Cambiar foto"}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   className="hidden"
                   onChange={handleAvatarChange}
                   disabled={uploadingPhoto}

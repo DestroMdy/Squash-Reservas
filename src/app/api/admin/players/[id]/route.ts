@@ -162,5 +162,19 @@ export async function DELETE(
     );
   }
 
+  const deleteAuthResponse = await fetch(
+    `${supabaseUrl}/auth/v1/admin/users/${params.id}`,
+    {
+      method: "DELETE",
+      headers: adminHeaders(serviceRoleKey)
+    }
+  );
+
+  if (!deleteAuthResponse.ok && deleteAuthResponse.status !== 404) {
+    console.warn(
+      `No se pudo eliminar el usuario auth ${params.id}: ${deleteAuthResponse.status}`
+    );
+  }
+
   return NextResponse.json({ ok: true, profile: deletedProfiles[0] });
 }

@@ -4,12 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   fetchUnreadPrivateMessagesCount,
+  fetchProfileRole,
   getSession,
   getUser,
   signOut
 } from "@/lib/supabase";
-
-const ADMIN_EMAIL = "alann.freire@gmail.com";
 
 const navItems = [
   { href: "/schedule", label: "Agenda" },
@@ -34,26 +33,32 @@ export function Navbar() {
     async function updateAuth() {
       const session = getSession();
       setIsLogged(Boolean(session?.access_token));
-      setIsAdminUser(session?.user?.email === ADMIN_EMAIL);
 
       if (!session?.access_token) {
+        setIsAdminUser(false);
         setUnreadCount(0);
         return;
       }
 
-      const user = await getUser(session.access_token);
+      const user = session.user?.id
+        ? session.user
+        : await getUser(session.access_token);
       if (!user) {
+        setIsAdminUser(false);
         setUnreadCount(0);
         return;
       }
 
       try {
+        const role = await fetchProfileRole(user.id, session.access_token);
+        setIsAdminUser(role === "admin");
         const count = await fetchUnreadPrivateMessagesCount(
           user.id,
           session.access_token
         );
         setUnreadCount(count);
       } catch {
+        setIsAdminUser(false);
         setUnreadCount(0);
       }
     }

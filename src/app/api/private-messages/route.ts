@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 
 type SupabaseUser = {
   id: string;
@@ -23,6 +24,15 @@ function adminHeaders(apiKey: string) {
     Authorization: `Bearer ${apiKey}`,
     "Content-Type": "application/json"
   };
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 async function fetchAuthUserById(
@@ -67,6 +77,8 @@ async function sendNotificationEmail({
 }) {
   const preview =
     messageBody.length > 180 ? `${messageBody.slice(0, 177)}...` : messageBody;
+  const safePreview = escapeHtml(preview).replace(/\n/g, "<br />");
+  const safeSenderName = escapeHtml(senderName);
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -81,9 +93,9 @@ async function sendNotificationEmail({
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
           <h2 style="margin-bottom:12px">Nuevo mensaje privado</h2>
-          <p><strong>${senderName}</strong> te escribió en Squash Reservas.</p>
+          <p><strong>${safeSenderName}</strong> te escribió en Squash Reservas.</p>
           <blockquote style="margin:16px 0;padding:12px 16px;border-left:4px solid #0f172a;background:#f8fafc">
-            ${preview.replace(/\n/g, "<br />")}
+            ${safePreview}
           </blockquote>
           <p>
             Abrí tu bandeja para responder:
@@ -105,7 +117,8 @@ export async function POST(request: NextRequest) {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
-  const fromEmail = process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
   const authHeader = request.headers.get("authorization");
 
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
@@ -125,6 +138,13 @@ export async function POST(request: NextRequest) {
   if (!body.sender_id || !body.recipient_id || !body.body?.trim()) {
     return NextResponse.json(
       { error: "Faltan datos para enviar el mensaje." },
+      { status: 400 }
+    );
+  }
+
+  if (body.sender_id === body.recipient_id) {
+    return NextResponse.json(
+      { error: "No puedes enviarte mensajes a ti mismo." },
       { status: 400 }
     );
   }
@@ -150,6 +170,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const ip = getRequestIp(request);
+  const rateLimit = checkRateLimit({
+    key: `private-message:${ip}:${body.sender_id}`,
+    max: 20,
+    windowMs: 60 * 1000
+  });
+
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      {
+        error:
+          "Demasiados mensajes en poco tiempo. Espera unos segundos antes de volver a enviar."
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds)
+        }
+      }
+    );
+  }
+
   const profilesResponse = await fetch(
     `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category&id=in.(${body.sender_id},${body.recipient_id})`,
     {
@@ -160,7 +202,9 @@ export async function POST(request: NextRequest) {
 
   const profiles = (await profilesResponse.json()) as ProfileRecord[];
   const senderProfile = profiles.find((profile) => profile.id === body.sender_id);
-  const recipientProfile = profiles.find((profile) => profile.id === body.recipient_id);
+  const recipientProfile = profiles.find(
+    (profile) => profile.id === body.recipient_id
+  );
 
   if (!senderProfile || !recipientProfile) {
     return NextResponse.json(

@@ -5,11 +5,10 @@ import {
   fetchLatestConfirmedBooking,
   fetchProfileRole,
   getSession,
-  getUser,
+  getUser
 } from "@/lib/supabase";
 
 const LAST_BOOKING_KEY = "sr_last_admin_booking_id";
-const ADMIN_EMAIL = "alann.freire@gmail.com";
 
 export function AdminBookingNotifier() {
   useEffect(() => {
@@ -20,11 +19,11 @@ export function AdminBookingNotifier() {
       const session = getSession();
       const token = session?.access_token;
 
-      if (!token || session?.user?.email !== ADMIN_EMAIL) {
+      if (!token) {
         return;
       }
 
-      const user = await getUser(token);
+      const user = session.user?.id ? session.user : await getUser(token);
       if (!user || cancelled) {
         return;
       }

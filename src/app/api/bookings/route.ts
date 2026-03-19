@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
-import { createBooking, fetchSlot, getUser, hasConfirmedBooking } from "@/lib/supabase";
+import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import {
+  createBooking,
+  fetchSlot,
+  getUser,
+  hasConfirmedBooking
+} from "@/lib/supabase";
 
 function normalizeBookingError(error: unknown) {
   if (
@@ -31,6 +37,28 @@ export async function POST(request: NextRequest) {
   const user = await getUser(token);
   if (!user) {
     return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+  }
+
+  const ip = getRequestIp(request);
+  const rateLimit = checkRateLimit({
+    key: `booking-create:${ip}:${user.id}`,
+    max: 12,
+    windowMs: 60 * 1000
+  });
+
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      {
+        error:
+          "Demasiados intentos de reserva. Espera unos segundos antes de volver a intentar."
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds)
+        }
+      }
+    );
   }
 
   const slot = await fetchSlot(body.slotId, token);

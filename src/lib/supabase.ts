@@ -16,6 +16,12 @@ type SupabaseErrorPayload = {
 
 const STORAGE_KEY = "sr_session";
 const AVATAR_BUCKET = "avatars";
+const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
+const AVATAR_ALLOWED_MIME_TYPES = new Map([
+  ["image/jpeg", "jpg"],
+  ["image/png", "png"],
+  ["image/webp", "webp"]
+]);
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -28,7 +34,9 @@ function headers(token?: string) {
   };
 }
 
-function normalizeSupabaseError(error: SupabaseErrorPayload | string | null | undefined) {
+function normalizeSupabaseError(
+  error: SupabaseErrorPayload | string | null | undefined
+) {
   if (!error) {
     return "Error en Supabase";
   }
@@ -103,21 +111,10 @@ export async function signUp(
 
   const data = (await response.json()) as {
     error?: string;
-    debug?: {
-      success?: boolean;
-      action?: string | null;
-      score?: number | null;
-      hostname?: string | null;
-      challenge_ts?: string | null;
-      error_codes?: string[];
-    };
   };
 
   if (!response.ok) {
-    const debugMessage = data.debug
-      ? ` debug=${JSON.stringify(data.debug)}`
-      : "";
-    throw new Error((data.error || "No se pudo registrar") + debugMessage);
+    throw new Error(data.error || "No se pudo registrar");
   }
 }
 
@@ -127,22 +124,25 @@ export async function requestPasswordReset(email: string) {
       ? `${window.location.origin}/reset-password`
       : undefined;
 
-  const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+  const response = await fetch("/api/auth/recover", {
     method: "POST",
-    headers: headers(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       email,
-      ...(redirectTo ? { redirect_to: redirectTo } : {})
+      ...(redirectTo ? { redirectTo } : {})
     })
   });
 
   const data = (await response.json()) as {
     msg?: string;
+    error?: string;
     error_description?: string;
   };
 
   if (!response.ok) {
-    throw new Error(data.error_description || data.msg || "No se pudo enviar el mail.");
+    throw new Error(
+      data.error || data.error_description || data.msg || "No se pudo enviar el mail."
+    );
   }
 }
 
@@ -153,7 +153,10 @@ export async function updatePassword(accessToken: string, password: string) {
     body: JSON.stringify({ password })
   });
 
-  const data = (await response.json()) as { msg?: string; error_description?: string };
+  const data = (await response.json()) as {
+    msg?: string;
+    error_description?: string;
+  };
 
   if (!response.ok) {
     throw new Error(
@@ -163,32 +166,26 @@ export async function updatePassword(accessToken: string, password: string) {
 }
 
 export async function signInWithPassword(email: string, password: string) {
-  const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+  const response = await fetch("/api/auth/login", {
     method: "POST",
-    headers: headers(),
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password })
   });
 
   const data = (await response.json()) as SessionData & {
+    error?: string;
     error_description?: string;
   };
 
   if (!response.ok) {
-    throw new Error(data.error_description || "No se pudo iniciar sesión");
+    throw new Error(
+      data.error || data.error_description || "No se pudo iniciar sesión"
+    );
   }
-
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    method: "GET",
-    headers: headers(data.access_token)
-  });
-
-  const userData = userResponse.ok
-    ? ((await userResponse.json()) as { id: string; email?: string })
-    : undefined;
 
   setSession({
     ...data,
-    user: userData
+    user: data.user
   });
 }
 
@@ -256,9 +253,7 @@ async function rest<T>(
       parsedError = null;
     }
 
-    throw new Error(
-      normalizeSupabaseError(parsedError ?? errorBody)
-    );
+    throw new Error(normalizeSupabaseError(parsedError ?? errorBody));
   }
 
   if (response.status === 204) {
@@ -279,9 +274,16 @@ export async function uploadProfileAvatar(
   token: string,
   file: File
 ) {
-  const extension = file.name.includes(".")
-    ? file.name.split(".").pop()?.toLowerCase() || "jpg"
-    : "jpg";
+  const extension = AVATAR_ALLOWED_MIME_TYPES.get(file.type);
+
+  if (!extension) {
+    throw new Error("La foto debe ser JPG, PNG o WebP.");
+  }
+
+  if (file.size > AVATAR_MAX_SIZE_BYTES) {
+    throw new Error("La foto no puede superar los 5 MB.");
+  }
+
   const filePath = `${userId}/avatar.${extension}`;
 
   const response = await fetch(
@@ -292,7 +294,7 @@ export async function uploadProfileAvatar(
         apikey: anonKey,
         Authorization: `Bearer ${token}`,
         "x-upsert": "true",
-        "Content-Type": file.type || "application/octet-stream"
+        "Content-Type": file.type
       },
       body: file
     }
@@ -404,10 +406,9 @@ export async function promoteProfileToAdmin(profileId: string, token: string) {
 }
 
 export async function fetchProfileRole(userId: string, token: string) {
-  const data = await rest<any[]>(
-    `profiles?select=role&id=eq.${userId}&limit=1`,
-    { token }
-  );
+  const data = await rest<any[]>(`profiles?select=role&id=eq.${userId}&limit=1`, {
+    token
+  });
   return data[0]?.role as "admin" | "player" | undefined;
 }
 
@@ -738,7 +739,10 @@ export async function updateExternalTournament(
   return data.tournament;
 }
 
-export async function deleteExternalTournament(tournamentId: string, token: string) {
+export async function deleteExternalTournament(
+  tournamentId: string,
+  token: string
+) {
   const response = await fetch(`/api/admin/external-tournaments/${tournamentId}`, {
     method: "DELETE",
     headers: {

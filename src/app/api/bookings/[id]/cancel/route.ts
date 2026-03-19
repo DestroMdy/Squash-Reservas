@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canCancelBooking } from "@/lib/time-rules";
+import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import { fetchProfileRole, getUser } from "@/lib/supabase";
 
 function headers(token: string, anonKey: string) {
@@ -33,6 +34,28 @@ export async function POST(
   const user = await getUser(token);
   if (!user) {
     return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+  }
+
+  const ip = getRequestIp(request);
+  const rateLimit = checkRateLimit({
+    key: `booking-cancel:${ip}:${user.id}`,
+    max: 12,
+    windowMs: 60 * 1000
+  });
+
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      {
+        error:
+          "Demasiados intentos de cancelación. Espera unos segundos antes de volver a intentar."
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds)
+        }
+      }
+    );
   }
 
   const callerRole = await fetchProfileRole(user.id, token);

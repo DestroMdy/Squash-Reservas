@@ -1,15 +1,21 @@
 "use client";
 
 import Script from "next/script";
-import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { requestPasswordReset, signInWithPassword, signUp } from "@/lib/supabase";
+import {
+  requestPasswordReset,
+  signInWithPassword,
+  signUp
+} from "@/lib/supabase";
 
 declare global {
   interface Window {
     grecaptcha?: {
       ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
+      execute: (
+        siteKey: string,
+        options: { action: string }
+      ) => Promise<string>;
     };
   }
 }
@@ -202,9 +208,7 @@ export function AuthForm() {
         </p>
       ) : null}
 
-      {message ? (
-        <p className="mt-4 text-sm text-slate-600">{message}</p>
-      ) : null}
+      {message ? <p className="mt-4 text-sm text-slate-600">{message}</p> : null}
 
       {mode === "forgot" ? (
         <p className="mt-4 text-xs text-slate-500">

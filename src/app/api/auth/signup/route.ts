@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 
 type RecaptchaVerification = {
   success?: boolean;
@@ -48,6 +49,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const ip = getRequestIp(request);
+  const rateLimit = checkRateLimit({
+    key: `auth-signup:${ip}:${body.email.trim().toLowerCase()}`,
+    max: 5,
+    windowMs: 10 * 60 * 1000
+  });
+
+  if (!rateLimit.ok) {
+    return NextResponse.json(
+      {
+        error:
+          "Demasiados intentos de registro. Intenta nuevamente en unos minutos."
+      },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(rateLimit.retryAfterSeconds)
+        }
+      }
+    );
+  }
+
   const verificationBody = new URLSearchParams();
   verificationBody.set("secret", recaptchaSecret);
   verificationBody.set("response", body.captchaToken);
@@ -68,10 +91,10 @@ export async function POST(request: NextRequest) {
   const debug = buildRecaptchaDebug(verification);
 
   if (!verification.success) {
+    console.warn("reCAPTCHA signup verification failed", debug);
     return NextResponse.json(
       {
-        error: "No se pudo validar el captcha.",
-        debug
+        error: "No se pudo validar el captcha."
       },
       { status: 400 }
     );
@@ -80,8 +103,7 @@ export async function POST(request: NextRequest) {
   if (verification.action !== "register") {
     return NextResponse.json(
       {
-        error: "La validación del captcha no corresponde al registro.",
-        debug
+        error: "La validación del captcha no corresponde al registro."
       },
       { status: 400 }
     );
@@ -90,8 +112,7 @@ export async function POST(request: NextRequest) {
   if ((verification.score ?? 0) < RECAPTCHA_THRESHOLD) {
     return NextResponse.json(
       {
-        error: "El registro fue bloqueado por validación anti-bots.",
-        debug
+        error: "El registro fue bloqueado por validación anti-bots."
       },
       { status: 400 }
     );
@@ -103,8 +124,7 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json(
       {
-        error: "El captcha fue emitido para otro dominio.",
-        debug
+        error: "El captcha fue emitido para otro dominio."
       },
       { status: 400 }
     );
