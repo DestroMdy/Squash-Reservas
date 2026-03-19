@@ -21,6 +21,17 @@ export interface PrivateMessage {
   updated_at: string;
 }
 
+export interface AdminAuditLog {
+  id: string;
+  actor_id: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+  profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
+}
+
 export interface ExternalTournament {
   id: string;
   title: string;

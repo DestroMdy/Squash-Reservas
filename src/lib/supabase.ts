@@ -356,12 +356,23 @@ export async function updateBookingAsAdmin(
     notes?: string | null;
   }
 ) {
-  await rest(`bookings?id=eq.${bookingId}`, {
+  const response = await fetch(`/api/admin/bookings/${bookingId}`, {
     method: "PATCH",
-    token,
-    body: JSON.stringify(payload),
-    headers: { Prefer: "return=minimal" }
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
   });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo actualizar la reserva.");
+  }
 }
 
 export async function deleteProfileAsAdmin(
@@ -670,6 +681,29 @@ export async function fetchAdminExternalTournaments(token: string) {
   }
 
   return payload as any[];
+}
+
+export async function fetchAdminAuditLogs(token: string) {
+  const response = await fetch("/api/admin/audit-logs", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string; logs?: any[]; enabled?: boolean })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo cargar la auditoría admin.");
+  }
+
+  return {
+    logs: payload.logs || [],
+    enabled: payload.enabled !== false
+  };
 }
 
 export async function createExternalTournament(

@@ -6,6 +6,7 @@ import {
   createExternalTournament,
   deleteProfileAsAdmin,
   deleteExternalTournament,
+  fetchAdminAuditLogs,
   fetchAdminExternalTournaments,
   fetchAllBookings,
   fetchBookingStats,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/supabase";
 import {
   Booking,
+  AdminAuditLog,
   BookingStatus,
   ExternalTournament,
   ExternalTournamentPlatform,
@@ -80,6 +82,8 @@ export default function AdminPage() {
   const [bookings, setBookings] = useState<BookingWithRelations[]>([]);
   const [players, setPlayers] = useState<Profile[]>([]);
   const [tournaments, setTournaments] = useState<ExternalTournament[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
+  const [auditEnabled, setAuditEnabled] = useState(true);
   const [filter, setFilter] = useState("");
   const [reportMonth, setReportMonth] = useState(getCurrentMonthKey());
   const [tournamentForm, setTournamentForm] = useState<TournamentFormState>(
@@ -121,17 +125,26 @@ export default function AdminPage() {
       return;
     }
 
-    const [bookingStats, allBookings, allPlayers, externalTournaments] = await Promise.all([
+    const [
+      bookingStats,
+      allBookings,
+      allPlayers,
+      externalTournaments,
+      auditData
+    ] = await Promise.all([
       fetchBookingStats(token),
       fetchAllBookings(token),
       fetchPlayers(token),
-      fetchAdminExternalTournaments(token)
+      fetchAdminExternalTournaments(token),
+      fetchAdminAuditLogs(token)
     ]);
 
     setStats(bookingStats);
     setBookings(allBookings ?? []);
     setPlayers(allPlayers ?? []);
     setTournaments(externalTournaments ?? []);
+    setAuditLogs(auditData.logs ?? []);
+    setAuditEnabled(auditData.enabled !== false);
     setError(null);
     setLoading(false);
   }
@@ -836,6 +849,63 @@ export default function AdminPage() {
               </p>
             )}
           </div>
+        </section>
+      ) : null}
+
+      {!error && role === "admin" ? (
+        <section className="card space-y-4 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Auditoría admin
+              </h2>
+              <p className="text-sm text-slate-500">
+                Historial reciente de acciones sensibles realizadas por administradores.
+              </p>
+            </div>
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+              {auditLogs.length}
+            </span>
+          </div>
+
+          {!auditEnabled ? (
+            <p className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+              La auditoría todavía no está habilitada en la base. Falta correr la migración `admin_audit_logs`.
+            </p>
+          ) : auditLogs.length ? (
+            <div className="space-y-3">
+              {auditLogs.map((log) => (
+                <article
+                  key={log.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="font-medium text-slate-900">
+                        {log.profiles?.full_name || "Admin"} · {log.action}
+                      </p>
+                      <p className="text-sm text-slate-500">
+                        {new Date(log.created_at).toLocaleString("es-AR")}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-wide text-slate-600">
+                      {log.target_type} · {log.target_id}
+                    </span>
+                  </div>
+
+                  {log.details ? (
+                    <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-3 text-xs text-slate-100">
+                      {JSON.stringify(log.details, null, 2)}
+                    </pre>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">
+              Todavía no hay acciones auditadas para mostrar.
+            </p>
+          )}
         </section>
       ) : null}
 

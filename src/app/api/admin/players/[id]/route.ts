@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logAdminAudit } from "@/lib/admin-audit";
 
 type SupabaseUser = {
   id: string;
@@ -175,6 +176,17 @@ export async function DELETE(
       `No se pudo eliminar el usuario auth ${params.id}: ${deleteAuthResponse.status}`
     );
   }
+
+  await logAdminAudit(supabaseUrl, serviceRoleKey, {
+    actorId: user.id,
+    action: "profile.deleted",
+    targetType: "profile",
+    targetId: params.id,
+    details: {
+      deleted_profile_id: deletedProfiles[0].id,
+      deleted_avatar_url: deletedProfiles[0].avatar_url ?? null
+    }
+  }).catch(() => null);
 
   return NextResponse.json({ ok: true, profile: deletedProfiles[0] });
 }

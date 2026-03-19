@@ -37,7 +37,7 @@ export async function POST(
   }
 
   const ip = getRequestIp(request);
-  const rateLimit = checkRateLimit({
+  const rateLimit = await checkRateLimit({
     key: `booking-cancel:${ip}:${user.id}`,
     max: 12,
     windowMs: 60 * 1000

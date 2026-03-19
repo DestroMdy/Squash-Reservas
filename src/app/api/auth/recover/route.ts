@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
   }
 
   const ip = getRequestIp(request);
-  const rateLimit = checkRateLimit({
+  const rateLimit = await checkRateLimit({
     key: `auth-recover:${ip}:${body.email.trim().toLowerCase()}`,
     max: 5,
     windowMs: 15 * 60 * 1000

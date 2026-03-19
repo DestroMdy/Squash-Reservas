@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logAdminAudit } from "@/lib/admin-audit";
 import { fetchProfileRole, getUser } from "@/lib/supabase";
 
 function adminHeaders(apiKey: string) {
@@ -31,10 +32,13 @@ async function requireAdmin(request: NextRequest) {
 
   const role = await fetchProfileRole(user.id, token);
   if (role !== "admin") {
-    return { error: "No tienes permisos de administrador.", status: 403 as const };
+    return {
+      error: "No tienes permisos de administrador.",
+      status: 403 as const
+    };
   }
 
-  return { supabaseUrl, serviceRoleKey };
+  return { supabaseUrl, serviceRoleKey, actorId: user.id };
 }
 
 export async function GET(request: NextRequest) {
@@ -87,25 +91,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const response = await fetch(
-    `${auth.supabaseUrl}/rest/v1/external_tournaments`,
-    {
-      method: "POST",
-      headers: {
-        ...adminHeaders(auth.serviceRoleKey),
-        Prefer: "return=representation"
-      },
-      body: JSON.stringify({
-        title: body.title.trim(),
-        platform: body.platform,
-        event_date: body.event_date || null,
-        location: body.location?.trim() || null,
-        url: body.url.trim(),
-        notes: body.notes?.trim() || null,
-        is_active: body.is_active ?? true
-      })
-    }
-  );
+  const response = await fetch(`${auth.supabaseUrl}/rest/v1/external_tournaments`, {
+    method: "POST",
+    headers: {
+      ...adminHeaders(auth.serviceRoleKey),
+      Prefer: "return=representation"
+    },
+    body: JSON.stringify({
+      title: body.title.trim(),
+      platform: body.platform,
+      event_date: body.event_date || null,
+      location: body.location?.trim() || null,
+      url: body.url.trim(),
+      notes: body.notes?.trim() || null,
+      is_active: body.is_active ?? true
+    })
+  });
 
   const text = await response.text();
   const payload = text.trim() ? JSON.parse(text) : [];
@@ -116,6 +117,18 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
+    actorId: auth.actorId,
+    action: "external_tournament.created",
+    targetType: "external_tournament",
+    targetId: payload[0].id,
+    details: {
+      title: payload[0].title,
+      platform: payload[0].platform,
+      event_date: payload[0].event_date
+    }
+  }).catch(() => null);
 
   return NextResponse.json({ ok: true, tournament: payload[0] });
 }

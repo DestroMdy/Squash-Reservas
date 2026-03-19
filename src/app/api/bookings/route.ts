@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
   }
 
   const ip = getRequestIp(request);
-  const rateLimit = checkRateLimit({
+  const rateLimit = await checkRateLimit({
     key: `booking-create:${ip}:${user.id}`,
     max: 12,
     windowMs: 60 * 1000

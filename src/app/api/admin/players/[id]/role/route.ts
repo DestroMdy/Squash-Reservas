@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logAdminAudit } from "@/lib/admin-audit";
 
 type RoleUpdateBody = {
   role?: "admin";
@@ -115,6 +116,16 @@ export async function POST(
       { status: 500 }
     );
   }
+
+  await logAdminAudit(supabaseUrl, serviceRoleKey, {
+    actorId: user.id,
+    action: "profile.promoted",
+    targetType: "profile",
+    targetId: params.id,
+    details: {
+      role: "admin"
+    }
+  }).catch(() => null);
 
   return NextResponse.json({ ok: true, profile: updatedProfiles[0] });
 }

@@ -22,16 +22,83 @@ function getStore() {
   return globalScope[RATE_LIMIT_STORE_KEY]!;
 }
 
-export function getRequestIp(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    return forwardedFor.split(",")[0]?.trim() || "unknown";
+function getKvConfig() {
+  const url = process.env.KV_REST_API_URL;
+  const token = process.env.KV_REST_API_TOKEN;
+
+  if (!url || !token) {
+    return null;
   }
 
-  return request.headers.get("x-real-ip")?.trim() || "unknown";
+  return { url, token };
 }
 
-export function checkRateLimit({
+async function callKv(command: string[]) {
+  const kv = getKvConfig();
+  if (!kv) {
+    return null;
+  }
+
+  const encodedCommand = command
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+
+  const response = await fetch(`${kv.url}/${encodedCommand}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${kv.token}`
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`KV request failed with status ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { result?: string | number | null };
+  return payload.result;
+}
+
+async function checkPersistentRateLimit({
+  key,
+  max,
+  windowMs
+}: {
+  key: string;
+  max: number;
+  windowMs: number;
+}): Promise<RateLimitResult | null> {
+  const kv = getKvConfig();
+  if (!kv) {
+    return null;
+  }
+
+  const namespacedKey = `sr:rate-limit:${key}`;
+  const windowSeconds = Math.max(1, Math.ceil(windowMs / 1000));
+  const currentCountRaw = await callKv(["incr", namespacedKey]);
+  const currentCount = Number(currentCountRaw ?? 0);
+
+  if (currentCount === 1) {
+    await callKv(["expire", namespacedKey, String(windowSeconds)]);
+  }
+
+  if (currentCount <= max) {
+    return {
+      ok: true,
+      retryAfterSeconds: 0
+    };
+  }
+
+  const ttlRaw = await callKv(["ttl", namespacedKey]);
+  const ttl = Number(ttlRaw ?? windowSeconds);
+
+  return {
+    ok: false,
+    retryAfterSeconds: ttl > 0 ? ttl : windowSeconds
+  };
+}
+
+function checkMemoryRateLimit({
   key,
   max,
   windowMs
@@ -73,4 +140,43 @@ export function checkRateLimit({
     ok: true,
     retryAfterSeconds: 0
   };
+}
+
+export function getRequestIp(request: Request) {
+  const forwardedFor = request.headers.get("x-forwarded-for");
+  if (forwardedFor) {
+    return forwardedFor.split(",")[0]?.trim() || "unknown";
+  }
+
+  return request.headers.get("x-real-ip")?.trim() || "unknown";
+}
+
+export async function checkRateLimit({
+  key,
+  max,
+  windowMs
+}: {
+  key: string;
+  max: number;
+  windowMs: number;
+}): Promise<RateLimitResult> {
+  try {
+    const persistentResult = await checkPersistentRateLimit({
+      key,
+      max,
+      windowMs
+    });
+
+    if (persistentResult) {
+      return persistentResult;
+    }
+  } catch {
+    // Fall back to in-memory protection if KV is unavailable.
+  }
+
+  return checkMemoryRateLimit({
+    key,
+    max,
+    windowMs
+  });
 }

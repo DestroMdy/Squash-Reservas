@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logAdminAudit } from "@/lib/admin-audit";
 import { fetchProfileRole, getUser } from "@/lib/supabase";
 
 function adminHeaders(apiKey: string) {
@@ -31,10 +32,31 @@ async function requireAdmin(request: NextRequest) {
 
   const role = await fetchProfileRole(user.id, token);
   if (role !== "admin") {
-    return { error: "No tienes permisos de administrador.", status: 403 as const };
+    return {
+      error: "No tienes permisos de administrador.",
+      status: 403 as const
+    };
   }
 
-  return { supabaseUrl, serviceRoleKey };
+  return { supabaseUrl, serviceRoleKey, actorId: user.id };
+}
+
+async function fetchTournamentById(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  id: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/external_tournaments?select=id,title,platform,event_date,location,url,notes,is_active&id=eq.${id}&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey)
+    }
+  );
+
+  const text = await response.text();
+  const rows = text.trim() ? JSON.parse(text) : [];
+  return rows[0] ?? null;
 }
 
 export async function PATCH(
@@ -45,6 +67,12 @@ export async function PATCH(
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+
+  const currentTournament = await fetchTournamentById(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    params.id
+  );
 
   const body = await request.json();
 
@@ -70,6 +98,17 @@ export async function PATCH(
     );
   }
 
+  await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
+    actorId: auth.actorId,
+    action: "external_tournament.updated",
+    targetType: "external_tournament",
+    targetId: params.id,
+    details: {
+      before: currentTournament,
+      after: payload[0]
+    }
+  }).catch(() => null);
+
   return NextResponse.json({ ok: true, tournament: payload[0] });
 }
 
@@ -81,6 +120,12 @@ export async function DELETE(
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+
+  const currentTournament = await fetchTournamentById(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    params.id
+  );
 
   const response = await fetch(
     `${auth.supabaseUrl}/rest/v1/external_tournaments?id=eq.${params.id}`,
@@ -102,6 +147,14 @@ export async function DELETE(
       { status: 400 }
     );
   }
+
+  await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
+    actorId: auth.actorId,
+    action: "external_tournament.deleted",
+    targetType: "external_tournament",
+    targetId: params.id,
+    details: currentTournament ?? payload[0]
+  }).catch(() => null);
 
   return NextResponse.json({ ok: true, tournament: payload[0] });
 }
