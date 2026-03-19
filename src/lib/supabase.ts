@@ -373,6 +373,26 @@ export async function deleteProfileAsAdmin(
   });
 }
 
+export async function promoteProfileToAdmin(profileId: string, token: string) {
+  const response = await fetch(`/api/admin/players/${profileId}/role`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({ role: "admin" })
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo actualizar el rol.");
+  }
+}
+
 export async function fetchProfileRole(userId: string, token: string) {
   const data = await rest<any[]>(
     `profiles?select=role&id=eq.${userId}&limit=1`,

@@ -10,6 +10,7 @@ import {
   fetchProfileRole,
   getSession,
   getUser,
+  promoteProfileToAdmin,
   updateBookingAsAdmin
 } from "@/lib/supabase";
 import { Booking, BookingStatus, Profile } from "@/types/db";
@@ -41,6 +42,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
+  const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -202,6 +204,37 @@ export default function AdminPage() {
     }
   }
 
+  async function handlePromoteProfile(player: Profile) {
+    const confirmed = window.confirm(
+      `Vas a convertir a ${player.full_name || "este usuario"} en administrador.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setPromotingProfileId(player.id);
+      setMessage(null);
+      setError(null);
+
+      await promoteProfileToAdmin(player.id, token);
+      await loadAdminData();
+      setMessage("Usuario promovido a administrador.");
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "No se pudo actualizar el rol"
+      );
+    } finally {
+      setPromotingProfileId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -269,6 +302,7 @@ export default function AdminPage() {
               {players.map((player) => {
                 const isCurrentAdmin = player.role === "admin";
                 const isDeleting = deletingProfileId === player.id;
+                const isPromoting = promotingProfileId === player.id;
 
                 return (
                   <article
@@ -294,20 +328,30 @@ export default function AdminPage() {
                       </div>
                     </div>
 
-                    <div>
+                    <div className="flex flex-wrap gap-2">
                       {isCurrentAdmin ? (
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
                           Admin protegido
                         </span>
                       ) : (
-                        <button
-                          type="button"
-                          className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                          onClick={() => handleDeleteProfile(player)}
-                          disabled={Boolean(deletingProfileId)}
-                        >
-                          {isDeleting ? "Eliminando..." : "Borrar perfil"}
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            className="rounded-xl border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => handlePromoteProfile(player)}
+                            disabled={Boolean(promotingProfileId) || Boolean(deletingProfileId)}
+                          >
+                            {isPromoting ? "Promoviendo..." : "Hacer admin"}
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => handleDeleteProfile(player)}
+                            disabled={Boolean(deletingProfileId) || Boolean(promotingProfileId)}
+                          >
+                            {isDeleting ? "Eliminando..." : "Borrar perfil"}
+                          </button>
+                        </>
                       )}
                     </div>
                   </article>
