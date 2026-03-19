@@ -18,6 +18,7 @@ const categoryOrder = [
 
 export default function PlayersPage() {
   const [players, setPlayers] = useState<Profile[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,6 +34,7 @@ export default function PlayersPage() {
           return;
         }
 
+        setCurrentUserId(session.user?.id ?? null);
         const data = await fetchPlayers(session.access_token);
         setPlayers(data ?? []);
       } catch (err) {
@@ -98,13 +100,13 @@ export default function PlayersPage() {
                         key={player.id}
                         className="rounded-xl border border-slate-200 bg-white p-4"
                       >
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center justify-between gap-4">
                           <img
                             src={player.avatar_url || "/icon-192.png"}
                             alt={player.full_name || "Jugador"}
                             className="h-16 w-16 rounded-full border border-slate-200 object-cover"
                           />
-                          <div>
+                          <div className="flex-1">
                             <p className="font-semibold text-slate-900">
                               {player.full_name || "Sin nombre"}
                             </p>
@@ -117,6 +119,19 @@ export default function PlayersPage() {
                               Rol: {player.role}
                             </p>
                           </div>
+
+                          {player.id !== currentUserId ? (
+                            <Link
+                              href={`/messages?to=${player.id}`}
+                              className="btn-secondary shrink-0 whitespace-nowrap"
+                            >
+                              Enviar mensaje
+                            </Link>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-500">
+                              Tu perfil
+                            </span>
+                          )}
                         </div>
                       </article>
                     ))}

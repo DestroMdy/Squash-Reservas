@@ -10,6 +10,16 @@ export interface Profile {
   role: Role;
 }
 
+export interface PrivateMessage {
+  id: string;
+  sender_id: string;
+  recipient_id: string;
+  body: string;
+  read_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Court {
   id: string;
   name: string;

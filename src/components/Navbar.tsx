@@ -9,6 +9,7 @@ const ADMIN_EMAIL = "alann.freire@gmail.com";
 const navItems = [
   { href: "/schedule", label: "Agenda" },
   { href: "/my-bookings", label: "Mis reservas" },
+  { href: "/messages", label: "Mensajes" },
   { href: "/profile", label: "Mi perfil" },
   { href: "/players", label: "Jugadores" },
   { href: "/courts", label: "Canchas" }

@@ -545,3 +545,31 @@ export async function fetchPlayers(token: string) {
     { token }
   );
 }
+
+export async function fetchPrivateMessages(userId: string, token: string) {
+  const senderFilter = `sender_id.eq.${userId}`;
+  const recipientFilter = `recipient_id.eq.${userId}`;
+
+  return rest<any[]>(
+    `private_messages?select=id,sender_id,recipient_id,body,read_at,created_at,updated_at&or=(${senderFilter},${recipientFilter})&order=created_at.asc`,
+    { token }
+  );
+}
+
+export async function sendPrivateMessage(
+  senderId: string,
+  recipientId: string,
+  body: string,
+  token: string
+) {
+  await rest("private_messages", {
+    method: "POST",
+    token,
+    body: JSON.stringify({
+      sender_id: senderId,
+      recipient_id: recipientId,
+      body: body.trim()
+    }),
+    headers: { Prefer: "return=minimal" }
+  });
+}
