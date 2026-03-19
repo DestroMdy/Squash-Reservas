@@ -20,3 +20,9 @@ export function isPastSlot(slotDate: string, endTime: string): boolean {
 export function canReserveSlot(slotDate: string, startTime: string, endTime: string) {
   return canBookSlot(slotDate) && !isPastSlot(slotDate, endTime) && Boolean(startTime);
 }
+
+export function canCancelBooking(slotDate: string, startTime: string) {
+  const bookingStart = buildSlotDateTime(slotDate, startTime);
+  const minimumCancelTime = new Date(bookingStart.getTime() - 60 * 60 * 1000);
+  return new Date() <= minimumCancelTime;
+}

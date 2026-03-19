@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppNoticeModal } from "../components/AppNoticeModal";
 import { cancelBooking, getSession, isProfileComplete } from "../lib/supabase";
-import { canBookSlot, canReserveSlot, isPastSlot } from "../lib/time-rules";
+import {
+  canBookSlot,
+  canCancelBooking,
+  canReserveSlot,
+  isPastSlot
+} from "../lib/time-rules";
 import { Booking, Court, TimeSlot } from "../types/db";
 
 type SlotWithRelations = TimeSlot & {
@@ -141,6 +146,10 @@ export function ScheduleGrid({
             slot.start_time,
             slot.end_time
           );
+          const canCancelThisBooking = Boolean(
+            confirmedBooking &&
+              canCancelBooking(slot.slot_date, slot.start_time)
+          );
 
           const disabled =
             isReserved || !canReserveThisSlot || profileComplete === false;
@@ -240,16 +249,26 @@ export function ScheduleGrid({
                       Completa tu perfil para poder reservar.
                     </p>
                   ) : null}
+
+                  {isMine && confirmedBooking && !canCancelThisBooking ? (
+                    <p className="text-sm text-amber-700">
+                      Solo puedes cancelar con más de 1 hora de anticipación.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="sm:min-w-[160px]">
                   {isMine && confirmedBooking ? (
                     <button
-                      disabled={isCancelling}
+                      disabled={isCancelling || !canCancelThisBooking}
                       className="btn-secondary w-full border-blue-300 bg-white text-blue-700 hover:bg-blue-100"
                       onClick={() => cancel(confirmedBooking.id)}
                     >
-                      {isCancelling ? "Cancelando..." : "Cancelar reserva"}
+                      {isCancelling
+                        ? "Cancelando..."
+                        : !canCancelThisBooking
+                          ? "No cancelable"
+                          : "Cancelar reserva"}
                     </button>
                   ) : (
                     <button

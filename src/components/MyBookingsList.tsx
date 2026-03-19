@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AppNoticeModal } from "../components/AppNoticeModal";
 import { Booking, Profile } from "../types/db";
 import { cancelBooking, fetchProfile, getSession } from "../lib/supabase";
+import { canCancelBooking } from "../lib/time-rules";
 
 function getBookingEndDateTime(booking: Booking) {
   const slotDate = booking.time_slots?.slot_date;
@@ -71,6 +72,14 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
           const bookingEnd = getBookingEndDateTime(booking);
           const isPast = Boolean(bookingEnd && bookingEnd < new Date());
           const isCurrent = booking.status === "confirmed" && !isPast;
+          const canCancelCurrentBooking = Boolean(
+            booking.time_slots?.slot_date &&
+              booking.time_slots?.start_time &&
+              canCancelBooking(
+                booking.time_slots.slot_date,
+                booking.time_slots.start_time
+              )
+          );
           const cardClass = isCurrent
             ? "border-green-300 bg-green-50"
             : "border-slate-300 bg-slate-100";
@@ -114,14 +123,26 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
                       <span className="font-medium">{profile.category}</span>
                     </p>
                   ) : null}
+
+                  {isCurrent && !canCancelCurrentBooking ? (
+                    <p className="mt-2 text-sm text-amber-700">
+                      La cancelación solo se permite con más de 1 hora de anticipación.
+                    </p>
+                  ) : null}
                 </div>
 
                 <button
                   className="btn-secondary"
-                  disabled={!isCurrent || loadingId === booking.id}
+                  disabled={
+                    !isCurrent || !canCancelCurrentBooking || loadingId === booking.id
+                  }
                   onClick={() => cancel(booking.id)}
                 >
-                  {loadingId === booking.id ? "Cancelando..." : "Cancelar"}
+                  {loadingId === booking.id
+                    ? "Cancelando..."
+                    : !canCancelCurrentBooking && isCurrent
+                      ? "No cancelable"
+                      : "Cancelar"}
                 </button>
               </div>
             </article>

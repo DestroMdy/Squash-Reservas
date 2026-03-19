@@ -328,12 +328,21 @@ export async function fetchAllBookings(token: string) {
 }
 
 export async function cancelBooking(bookingId: string, token: string) {
-  await rest(`bookings?id=eq.${bookingId}&status=eq.confirmed`, {
-    method: "PATCH",
-    token,
-    body: JSON.stringify({ status: "cancelled" }),
-    headers: { Prefer: "return=minimal" }
+  const response = await fetch(`/api/bookings/${bookingId}/cancel`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
   });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo cancelar la reserva.");
+  }
 }
 
 export async function updateBookingAsAdmin(
