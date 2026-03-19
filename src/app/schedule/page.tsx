@@ -4,8 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { ScheduleGrid } from "../../components/ScheduleGrid";
 import { SectionTitle } from "../../components/SectionTitle";
-import { fetchSlotsByDate, getSession } from "../../lib/supabase";
-import { isSlotWithinClubHours } from "../../lib/time-rules";
+import {
+  fetchProfileRole,
+  fetchSlotsByDate,
+  getSession,
+  getUser
+} from "../../lib/supabase";
+import { isPastSlot, isSlotWithinClubHours } from "../../lib/time-rules";
 import { Booking, Court, TimeSlot } from "../../types/db";
 
 type SlotWithRelations = TimeSlot & {
@@ -32,6 +37,7 @@ export default function SchedulePage() {
   const [mounted, setMounted] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [slots, setSlots] = useState<SlotWithRelations[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,8 +54,23 @@ export default function SchedulePage() {
         setLoading(true);
         setError(null);
         const token = getSession()?.access_token;
+        let adminUser = false;
+
+        if (token) {
+          const user = await getUser(token);
+          if (user) {
+            const role = await fetchProfileRole(user.id, token);
+            adminUser = role === "admin";
+          }
+        }
+
+        setIsAdmin(adminUser);
         const data = await fetchSlotsByDate(selectedDate, token);
-        setSlots(data);
+        setSlots(
+          (data ?? []).filter((slot) =>
+            adminUser ? true : !isPastSlot(slot.slot_date, slot.end_time)
+          )
+        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "No se pudo cargar la agenda");
       } finally {

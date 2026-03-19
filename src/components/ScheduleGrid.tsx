@@ -102,11 +102,13 @@ export function ScheduleGrid({
   }
 
   function formatReservationDate(slotDate: string) {
-    return new Intl.DateTimeFormat("es-AR", {
+    const formatted = new Intl.DateTimeFormat("es-AR", {
       weekday: "long",
       day: "2-digit",
       month: "2-digit"
     }).format(new Date(`${slotDate}T12:00:00`));
+
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
   }
 
   async function cancel(bookingId: string) {
