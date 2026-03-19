@@ -79,14 +79,14 @@ export async function GET(
 
   const [messagesResponse, membersResponse] = await Promise.all([
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,body,created_at,updated_at,profiles(id,full_name,category,avatar_url)&group_id=eq.${params.id}&order=created_at.asc`,
+      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,body,created_at,updated_at&group_id=eq.${params.id}&order=created_at.asc`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey)
       }
     ),
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id,profiles(id,full_name,category,avatar_url)&group_id=eq.${params.id}`,
+      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${params.id}`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey)
@@ -105,12 +105,74 @@ export async function GET(
   }
 
   const messages = messagesText.trim() ? JSON.parse(messagesText) : [];
-  const members = (membersText.trim() ? JSON.parse(membersText) : []).map(
-    (member: { profiles?: unknown }) => member.profiles
+  const memberRows = membersText.trim() ? JSON.parse(membersText) : [];
+  const profileIds = Array.from(
+    new Set<string>([
+      ...memberRows.map((member: { user_id: string }) => member.user_id),
+      ...messages.map((message: { sender_id: string }) => message.sender_id)
+    ])
   );
 
+  let profilesById = new Map<
+    string,
+    {
+      id: string;
+      full_name?: string | null;
+      category?: string | null;
+      avatar_url?: string | null;
+    }
+  >();
+
+  if (profileIds.length) {
+    const profilesResponse = await fetch(
+      `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${profileIds.join(",")})`,
+      {
+        method: "GET",
+        headers: adminHeaders(auth.serviceRoleKey)
+      }
+    );
+
+    const profilesText = await profilesResponse.text();
+
+    if (!profilesResponse.ok) {
+      return NextResponse.json(
+        { error: "No se pudieron cargar los perfiles del grupo." },
+        { status: 400 }
+      );
+    }
+
+    const profiles = profilesText.trim() ? JSON.parse(profilesText) : [];
+    profilesById = new Map(
+      profiles.map(
+        (profile: {
+          id: string;
+          full_name?: string | null;
+          category?: string | null;
+          avatar_url?: string | null;
+        }) => [profile.id, profile]
+      )
+    );
+  }
+
+  const normalizedMessages = messages.map(
+    (message: {
+      id: string;
+      group_id: string;
+      sender_id: string;
+      body: string;
+      created_at: string;
+      updated_at: string;
+    }) => ({
+      ...message,
+      profiles: profilesById.get(message.sender_id) || null
+    })
+  );
+  const members = memberRows
+    .map((member: { user_id: string }) => profilesById.get(member.user_id) || null)
+    .filter(Boolean);
+
   return NextResponse.json({
-    messages,
+    messages: normalizedMessages,
     members
   });
 }

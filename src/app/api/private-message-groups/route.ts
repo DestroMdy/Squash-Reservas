@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
       }
     ),
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=group_id,user_id,profiles(id,full_name,category,avatar_url)&group_id=in.(${groupFilter})`,
+      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=group_id,user_id&group_id=in.(${groupFilter})`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey)
@@ -140,6 +140,53 @@ export async function GET(request: NextRequest) {
   const groups = groupsText.trim() ? JSON.parse(groupsText) : [];
   const members = membersText.trim() ? JSON.parse(membersText) : [];
   const messages = messagesText.trim() ? JSON.parse(messagesText) : [];
+  const profileIds = Array.from(
+    new Set<string>([
+      ...members.map((member: { user_id: string }) => member.user_id),
+      ...messages.map((message: { sender_id: string }) => message.sender_id)
+    ])
+  );
+
+  let profilesById = new Map<
+    string,
+    {
+      id: string;
+      full_name?: string | null;
+      category?: string | null;
+      avatar_url?: string | null;
+    }
+  >();
+
+  if (profileIds.length) {
+    const profilesResponse = await fetch(
+      `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${profileIds.join(",")})`,
+      {
+        method: "GET",
+        headers: adminHeaders(auth.serviceRoleKey)
+      }
+    );
+
+    const profilesText = await profilesResponse.text();
+
+    if (!profilesResponse.ok) {
+      return NextResponse.json(
+        { error: "No se pudieron cargar los perfiles de grupos." },
+        { status: 400 }
+      );
+    }
+
+    const profiles = profilesText.trim() ? JSON.parse(profilesText) : [];
+    profilesById = new Map(
+      profiles.map(
+        (profile: {
+          id: string;
+          full_name?: string | null;
+          category?: string | null;
+          avatar_url?: string | null;
+        }) => [profile.id, profile]
+      )
+    );
+  }
 
   const membershipMap = new Map<
     string,
@@ -163,16 +210,7 @@ export async function GET(request: NextRequest) {
     }) => {
       const groupMembers = members
         .filter((member: { group_id: string }) => member.group_id === group.id)
-        .map(
-          (member: {
-            profiles?: {
-              id: string;
-              full_name?: string | null;
-              category?: string | null;
-              avatar_url?: string | null;
-            } | null;
-          }) => member.profiles
-        )
+        .map((member: { user_id: string }) => profilesById.get(member.user_id))
         .filter(Boolean);
 
       const lastReadAt = membershipMap.get(group.id)?.last_read_at;
@@ -201,8 +239,9 @@ export async function GET(request: NextRequest) {
         last_message_at: latestMessage?.created_at || null,
         last_message_id: latestMessage?.id || null,
         last_message_body: latestMessage?.body || null,
-        last_message_sender_name:
-          latestMessage?.profiles?.full_name || null
+        last_message_sender_name: latestMessage?.sender_id
+          ? profilesById.get(latestMessage.sender_id)?.full_name || null
+          : null
       };
     }
   );
