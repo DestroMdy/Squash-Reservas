@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
+  deleteProfileAsAdmin,
   fetchAllBookings,
   fetchBookingStats,
   fetchPlayers,
@@ -39,6 +40,7 @@ export default function AdminPage() {
   const [editState, setEditState] = useState<EditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -169,6 +171,37 @@ export default function AdminPage() {
     }
   }
 
+  async function handleDeleteProfile(player: Profile) {
+    const confirmed = window.confirm(
+      `Vas a borrar el perfil de ${player.full_name || "este usuario"}. Esta acción no se puede deshacer.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setDeletingProfileId(player.id);
+      setMessage(null);
+      setError(null);
+
+      await deleteProfileAsAdmin(player, token);
+      await loadAdminData();
+      setMessage("Perfil eliminado correctamente.");
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "No se pudo eliminar el perfil"
+      );
+    } finally {
+      setDeletingProfileId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -217,6 +250,72 @@ export default function AdminPage() {
 
       {!loading && !error && role === "admin" ? (
         <div className="space-y-4">
+          <section className="card p-5">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Gestión de jugadores
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Como admin puedes borrar perfiles de usuarios.
+                </p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+                {players.length}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {players.map((player) => {
+                const isCurrentAdmin = player.role === "admin";
+                const isDeleting = deletingProfileId === player.id;
+
+                return (
+                  <article
+                    key={player.id}
+                    className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={player.avatar_url || "/icon-192.png"}
+                        alt={player.full_name || "Jugador"}
+                        className="h-14 w-14 rounded-full border border-slate-200 object-cover"
+                      />
+                      <div>
+                        <p className="font-medium text-slate-900">
+                          {player.full_name || "Sin nombre"}
+                        </p>
+                        <p className="text-sm text-slate-600">
+                          {player.category || "Sin categoría"} · {player.phone || "Sin teléfono"}
+                        </p>
+                        <p className="text-xs uppercase tracking-wide text-slate-400">
+                          {player.role}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      {isCurrentAdmin ? (
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
+                          Admin protegido
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => handleDeleteProfile(player)}
+                          disabled={Boolean(deletingProfileId)}
+                        >
+                          {isDeleting ? "Eliminando..." : "Borrar perfil"}
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+
           {filteredBookings.map((booking) => {
             const playerName = booking.profiles?.full_name || "Sin nombre";
             const playerCategory =

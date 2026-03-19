@@ -334,6 +334,45 @@ export async function updateBookingAsAdmin(
   });
 }
 
+function getAvatarStoragePath(avatarUrl: string | null | undefined) {
+  if (!avatarUrl) return null;
+
+  const marker = `/storage/v1/object/public/${AVATAR_BUCKET}/`;
+  const index = avatarUrl.indexOf(marker);
+
+  if (index === -1) {
+    return null;
+  }
+
+  return avatarUrl.slice(index + marker.length);
+}
+
+export async function deleteProfileAsAdmin(
+  profile: { id: string; avatar_url?: string | null },
+  token: string
+) {
+  const avatarPath = getAvatarStoragePath(profile.avatar_url);
+
+  if (avatarPath) {
+    await fetch(
+      `${supabaseUrl}/storage/v1/object/${AVATAR_BUCKET}/${avatarPath}`,
+      {
+        method: "DELETE",
+        headers: {
+          apikey: anonKey,
+          Authorization: `Bearer ${token}`
+        }
+      }
+    );
+  }
+
+  await rest(`profiles?id=eq.${profile.id}`, {
+    method: "DELETE",
+    token,
+    headers: { Prefer: "return=minimal" }
+  });
+}
+
 export async function fetchProfileRole(userId: string, token: string) {
   const data = await rest<any[]>(
     `profiles?select=role&id=eq.${userId}&limit=1`,
