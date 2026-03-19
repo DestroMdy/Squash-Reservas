@@ -15,6 +15,7 @@ const navItems = [
   { href: "/schedule", label: "Agenda" },
   { href: "/my-bookings", label: "Mis reservas" },
   { href: "/messages", label: "Mensajes" },
+  { href: "/tournaments", label: "Torneos" },
   { href: "/profile", label: "Mi perfil" },
   { href: "/players", label: "Jugadores" },
   { href: "/courts", label: "Canchas" }

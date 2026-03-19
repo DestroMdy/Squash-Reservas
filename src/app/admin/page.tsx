@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
+  createExternalTournament,
   deleteProfileAsAdmin,
+  deleteExternalTournament,
+  fetchAdminExternalTournaments,
   fetchAllBookings,
   fetchBookingStats,
   fetchPlayers,
@@ -11,9 +14,16 @@ import {
   getSession,
   getUser,
   promoteProfileToAdmin,
+  updateExternalTournament,
   updateBookingAsAdmin
 } from "@/lib/supabase";
-import { Booking, BookingStatus, Profile } from "@/types/db";
+import {
+  Booking,
+  BookingStatus,
+  ExternalTournament,
+  ExternalTournamentPlatform,
+  Profile
+} from "@/types/db";
 
 type BookingWithRelations = Booking & {
   profiles?: Pick<Profile, "id" | "full_name" | "category"> | null;
@@ -25,12 +35,39 @@ type EditState = {
   notes: string;
 };
 
+type TournamentFormState = {
+  title: string;
+  platform: ExternalTournamentPlatform;
+  event_date: string;
+  location: string;
+  url: string;
+  notes: string;
+  is_active: boolean;
+};
+
 const statusOptions: BookingStatus[] = ["confirmed", "cancelled", "completed"];
+const tournamentPlatforms: ExternalTournamentPlatform[] = [
+  "rankedin",
+  "tournamentsoftware",
+  "otro"
+];
 
 function getCurrentMonthKey() {
   const now = new Date();
   const month = String(now.getMonth() + 1).padStart(2, "0");
   return `${now.getFullYear()}-${month}`;
+}
+
+function getEmptyTournamentForm(): TournamentFormState {
+  return {
+    title: "",
+    platform: "rankedin",
+    event_date: "",
+    location: "",
+    url: "",
+    notes: "",
+    is_active: true
+  };
 }
 
 export default function AdminPage() {
@@ -42,12 +79,19 @@ export default function AdminPage() {
   } | null>(null);
   const [bookings, setBookings] = useState<BookingWithRelations[]>([]);
   const [players, setPlayers] = useState<Profile[]>([]);
+  const [tournaments, setTournaments] = useState<ExternalTournament[]>([]);
   const [filter, setFilter] = useState("");
   const [reportMonth, setReportMonth] = useState(getCurrentMonthKey());
+  const [tournamentForm, setTournamentForm] = useState<TournamentFormState>(
+    getEmptyTournamentForm()
+  );
+  const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingTournament, setSavingTournament] = useState(false);
+  const [deletingTournamentId, setDeletingTournamentId] = useState<string | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -77,15 +121,17 @@ export default function AdminPage() {
       return;
     }
 
-    const [bookingStats, allBookings, allPlayers] = await Promise.all([
+    const [bookingStats, allBookings, allPlayers, externalTournaments] = await Promise.all([
       fetchBookingStats(token),
       fetchAllBookings(token),
-      fetchPlayers(token)
+      fetchPlayers(token),
+      fetchAdminExternalTournaments(token)
     ]);
 
     setStats(bookingStats);
     setBookings(allBookings ?? []);
     setPlayers(allPlayers ?? []);
+    setTournaments(externalTournaments ?? []);
     setError(null);
     setLoading(false);
   }
@@ -293,6 +339,96 @@ export default function AdminPage() {
     }
   }
 
+  function startTournamentEdit(tournament: ExternalTournament) {
+    setEditingTournamentId(tournament.id);
+    setTournamentForm({
+      title: tournament.title,
+      platform: tournament.platform,
+      event_date: tournament.event_date || "",
+      location: tournament.location || "",
+      url: tournament.url,
+      notes: tournament.notes || "",
+      is_active: tournament.is_active
+    });
+    setMessage(null);
+  }
+
+  function resetTournamentForm() {
+    setEditingTournamentId(null);
+    setTournamentForm(getEmptyTournamentForm());
+  }
+
+  async function handleTournamentSubmit() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setSavingTournament(true);
+      setMessage(null);
+
+      const payload = {
+        title: tournamentForm.title,
+        platform: tournamentForm.platform,
+        event_date: tournamentForm.event_date || null,
+        location: tournamentForm.location || null,
+        url: tournamentForm.url,
+        notes: tournamentForm.notes || null,
+        is_active: tournamentForm.is_active
+      };
+
+      if (editingTournamentId) {
+        await updateExternalTournament(editingTournamentId, token, payload);
+        setMessage("Torneo externo actualizado.");
+      } else {
+        await createExternalTournament(token, payload);
+        setMessage("Torneo externo creado.");
+      }
+
+      await loadAdminData();
+      resetTournamentForm();
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "No se pudo guardar el torneo externo"
+      );
+    } finally {
+      setSavingTournament(false);
+    }
+  }
+
+  async function handleDeleteTournament(tournament: ExternalTournament) {
+    const confirmed = window.confirm(
+      `Vas a borrar el torneo "${tournament.title}".`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setDeletingTournamentId(tournament.id);
+      setMessage(null);
+      await deleteExternalTournament(tournament.id, token);
+      await loadAdminData();
+      setMessage("Torneo externo borrado.");
+      if (editingTournamentId === tournament.id) {
+        resetTournamentForm();
+      }
+    } catch (err) {
+      setMessage(
+        err instanceof Error ? err.message : "No se pudo borrar el torneo externo"
+      );
+    } finally {
+      setDeletingTournamentId(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -474,6 +610,231 @@ export default function AdminPage() {
                 </p>
               )}
             </article>
+          </div>
+        </section>
+      ) : null}
+
+      {!error && role === "admin" ? (
+        <section className="card space-y-5 p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Torneos externos
+              </h2>
+              <p className="text-sm text-slate-500">
+                Carga links manuales a torneos de Rankedin, Tournament Software u otras plataformas.
+              </p>
+            </div>
+            <a
+              href="/tournaments"
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary whitespace-nowrap"
+            >
+              Ver página pública
+            </a>
+          </div>
+
+          <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Nombre del torneo
+              </label>
+              <input
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                value={tournamentForm.title}
+                onChange={(event) =>
+                  setTournamentForm({ ...tournamentForm, title: event.target.value })
+                }
+                placeholder="Ej: Torneo Apertura"
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Plataforma
+              </label>
+              <select
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                value={tournamentForm.platform}
+                onChange={(event) =>
+                  setTournamentForm({
+                    ...tournamentForm,
+                    platform: event.target.value as ExternalTournamentPlatform
+                  })
+                }
+              >
+                {tournamentPlatforms.map((platform) => (
+                  <option key={platform} value={platform}>
+                    {platform === "rankedin"
+                      ? "Rankedin"
+                      : platform === "tournamentsoftware"
+                        ? "Tournament Software"
+                        : "Otro"}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Fecha
+              </label>
+              <input
+                type="date"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                value={tournamentForm.event_date}
+                onChange={(event) =>
+                  setTournamentForm({
+                    ...tournamentForm,
+                    event_date: event.target.value
+                  })
+                }
+              />
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Lugar
+              </label>
+              <input
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                value={tournamentForm.location}
+                onChange={(event) =>
+                  setTournamentForm({
+                    ...tournamentForm,
+                    location: event.target.value
+                  })
+                }
+                placeholder="Club / ciudad"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Link del torneo
+              </label>
+              <input
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                value={tournamentForm.url}
+                onChange={(event) =>
+                  setTournamentForm({ ...tournamentForm, url: event.target.value })
+                }
+                placeholder="https://..."
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Notas
+              </label>
+              <textarea
+                className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                value={tournamentForm.notes}
+                onChange={(event) =>
+                  setTournamentForm({ ...tournamentForm, notes: event.target.value })
+                }
+                placeholder="Opcional"
+              />
+            </div>
+
+            <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={tournamentForm.is_active}
+                onChange={(event) =>
+                  setTournamentForm({
+                    ...tournamentForm,
+                    is_active: event.target.checked
+                  })
+                }
+              />
+              Mostrar en la página pública de torneos
+            </label>
+
+            <div className="md:col-span-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleTournamentSubmit}
+                disabled={savingTournament}
+              >
+                {savingTournament
+                  ? "Guardando..."
+                  : editingTournamentId
+                    ? "Guardar torneo"
+                    : "Crear torneo"}
+              </button>
+              {editingTournamentId ? (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={resetTournamentForm}
+                  disabled={savingTournament}
+                >
+                  Cancelar edición
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {tournaments.length ? (
+              tournaments.map((tournament) => (
+                <article
+                  key={tournament.id}
+                  className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                >
+                  <div>
+                    <p className="font-medium text-slate-900">{tournament.title}</p>
+                    <p className="text-sm text-slate-600">
+                      {(tournament.platform === "rankedin"
+                        ? "Rankedin"
+                        : tournament.platform === "tournamentsoftware"
+                          ? "Tournament Software"
+                          : "Otro")}
+                      {tournament.event_date ? ` · ${tournament.event_date}` : ""}
+                      {tournament.location ? ` · ${tournament.location}` : ""}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {tournament.is_active ? "Visible en público" : "Oculto"}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={tournament.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-secondary"
+                    >
+                      Abrir link
+                    </a>
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => startTournamentEdit(tournament)}
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                      onClick={() => handleDeleteTournament(tournament)}
+                      disabled={deletingTournamentId === tournament.id}
+                    >
+                      {deletingTournamentId === tournament.id
+                        ? "Borrando..."
+                        : "Borrar"}
+                    </button>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="text-sm text-slate-500">
+                Todavía no hay torneos externos cargados.
+              </p>
+            )}
           </div>
         </section>
       ) : null}

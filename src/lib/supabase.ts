@@ -643,3 +643,115 @@ export async function markConversationAsRead(
     window.dispatchEvent(new Event("sr-messages-updated"));
   }
 }
+
+export async function fetchExternalTournaments() {
+  return rest<any[]>(
+    "external_tournaments?select=id,title,platform,event_date,location,url,notes,is_active,created_at&is_active=eq.true&order=event_date.asc.nullslast,created_at.desc"
+  );
+}
+
+export async function fetchAdminExternalTournaments(token: string) {
+  const response = await fetch("/api/admin/external-tournaments", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as any[] | { error?: string })
+    : [];
+
+  if (!response.ok) {
+    const error = !Array.isArray(payload) ? payload.error : undefined;
+    throw new Error(error || "No se pudieron cargar los torneos externos.");
+  }
+
+  return payload as any[];
+}
+
+export async function createExternalTournament(
+  token: string,
+  payload: {
+    title: string;
+    platform: string;
+    event_date?: string | null;
+    location?: string | null;
+    url: string;
+    notes?: string | null;
+    is_active?: boolean;
+  }
+) {
+  const response = await fetch("/api/admin/external-tournaments", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string; tournament?: any })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo crear el torneo externo.");
+  }
+
+  return data.tournament;
+}
+
+export async function updateExternalTournament(
+  tournamentId: string,
+  token: string,
+  payload: {
+    title?: string;
+    platform?: string;
+    event_date?: string | null;
+    location?: string | null;
+    url?: string;
+    notes?: string | null;
+    is_active?: boolean;
+  }
+) {
+  const response = await fetch(`/api/admin/external-tournaments/${tournamentId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string; tournament?: any })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo actualizar el torneo externo.");
+  }
+
+  return data.tournament;
+}
+
+export async function deleteExternalTournament(tournamentId: string, token: string) {
+  const response = await fetch(`/api/admin/external-tournaments/${tournamentId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo borrar el torneo externo.");
+  }
+}

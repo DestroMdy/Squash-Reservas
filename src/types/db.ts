@@ -1,5 +1,6 @@
 export type Role = "player" | "admin";
 export type BookingStatus = "confirmed" | "cancelled" | "completed";
+export type ExternalTournamentPlatform = "rankedin" | "tournamentsoftware" | "otro";
 
 export interface Profile {
   id: string;
@@ -18,6 +19,18 @@ export interface PrivateMessage {
   read_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ExternalTournament {
+  id: string;
+  title: string;
+  platform: ExternalTournamentPlatform;
+  event_date: string | null;
+  location: string | null;
+  url: string;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
 }
 
 export interface Court {

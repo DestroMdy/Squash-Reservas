@@ -54,6 +54,9 @@ export default function HomePage() {
           <Link href="/my-bookings" className="btn-secondary text-center">
             Mis reservas
           </Link>
+          <Link href="/tournaments" className="btn-secondary text-center">
+            Torneos
+          </Link>
           {isLogged ? (
             <Link href="/profile" className="btn-secondary text-center">
               Mi perfil
