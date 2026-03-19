@@ -38,13 +38,17 @@ export default function PlayersPage() {
         const data = await fetchPlayers(session.access_token);
         setPlayers(data ?? []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudo cargar la lista de jugadores");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No se pudo cargar la lista de jugadores"
+        );
       } finally {
         setLoading(false);
       }
     }
 
-    load();
+    void load();
   }, []);
 
   const groupedPlayers = useMemo(() => {
@@ -98,33 +102,34 @@ export default function PlayersPage() {
                     {categoryPlayers.map((player) => (
                       <article
                         key={player.id}
-                        className="rounded-xl border border-slate-200 bg-white p-4"
+                        className="rounded-2xl border border-slate-200 bg-white p-4"
                       >
-                        <div className="flex items-center justify-between gap-4">
-                          <img
-                            src={player.avatar_url || "/icon-192.png"}
-                            alt={player.full_name || "Jugador"}
-                            className="h-16 w-16 rounded-full border border-slate-200 object-cover"
-                          />
-                          <div className="flex-1">
-                            <p className="font-semibold text-slate-900">
-                              {player.full_name || "Sin nombre"}
-                            </p>
-
-                            <p className="mt-1 text-sm text-slate-500">
-                              Rol: {player.role}
-                            </p>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-3">
+                            <img
+                              src={player.avatar_url || "/icon-192.png"}
+                              alt={player.full_name || "Jugador"}
+                              className="h-16 w-16 rounded-full border border-slate-200 object-cover"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-lg font-semibold text-slate-900">
+                                {player.full_name || "Sin nombre"}
+                              </p>
+                              <p className="mt-1 text-sm text-slate-500">
+                                {player.category || "Sin categoría"}
+                              </p>
+                            </div>
                           </div>
 
                           {player.id !== currentUserId ? (
                             <Link
                               href={`/messages?to=${player.id}`}
-                              className="btn-secondary shrink-0 whitespace-nowrap"
+                              className="btn-secondary w-full text-center sm:w-auto sm:shrink-0 sm:whitespace-nowrap"
                             >
                               Enviar mensaje
                             </Link>
                           ) : (
-                            <span className="rounded-full bg-slate-100 px-3 py-2 text-xs font-medium text-slate-500">
+                            <span className="rounded-full bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500 sm:text-left">
                               Tu perfil
                             </span>
                           )}
