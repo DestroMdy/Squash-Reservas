@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getSession, signOut } from "@/lib/supabase";
+import {
+  fetchUnreadPrivateMessagesCount,
+  getSession,
+  getUser,
+  signOut
+} from "@/lib/supabase";
 
 const ADMIN_EMAIL = "alann.freire@gmail.com";
 
@@ -19,21 +24,53 @@ export function Navbar() {
   const [mounted, setMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     setMounted(true);
+    let intervalId: number | null = null;
 
-    function updateAuth() {
+    async function updateAuth() {
       const session = getSession();
       setIsLogged(Boolean(session?.access_token));
       setIsAdminUser(session?.user?.email === ADMIN_EMAIL);
+
+      if (!session?.access_token) {
+        setUnreadCount(0);
+        return;
+      }
+
+      const user = await getUser(session.access_token);
+      if (!user) {
+        setUnreadCount(0);
+        return;
+      }
+
+      try {
+        const count = await fetchUnreadPrivateMessagesCount(
+          user.id,
+          session.access_token
+        );
+        setUnreadCount(count);
+      } catch {
+        setUnreadCount(0);
+      }
     }
 
-    updateAuth();
+    void updateAuth();
     window.addEventListener("sr-auth-change", updateAuth);
+    window.addEventListener("sr-messages-updated", updateAuth);
+
+    intervalId = window.setInterval(() => {
+      void updateAuth();
+    }, 30000);
 
     return () => {
       window.removeEventListener("sr-auth-change", updateAuth);
+      window.removeEventListener("sr-messages-updated", updateAuth);
+      if (intervalId) {
+        window.clearInterval(intervalId);
+      }
     };
   }, []);
 
@@ -81,9 +118,14 @@ export function Navbar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="btn-secondary whitespace-nowrap"
+                className="btn-secondary relative whitespace-nowrap"
               >
                 {item.label}
+                {item.href === "/messages" && unreadCount > 0 ? (
+                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                ) : null}
               </Link>
             ))}
             {isAdminUser ? (

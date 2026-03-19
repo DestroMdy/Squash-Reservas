@@ -556,6 +556,30 @@ export async function fetchPrivateMessages(userId: string, token: string) {
   );
 }
 
+export async function fetchUnreadPrivateMessagesCount(
+  userId: string,
+  token: string
+) {
+  const data = await rest<any[]>(
+    `private_messages?select=id&recipient_id=eq.${userId}&read_at=is.null`,
+    { token }
+  );
+
+  return data.length;
+}
+
+export async function fetchLatestUnreadIncomingMessage(
+  userId: string,
+  token: string
+) {
+  const data = await rest<any[]>(
+    `private_messages?select=id,sender_id,recipient_id,body,read_at,created_at,updated_at&recipient_id=eq.${userId}&read_at=is.null&order=created_at.desc&limit=1`,
+    { token }
+  );
+
+  return data[0];
+}
+
 export async function sendPrivateMessage(
   senderId: string,
   recipientId: string,
@@ -572,4 +596,30 @@ export async function sendPrivateMessage(
     }),
     headers: { Prefer: "return=minimal" }
   });
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-messages-updated"));
+  }
+}
+
+export async function markConversationAsRead(
+  senderId: string,
+  recipientId: string,
+  token: string
+) {
+  await rest(
+    `private_messages?sender_id=eq.${senderId}&recipient_id=eq.${recipientId}&read_at=is.null`,
+    {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({
+        read_at: new Date().toISOString()
+      }),
+      headers: { Prefer: "return=minimal" }
+    }
+  );
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-messages-updated"));
+  }
 }

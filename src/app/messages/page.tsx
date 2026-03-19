@@ -8,6 +8,7 @@ import {
   fetchPrivateMessages,
   getSession,
   getUser,
+  markConversationAsRead,
   sendPrivateMessage
 } from "@/lib/supabase";
 import { PrivateMessage, Profile } from "@/types/db";
@@ -121,6 +122,43 @@ export default function MessagesPage() {
     });
   }, [currentUserId, messages, selectedPlayerId]);
 
+  useEffect(() => {
+    async function markRead() {
+      const token = getSession()?.access_token;
+      if (!token || !currentUserId || !selectedPlayerId) {
+        return;
+      }
+
+      const hasUnreadIncoming = messages.some(
+        (message) =>
+          message.sender_id === selectedPlayerId &&
+          message.recipient_id === currentUserId &&
+          !message.read_at
+      );
+
+      if (!hasUnreadIncoming) {
+        return;
+      }
+
+      try {
+        await markConversationAsRead(selectedPlayerId, currentUserId, token);
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.sender_id === selectedPlayerId &&
+            message.recipient_id === currentUserId &&
+            !message.read_at
+              ? { ...message, read_at: new Date().toISOString() }
+              : message
+          )
+        );
+      } catch {
+        // Ignore read sync errors on view.
+      }
+    }
+
+    void markRead();
+  }, [currentUserId, messages, selectedPlayerId]);
+
   async function handleSend() {
     try {
       const token = getSession()?.access_token;
@@ -188,6 +226,12 @@ export default function MessagesPage() {
               <div className="space-y-2">
                 {players.slice(0, 8).map((player) => {
                   const isActive = player.id === selectedPlayerId;
+                  const unreadFromPlayer = messages.filter(
+                    (message) =>
+                      message.sender_id === player.id &&
+                      message.recipient_id === currentUserId &&
+                      !message.read_at
+                  ).length;
                   return (
                     <button
                       key={player.id}
@@ -216,6 +260,11 @@ export default function MessagesPage() {
                           {player.category || "Sin categoría"}
                         </p>
                       </div>
+                      {unreadFromPlayer > 0 ? (
+                        <span className="rounded-full bg-red-600 px-2 py-1 text-xs font-semibold text-white">
+                          {unreadFromPlayer}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
