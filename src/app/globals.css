@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Dodger";
+  src: url("/fonts/dodger-regular.ttf") format("truetype");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
 }
@@ -27,5 +35,10 @@ body {
 
   .btn-secondary {
     @apply rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .font-dodger {
+    font-family: "Dodger", Arial, Helvetica, sans-serif;
+    letter-spacing: 0.12em;
   }
 }

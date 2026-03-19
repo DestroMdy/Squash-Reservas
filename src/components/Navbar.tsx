@@ -91,7 +91,7 @@ export function Navbar() {
               className="h-12 w-12 shrink-0 rounded-xl object-contain"
             />
             <div className="min-w-0">
-              <p className="truncate text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              <p className="font-dodger truncate text-sm text-slate-500">
                 La Martineta
               </p>
               <p className="truncate text-xl font-bold leading-tight text-slate-900">
