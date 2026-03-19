@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   fetchUnreadPrivateMessagesCount,
   fetchProfileRole,
@@ -12,21 +11,16 @@ import {
 } from "@/lib/supabase";
 
 const navItems = [
-  { href: "/schedule", label: "Agenda", shortLabel: "Agenda" },
-  { href: "/my-bookings", label: "Mis reservas", shortLabel: "Reservas" },
-  { href: "/messages", label: "Mensajes", shortLabel: "Mensajes" },
-  { href: "/tournaments", label: "Torneos", shortLabel: "Torneos" },
-  { href: "/profile", label: "Mi perfil", shortLabel: "Perfil" },
-  { href: "/players", label: "Jugadores", shortLabel: "Club" },
-  { href: "/courts", label: "Canchas", shortLabel: "Canchas" }
+  { href: "/schedule", label: "Agenda" },
+  { href: "/my-bookings", label: "Mis reservas" },
+  { href: "/messages", label: "Mensajes" },
+  { href: "/tournaments", label: "Torneos" },
+  { href: "/profile", label: "Mi perfil" },
+  { href: "/players", label: "Jugadores" },
+  { href: "/courts", label: "Canchas" }
 ];
 
-function navIsActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
 export function Navbar() {
-  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
@@ -49,7 +43,6 @@ export function Navbar() {
       const user = session.user?.id
         ? session.user
         : await getUser(session.access_token);
-
       if (!user) {
         setIsAdminUser(false);
         setUnreadCount(0);
@@ -92,30 +85,21 @@ export function Navbar() {
     window.location.href = "/";
   }
 
-  const visibleItems = useMemo(() => {
-    return isAdminUser
-      ? [...navItems, { href: "/admin", label: "Admin", shortLabel: "Admin" }]
-      : navItems;
-  }, [isAdminUser]);
-
   return (
-    <>
-      <header className="sticky top-0 z-40 border-b border-white/65 bg-[rgba(244,248,252,0.78)] backdrop-blur-xl">
-        <div className="mx-auto flex max-w-[1120px] items-center justify-between gap-4 px-4 py-4 sm:px-6">
+    <header className="border-b border-slate-200 bg-white/95 backdrop-blur">
+      <div className="mx-auto max-w-5xl px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[22px] border border-white/80 bg-white/88 shadow-[0_18px_34px_-24px_rgba(15,23,42,0.45)]">
-              <img
-                src="/logo.png"
-                alt="Squash Reservas"
-                className="h-11 w-11 object-contain"
-              />
-            </div>
-
+            <img
+              src="/logo.png"
+              alt="Squash Reservas"
+              className="h-12 w-12 shrink-0 rounded-xl object-contain"
+            />
             <div className="min-w-0">
-              <p className="font-dodger truncate text-xs text-slate-500 sm:text-sm">
+              <p className="font-dodger truncate text-sm text-slate-500">
                 La Martineta
               </p>
-              <p className="truncate text-[1.65rem] font-black leading-none tracking-tight text-slate-950 sm:text-[2rem]">
+              <p className="truncate text-xl font-bold leading-tight text-slate-900">
                 Squash Reservas
               </p>
             </div>
@@ -134,62 +118,30 @@ export function Navbar() {
           )}
         </div>
 
-        <div className="mx-auto hidden max-w-[1120px] px-4 pb-4 sm:block sm:px-6">
-          <nav className="soft-panel overflow-x-auto px-3 py-3">
-            <div className="flex min-w-max items-center gap-2">
-              {visibleItems.map((item) => {
-                const isActive = navIsActive(pathname, item.href);
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`relative inline-flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold transition ${
-                      isActive
-                        ? "bg-slate-900 text-white shadow-[0_18px_28px_-18px_rgba(15,23,42,0.78)]"
-                        : "bg-white/78 text-slate-600 hover:bg-white hover:text-slate-900"
-                    }`}
-                  >
-                    <span>{item.label}</span>
-                    {item.href === "/messages" && unreadCount > 0 ? (
-                      <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">
-                        {unreadCount > 9 ? "9+" : unreadCount}
-                      </span>
-                    ) : null}
-                  </Link>
-                );
-              })}
-            </div>
-          </nav>
-        </div>
-      </header>
-
-      <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-slate-200/80 bg-white/92 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 shadow-[0_-18px_40px_-30px_rgba(15,23,42,0.55)] backdrop-blur-xl sm:hidden">
-        <div className="mx-auto flex max-w-[1120px] gap-2 overflow-x-auto pb-1">
-          {visibleItems.map((item) => {
-            const isActive = navIsActive(pathname, item.href);
-
-            return (
+        <nav className="-mx-4 mt-3 overflow-x-auto px-4 pb-1">
+          <div className="flex min-w-max gap-2">
+            {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`relative flex min-w-[92px] shrink-0 flex-col items-center justify-center rounded-2xl px-3 py-2.5 text-center text-[11px] font-semibold transition ${
-                  isActive
-                    ? "bg-slate-900 text-white"
-                    : "bg-slate-100/88 text-slate-600"
-                }`}
+                className="btn-secondary relative whitespace-nowrap"
               >
-                <span>{item.shortLabel}</span>
+                {item.label}
                 {item.href === "/messages" && unreadCount > 0 ? (
-                  <span className="absolute right-2 top-2 inline-flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 ) : null}
               </Link>
-            );
-          })}
-        </div>
-      </nav>
-    </>
+            ))}
+            {isAdminUser ? (
+              <Link href="/admin" className="btn-secondary whitespace-nowrap">
+                Admin
+              </Link>
+            ) : null}
+          </div>
+        </nav>
+      </div>
+    </header>
   );
 }
