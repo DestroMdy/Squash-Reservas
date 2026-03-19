@@ -101,6 +101,14 @@ export function ScheduleGrid({
     setConfirmingSlot(slot);
   }
 
+  function formatReservationDate(slotDate: string) {
+    return new Intl.DateTimeFormat("es-AR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit"
+    }).format(new Date(`${slotDate}T12:00:00`));
+  }
+
   async function cancel(bookingId: string) {
     try {
       setPendingCancelId(bookingId);
@@ -326,7 +334,7 @@ export function ScheduleGrid({
         title="Confirmar reserva"
         message={
           confirmingSlot
-            ? `¿Quieres reservar ${confirmingSlot.courts?.name ?? "la cancha"} el ${confirmingSlot.slot_date} de ${confirmingSlot.start_time.slice(0, 5)} a ${confirmingSlot.end_time.slice(0, 5)}?`
+            ? `¿Quieres reservar ${confirmingSlot.courts?.name ?? "la cancha"} el ${formatReservationDate(confirmingSlot.slot_date)} de ${confirmingSlot.start_time.slice(0, 5)} a ${confirmingSlot.end_time.slice(0, 5)}?`
             : ""
         }
         confirmLabel="Reservar"
