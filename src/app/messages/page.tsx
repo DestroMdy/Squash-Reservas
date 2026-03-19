@@ -206,6 +206,9 @@ export default function MessagesPage() {
               : message
           )
         );
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("sr-messages-updated"));
+        }
       } catch {
         // Ignore background read sync errors.
       }
@@ -229,6 +232,9 @@ export default function MessagesPage() {
             item.id === selectedGroupId ? { ...item, unread_count: 0 } : item
           )
         );
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("sr-messages-updated"));
+        }
       } catch {
         // Ignore background read sync errors.
       }
