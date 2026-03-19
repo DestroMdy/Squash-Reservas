@@ -586,16 +586,27 @@ export async function sendPrivateMessage(
   body: string,
   token: string
 ) {
-  await rest("private_messages", {
+  const response = await fetch("/api/private-messages", {
     method: "POST",
-    token,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
     body: JSON.stringify({
       sender_id: senderId,
       recipient_id: recipientId,
       body: body.trim()
-    }),
-    headers: { Prefer: "return=minimal" }
+    })
   });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo enviar el mensaje.");
+  }
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("sr-messages-updated"));
