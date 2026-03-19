@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { canCancelBooking } from "@/lib/time-rules";
-import { getUser } from "@/lib/supabase";
+import { fetchProfileRole, getUser } from "@/lib/supabase";
 
 function headers(token: string, anonKey: string) {
   return {
@@ -35,6 +35,9 @@ export async function POST(
     return NextResponse.json({ error: "Token inválido" }, { status: 401 });
   }
 
+  const callerRole = await fetchProfileRole(user.id, token);
+  const isAdmin = callerRole === "admin";
+
   const bookingResponse = await fetch(
     `${supabaseUrl}/rest/v1/bookings?select=id,user_id,status,time_slots(slot_date,start_time,end_time)&id=eq.${params.id}&limit=1`,
     {
@@ -63,7 +66,7 @@ export async function POST(
     );
   }
 
-  if (booking.user_id !== user.id) {
+  if (booking.user_id !== user.id && !isAdmin) {
     return NextResponse.json(
       { error: "No puedes cancelar una reserva de otro usuario." },
       { status: 403 }
@@ -87,7 +90,7 @@ export async function POST(
     );
   }
 
-  if (!canCancelBooking(slotDate, startTime)) {
+  if (!isAdmin && !canCancelBooking(slotDate, startTime)) {
     return NextResponse.json(
       {
         error:

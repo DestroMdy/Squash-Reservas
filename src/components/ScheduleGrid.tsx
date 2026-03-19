@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppNoticeModal } from "../components/AppNoticeModal";
-import { cancelBooking, getSession, isProfileComplete } from "../lib/supabase";
+import {
+  cancelBooking,
+  fetchProfileRole,
+  getSession,
+  isProfileComplete
+} from "../lib/supabase";
 import {
   canBookSlot,
   canCancelBooking,
@@ -30,6 +35,7 @@ export function ScheduleGrid({
   const [pendingSlotId, setPendingSlotId] = useState<string | null>(null);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
   const [noticeMessage, setNoticeMessage] = useState("");
 
@@ -43,9 +49,12 @@ export function ScheduleGrid({
 
       if (userId && token) {
         const complete = await isProfileComplete(userId, token);
+        const role = await fetchProfileRole(userId, token);
         setProfileComplete(complete);
+        setCurrentUserRole(role ?? null);
       } else {
         setProfileComplete(false);
+        setCurrentUserRole(null);
       }
     }
 
@@ -146,10 +155,13 @@ export function ScheduleGrid({
             slot.start_time,
             slot.end_time
           );
-          const canCancelThisBooking = Boolean(
-            confirmedBooking &&
-              canCancelBooking(slot.slot_date, slot.start_time)
-          );
+          const canCancelThisBooking =
+            currentUserRole === "admin"
+              ? Boolean(confirmedBooking)
+              : Boolean(
+                  confirmedBooking &&
+                    canCancelBooking(slot.slot_date, slot.start_time)
+                );
 
           const disabled =
             isReserved || !canReserveThisSlot || profileComplete === false;
@@ -250,7 +262,10 @@ export function ScheduleGrid({
                     </p>
                   ) : null}
 
-                  {isMine && confirmedBooking && !canCancelThisBooking ? (
+                  {isMine &&
+                  confirmedBooking &&
+                  !canCancelThisBooking &&
+                  currentUserRole !== "admin" ? (
                     <p className="text-sm text-amber-700">
                       Solo puedes cancelar con más de 1 hora de anticipación.
                     </p>

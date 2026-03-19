@@ -72,14 +72,17 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
           const bookingEnd = getBookingEndDateTime(booking);
           const isPast = Boolean(bookingEnd && bookingEnd < new Date());
           const isCurrent = booking.status === "confirmed" && !isPast;
-          const canCancelCurrentBooking = Boolean(
-            booking.time_slots?.slot_date &&
-              booking.time_slots?.start_time &&
-              canCancelBooking(
-                booking.time_slots.slot_date,
-                booking.time_slots.start_time
-              )
-          );
+          const canCancelCurrentBooking =
+            profile?.role === "admin"
+              ? true
+              : Boolean(
+                  booking.time_slots?.slot_date &&
+                    booking.time_slots?.start_time &&
+                    canCancelBooking(
+                      booking.time_slots.slot_date,
+                      booking.time_slots.start_time
+                    )
+                );
           const cardClass = isCurrent
             ? "border-green-300 bg-green-50"
             : "border-slate-300 bg-slate-100";
@@ -124,7 +127,7 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
                     </p>
                   ) : null}
 
-                  {isCurrent && !canCancelCurrentBooking ? (
+                  {isCurrent && !canCancelCurrentBooking && profile?.role !== "admin" ? (
                     <p className="mt-2 text-sm text-amber-700">
                       La cancelación solo se permite con más de 1 hora de anticipación.
                     </p>
