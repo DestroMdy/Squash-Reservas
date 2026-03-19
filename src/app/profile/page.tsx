@@ -184,7 +184,9 @@ export default function ProfilePage() {
 
         <div className="card space-y-4 p-6">
           <div>
-            <label className="mb-1 block text-sm font-medium">Nombre</label>
+            <label className="mb-1 block text-sm font-medium">
+              Nombre y apellido
+            </label>
             <input
               className="w-full rounded-xl border px-3 py-2"
               value={name}
