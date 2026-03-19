@@ -474,6 +474,33 @@ export async function fetchSlot(slotId: string, token: string) {
   return data[0];
 }
 
+export async function findAlternativeOpenSlot(
+  slot: {
+    id: string;
+    slot_date: string;
+    start_time: string;
+    end_time: string;
+  },
+  token: string
+) {
+  const data = await rest<any[]>(
+    `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status)&slot_date=eq.${slot.slot_date}&start_time=eq.${slot.start_time}&end_time=eq.${slot.end_time}&id=neq.${slot.id}&order=created_at.asc`,
+    { token }
+  );
+
+  return data.find((candidate: any) => {
+    const bookings = (
+      Array.isArray(candidate.bookings)
+        ? candidate.bookings
+        : candidate.bookings
+          ? [candidate.bookings]
+          : []
+    ) as { status?: string }[];
+
+    return !bookings.some((booking) => booking.status === "confirmed");
+  });
+}
+
 export async function hasConfirmedBooking(timeSlotId: string, token: string) {
   const data = await rest<any[]>(
     `bookings?select=id&time_slot_id=eq.${timeSlotId}&status=eq.confirmed&limit=1`,

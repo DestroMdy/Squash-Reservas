@@ -4,6 +4,7 @@ import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import {
   createBooking,
   fetchSlot,
+  findAlternativeOpenSlot,
   getUser,
   hasConfirmedBooking
 } from "@/lib/supabase";
@@ -83,18 +84,36 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const alreadyBooked = await hasConfirmedBooking(slot.id, token);
+  let selectedSlot = slot;
+  let fallbackCourtName: string | null = null;
+  let alreadyBooked = await hasConfirmedBooking(selectedSlot.id, token);
+
+  if (alreadyBooked) {
+    const alternativeSlot = await findAlternativeOpenSlot(selectedSlot, token);
+
+    if (alternativeSlot) {
+      selectedSlot = alternativeSlot;
+      fallbackCourtName = alternativeSlot.courts?.name ?? null;
+      alreadyBooked = await hasConfirmedBooking(selectedSlot.id, token);
+    }
+  }
 
   if (alreadyBooked) {
     return NextResponse.json(
-      { error: "El turno ya está reservado" },
+      { error: "Ese horario ya no tiene canchas disponibles." },
       { status: 409 }
     );
   }
 
   try {
-    await createBooking(slot.id, slot.court_id, user.id, token);
-    return NextResponse.json({ ok: true });
+    await createBooking(selectedSlot.id, selectedSlot.court_id, user.id, token);
+
+    return NextResponse.json({
+      ok: true,
+      message: fallbackCourtName
+        ? `La cancha elegida estaba ocupada. Te reservamos automáticamente en ${fallbackCourtName}.`
+        : undefined
+    });
   } catch (error) {
     const message = normalizeBookingError(error);
 

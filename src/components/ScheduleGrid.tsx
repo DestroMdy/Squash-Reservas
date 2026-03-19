@@ -33,6 +33,7 @@ export function ScheduleGrid({
   slots: SlotWithRelations[];
   selectedDate: string;
 }) {
+  const fallbackNoticeStorageKey = "sr-booking-fallback-notice";
   const [pendingSlotId, setPendingSlotId] = useState<string | null>(null);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -63,6 +64,19 @@ export function ScheduleGrid({
     loadSessionData();
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const storedMessage = window.sessionStorage.getItem(
+      fallbackNoticeStorageKey
+    );
+
+    if (storedMessage) {
+      setNoticeMessage(storedMessage);
+      window.sessionStorage.removeItem(fallbackNoticeStorageKey);
+    }
+  }, []);
+
   async function reserve(slotId: string) {
     try {
       setPendingSlotId(slotId);
@@ -80,11 +94,18 @@ export function ScheduleGrid({
 
       const responseText = await response.text();
       const payload = responseText.trim()
-        ? (JSON.parse(responseText) as { error?: string })
+        ? (JSON.parse(responseText) as { error?: string; message?: string })
         : {};
 
       if (!response.ok) {
         throw new Error(payload.error || "No se pudo reservar");
+      }
+
+      if (payload.message && typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          fallbackNoticeStorageKey,
+          payload.message
+        );
       }
 
       window.location.reload();
