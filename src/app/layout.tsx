@@ -1,12 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { AdminBookingNotifier } from "@/components/AdminBookingNotifier";
 import { Navbar } from "@/components/Navbar";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  applicationName: "Squash Reservas",
   title: "Squash Reservas",
   description: "App para reservar canchas de squash",
   manifest: "/manifest.webmanifest",
+  formatDetection: {
+    telephone: false,
+    email: false,
+    address: false
+  },
   icons: {
     icon: [
       { url: "/icon.png", sizes: "1201x1334", type: "image/png" },
@@ -18,9 +24,16 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Squash Reservas"
   }
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover"
 };
 
 export default function RootLayout({
