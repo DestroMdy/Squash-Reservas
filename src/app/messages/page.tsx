@@ -169,6 +169,22 @@ export default function MessagesPage() {
   const canEditSelectedGroup =
     Boolean(selectedGroup) && selectedGroup?.created_by === currentUserId;
 
+  const directUnreadCount = useMemo(() => {
+    if (!currentUserId) return 0;
+    return directMessages.filter(
+      (message) => message.recipient_id === currentUserId && !message.read_at
+    ).length;
+  }, [currentUserId, directMessages]);
+
+  const groupUnreadCount = useMemo(
+    () =>
+      groups.reduce(
+        (sum, group) => sum + (group.unread_count || 0),
+        0
+      ),
+    [groups]
+  );
+
   const currentDirectMessages = useMemo(() => {
     if (!currentUserId || !selectedPlayerId) return [];
 
@@ -464,6 +480,11 @@ export default function MessagesPage() {
                 onClick={() => setTab("direct")}
               >
                 Mensajes directos
+                {directUnreadCount > 0 ? (
+                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    {directUnreadCount > 9 ? "9+" : directUnreadCount}
+                  </span>
+                ) : null}
               </button>
               <button
                 type="button"
@@ -471,6 +492,11 @@ export default function MessagesPage() {
                 onClick={() => setTab("group")}
               >
                 Grupos privados
+                {groupUnreadCount > 0 ? (
+                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">
+                    {groupUnreadCount > 9 ? "9+" : groupUnreadCount}
+                  </span>
+                ) : null}
               </button>
             </div>
 
