@@ -111,10 +111,6 @@ export default function PlayersPage() {
                               {player.full_name || "Sin nombre"}
                             </p>
 
-                            <p className="mt-1 text-sm text-slate-600">
-                              Contacto privado protegido
-                            </p>
-
                             <p className="mt-1 text-sm text-slate-500">
                               Rol: {player.role}
                             </p>
