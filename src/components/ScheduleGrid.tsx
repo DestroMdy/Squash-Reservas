@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { cancelBooking, getSession, isProfileComplete } from "../lib/supabase";
-import { canBookSlot } from "../lib/time-rules";
+import { canBookSlot, canReserveSlot, isPastSlot } from "../lib/time-rules";
 import { Booking, Court, TimeSlot } from "../types/db";
 
 type SlotWithRelations = TimeSlot & {
@@ -25,8 +25,6 @@ export function ScheduleGrid({
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
-
-  const canBookDate = useMemo(() => canBookSlot(selectedDate), [selectedDate]);
 
   useEffect(() => {
     async function loadSessionData() {
@@ -129,33 +127,48 @@ export function ScheduleGrid({
         const isReserved = Boolean(confirmedBooking);
         const isMine =
           Boolean(currentUserId) && confirmedBooking?.user_id === currentUserId;
+        const isExpired = isPastSlot(slot.slot_date, slot.end_time);
+        const bookingWindowOpen = canBookSlot(selectedDate);
+        const canReserveThisSlot = canReserveSlot(
+          slot.slot_date,
+          slot.start_time,
+          slot.end_time
+        );
 
         const disabled =
-          isReserved || !canBookDate || profileComplete === false;
+          isReserved || !canReserveThisSlot || profileComplete === false;
 
         const cardClass = isMine
           ? "border-blue-300 bg-blue-50"
           : isReserved
             ? "border-red-300 bg-red-50"
-            : "border-green-300 bg-green-50";
+            : isExpired
+              ? "border-slate-300 bg-slate-100"
+              : "border-green-300 bg-green-50";
 
         const badgeClass = isMine
           ? "bg-blue-100 text-blue-800"
           : isReserved
             ? "bg-red-100 text-red-800"
-            : "bg-green-100 text-green-800";
+            : isExpired
+              ? "bg-slate-200 text-slate-700"
+              : "bg-green-100 text-green-800";
 
         const badgeText = isMine
           ? "Tu reserva"
           : isReserved
             ? "Ocupado"
-            : "Disponible";
+            : isExpired
+              ? "Vencido"
+              : "Disponible";
 
         const isCancelling = pendingCancelId === confirmedBooking?.id;
-        const playerName = confirmedBooking?.profiles?.full_name?.trim() || "Sin nombre";
+        const playerName =
+          confirmedBooking?.profiles?.full_name?.trim() || "Sin nombre";
         const playerCategory =
           confirmedBooking?.profiles?.category?.trim() || "Sin categoría";
-        const playerAvatar = confirmedBooking?.profiles?.avatar_url || "/icon-192.png";
+        const playerAvatar =
+          confirmedBooking?.profiles?.avatar_url || "/icon-192.png";
 
         return (
           <article
@@ -196,15 +209,22 @@ export function ScheduleGrid({
                         Jugador: <span className="font-medium">{playerName}</span>
                       </p>
                       <p>
-                        Categoría: <span className="font-medium">{playerCategory}</span>
+                        Categoría:{" "}
+                        <span className="font-medium">{playerCategory}</span>
                       </p>
                     </div>
                   </div>
                 ) : null}
 
-                {!canBookDate && !isReserved ? (
+                {!bookingWindowOpen && !isReserved && !isExpired ? (
                   <p className="text-sm text-amber-700">
                     Disponible desde las 22:00 del día anterior
+                  </p>
+                ) : null}
+
+                {isExpired && !isReserved ? (
+                  <p className="text-sm text-slate-600">
+                    Este turno ya pasó y no se puede reservar.
                   </p>
                 ) : null}
 
@@ -232,9 +252,11 @@ export function ScheduleGrid({
                   >
                     {isReserved
                       ? "No disponible"
-                      : pendingSlotId === slot.id
-                        ? "Reservando..."
-                        : "Reservar"}
+                      : isExpired
+                        ? "Turno vencido"
+                        : pendingSlotId === slot.id
+                          ? "Reservando..."
+                          : "Reservar"}
                   </button>
                 )}
               </div>
