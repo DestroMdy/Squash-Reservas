@@ -613,6 +613,27 @@ export async function fetchLatestUnreadIncomingMessage(
   return data[0];
 }
 
+export async function fetchLatestUnreadGroupMessage(token: string) {
+  const groupData = await fetchPrivateMessageGroups(token);
+  const unreadGroups = (groupData.groups || [])
+    .filter(
+      (group: {
+        unread_count?: number;
+        last_message_at?: string | null;
+      }) => (group.unread_count || 0) > 0 && group.last_message_at
+    )
+    .sort(
+      (
+        a: { last_message_at?: string | null },
+        b: { last_message_at?: string | null }
+      ) =>
+        new Date(b.last_message_at || 0).getTime() -
+        new Date(a.last_message_at || 0).getTime()
+    );
+
+  return unreadGroups[0] || null;
+}
+
 export async function fetchPrivateMessageGroups(token: string) {
   const response = await fetch("/api/private-message-groups", {
     method: "GET",
@@ -667,6 +688,39 @@ export async function createPrivateMessageGroup(
   }
 
   return payload.group;
+}
+
+export async function updatePrivateMessageGroup(
+  groupId: string,
+  payload: {
+    name: string;
+    memberIds: string[];
+  },
+  token: string
+) {
+  const response = await fetch(`/api/private-message-groups/${groupId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  const result = text.trim()
+    ? (JSON.parse(text) as { error?: string; group?: any })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(result.error || "No se pudo actualizar el grupo.");
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-messages-updated"));
+  }
+
+  return result.group;
 }
 
 export async function fetchPrivateGroupMessages(groupId: string, token: string) {

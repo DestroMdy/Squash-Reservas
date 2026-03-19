@@ -118,7 +118,7 @@ export async function GET(request: NextRequest) {
       }
     ),
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,created_at&group_id=in.(${groupFilter})&order=created_at.desc`,
+      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,body,created_at,profiles(full_name)&group_id=in.(${groupFilter})&order=created_at.desc`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey)
@@ -178,9 +178,12 @@ export async function GET(request: NextRequest) {
       const lastReadAt = membershipMap.get(group.id)?.last_read_at;
       const groupMessages = messages.filter(
         (message: {
+          id: string;
           group_id: string;
           sender_id: string;
+          body?: string | null;
           created_at: string;
+          profiles?: { full_name?: string | null } | null;
         }) => message.group_id === group.id
       );
 
@@ -189,12 +192,17 @@ export async function GET(request: NextRequest) {
           message.sender_id !== auth.user.id &&
           (!lastReadAt || new Date(message.created_at) > new Date(lastReadAt))
       ).length;
+      const latestMessage = groupMessages[0];
 
       return {
         ...group,
         members: groupMembers,
         unread_count: unreadCount,
-        last_message_at: groupMessages[0]?.created_at || null
+        last_message_at: latestMessage?.created_at || null,
+        last_message_id: latestMessage?.id || null,
+        last_message_body: latestMessage?.body || null,
+        last_message_sender_name:
+          latestMessage?.profiles?.full_name || null
       };
     }
   );

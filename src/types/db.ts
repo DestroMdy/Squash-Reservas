@@ -29,6 +29,9 @@ export interface PrivateMessageGroup {
   updated_at: string;
   unread_count?: number;
   last_message_at?: string | null;
+  last_message_id?: string | null;
+  last_message_body?: string | null;
+  last_message_sender_name?: string | null;
   members?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url">[];
 }
 
