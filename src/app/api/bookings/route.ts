@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { canBookSlot } from "@/lib/time-rules";
+import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
 import { createBooking, fetchSlot, getUser, hasConfirmedBooking } from "@/lib/supabase";
 
 function normalizeBookingError(error: unknown) {
@@ -41,6 +41,16 @@ export async function POST(request: NextRequest) {
   if (!canBookSlot(slot.slot_date)) {
     return NextResponse.json(
       { error: "Disponible desde las 22:00 del día anterior" },
+      { status: 400 }
+    );
+  }
+
+  if (!isSlotWithinClubHours(slot.slot_date, slot.start_time, slot.end_time)) {
+    return NextResponse.json(
+      {
+        error:
+          "Ese turno está fuera del horario permitido. Los sábados se reserva de 09:00 a 21:00, con último turno a las 20:00."
+      },
       { status: 400 }
     );
   }

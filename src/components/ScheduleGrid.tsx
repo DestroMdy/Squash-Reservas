@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AppConfirmModal } from "../components/AppConfirmModal";
 import { AppNoticeModal } from "../components/AppNoticeModal";
 import {
   cancelBooking,
@@ -38,6 +39,7 @@ export function ScheduleGrid({
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
   const [noticeMessage, setNoticeMessage] = useState("");
+  const [confirmingSlot, setConfirmingSlot] = useState<SlotWithRelations | null>(null);
 
   useEffect(() => {
     async function loadSessionData() {
@@ -93,6 +95,10 @@ export function ScheduleGrid({
     } finally {
       setPendingSlotId(null);
     }
+  }
+
+  function requestReserveConfirmation(slot: SlotWithRelations) {
+    setConfirmingSlot(slot);
   }
 
   async function cancel(bookingId: string) {
@@ -289,7 +295,7 @@ export function ScheduleGrid({
                     <button
                       disabled={disabled || pendingSlotId === slot.id}
                       className="btn-primary w-full"
-                      onClick={() => reserve(slot.id)}
+                      onClick={() => requestReserveConfirmation(slot)}
                     >
                       {isReserved
                         ? "No disponible"
@@ -317,6 +323,25 @@ export function ScheduleGrid({
         open={Boolean(noticeMessage)}
         message={noticeMessage}
         onClose={() => setNoticeMessage("")}
+      />
+
+      <AppConfirmModal
+        open={Boolean(confirmingSlot)}
+        title="Confirmar reserva"
+        message={
+          confirmingSlot
+            ? `¿Quieres reservar ${confirmingSlot.courts?.name ?? "la cancha"} de ${confirmingSlot.start_time.slice(0, 5)} a ${confirmingSlot.end_time.slice(0, 5)}?`
+            : ""
+        }
+        confirmLabel="Reservar"
+        cancelLabel="Volver"
+        busy={Boolean(confirmingSlot && pendingSlotId === confirmingSlot.id)}
+        onCancel={() => setConfirmingSlot(null)}
+        onConfirm={() => {
+          if (!confirmingSlot) return;
+          void reserve(confirmingSlot.id);
+          setConfirmingSlot(null);
+        }}
       />
     </>
   );

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ScheduleGrid } from "../../components/ScheduleGrid";
 import { SectionTitle } from "../../components/SectionTitle";
 import { fetchSlotsByDate, getSession } from "../../lib/supabase";
+import { isSlotWithinClubHours } from "../../lib/time-rules";
 import { Booking, Court, TimeSlot } from "../../types/db";
 
 type SlotWithRelations = TimeSlot & {
@@ -60,14 +61,18 @@ export default function SchedulePage() {
   }, [mounted, selectedDate]);
 
   const sortedSlots = useMemo(() => {
-    return [...slots].sort((a, b) => {
+    return [...slots]
+      .filter((slot) =>
+        isSlotWithinClubHours(slot.slot_date, slot.start_time, slot.end_time)
+      )
+      .sort((a, b) => {
       if (a.start_time < b.start_time) return -1;
       if (a.start_time > b.start_time) return 1;
 
       const courtA = a.courts?.name ?? "";
       const courtB = b.courts?.name ?? "";
       return courtA.localeCompare(courtB);
-    });
+      });
   }, [slots]);
 
   const tomorrow = useMemo(() => tomorrowLocalDate(), []);
