@@ -1,10 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AppNoticeModal } from "../components/AppNoticeModal";
-import { Booking, Profile } from "../types/db";
-import { cancelBooking, fetchProfile, getSession } from "../lib/supabase";
-import { canCancelBooking } from "../lib/time-rules";
+import { useEffect, useMemo, useState } from "react";
+import { AppNoticeModal } from "@/components/AppNoticeModal";
+import { cancelBooking, fetchProfile, getSession } from "@/lib/supabase";
+import { canCancelBooking } from "@/lib/time-rules";
+import { Booking, Profile } from "@/types/db";
+
+function getBookingStartDateTime(booking: Booking) {
+  const slotDate = booking.time_slots?.slot_date;
+  const startTime = booking.time_slots?.start_time;
+
+  if (!slotDate || !startTime) {
+    return null;
+  }
+
+  return new Date(`${slotDate}T${startTime}`);
+}
 
 function getBookingEndDateTime(booking: Booking) {
   const slotDate = booking.time_slots?.slot_date;
@@ -15,6 +26,123 @@ function getBookingEndDateTime(booking: Booking) {
   }
 
   return new Date(`${slotDate}T${endTime}`);
+}
+
+function formatBookingDate(date: string | undefined) {
+  if (!date) return "Sin fecha";
+
+  const formatted = new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit"
+  }).format(new Date(`${date}T12:00:00`));
+
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+}
+
+function formatBookingTime(booking: Booking) {
+  return `${booking.time_slots?.start_time?.slice(0, 5) ?? "--:--"} - ${booking.time_slots?.end_time?.slice(0, 5) ?? "--:--"}`;
+}
+
+function getBookingState(booking: Booking) {
+  const bookingEnd = getBookingEndDateTime(booking);
+  const isPast = Boolean(bookingEnd && bookingEnd < new Date());
+
+  if (booking.status === "cancelled") {
+    return "cancelled";
+  }
+
+  if (isPast) {
+    return "past";
+  }
+
+  return "upcoming";
+}
+
+function BookingCard({
+  booking,
+  role,
+  loadingId,
+  onCancel
+}: {
+  booking: Booking;
+  role: Profile["role"] | undefined;
+  loadingId: string | null;
+  onCancel: (bookingId: string) => void;
+}) {
+  const state = getBookingState(booking);
+  const isUpcoming = state === "upcoming";
+  const canCancelCurrentBooking =
+    role === "admin"
+      ? isUpcoming
+      : Boolean(
+          isUpcoming &&
+            booking.time_slots?.slot_date &&
+            booking.time_slots?.start_time &&
+            canCancelBooking(
+              booking.time_slots.slot_date,
+              booking.time_slots.start_time
+            )
+        );
+
+  const cardClass =
+    state === "upcoming"
+      ? "border-green-300 bg-green-50"
+      : "border-slate-300 bg-slate-100";
+  const badgeClass =
+    state === "upcoming"
+      ? "bg-green-100 text-green-800"
+      : "bg-slate-200 text-slate-700";
+  const badgeText =
+    state === "cancelled"
+      ? "Cancelada"
+      : state === "past"
+        ? "Finalizada"
+        : "Próxima";
+
+  return (
+    <article className={`card rounded-2xl border p-4 ${cardClass}`}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-lg font-semibold text-slate-900">
+              {booking.time_slots?.courts?.name ?? "Cancha"}
+            </p>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide ${badgeClass}`}
+            >
+              {badgeText}
+            </span>
+          </div>
+
+          <p className="text-sm font-medium text-slate-700">
+            {formatBookingDate(booking.time_slots?.slot_date)}
+          </p>
+          <p className="text-sm text-slate-600">{formatBookingTime(booking)}</p>
+
+          {isUpcoming && !canCancelCurrentBooking && role !== "admin" ? (
+            <p className="text-sm text-amber-700">
+              La cancelación solo se permite con más de 1 hora de anticipación.
+            </p>
+          ) : null}
+        </div>
+
+        {canCancelCurrentBooking ? (
+          <button
+            className="btn-primary w-full sm:w-auto"
+            disabled={loadingId === booking.id}
+            onClick={() => onCancel(booking.id)}
+          >
+            {loadingId === booking.id ? "Cancelando..." : "Cancelar reserva"}
+          </button>
+        ) : (
+          <div className="text-sm text-slate-500">
+            {state === "upcoming" ? "No cancelable" : "Sin acciones"}
+          </div>
+        )}
+      </div>
+    </article>
+  );
 }
 
 export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
@@ -31,7 +159,7 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
       setProfile(data ?? null);
     }
 
-    loadProfile();
+    void loadProfile();
   }, []);
 
   async function cancel(bookingId: string) {
@@ -50,9 +178,31 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
     }
   }
 
+  const { nextBooking, historyBookings } = useMemo(() => {
+    const sorted = [...bookings].sort((a, b) => {
+      const aStart = getBookingStartDateTime(a)?.getTime() ?? 0;
+      const bStart = getBookingStartDateTime(b)?.getTime() ?? 0;
+      return aStart - bStart;
+    });
+
+    const upcoming = sorted.filter((booking) => getBookingState(booking) === "upcoming");
+    const history = [...sorted]
+      .filter((booking) => getBookingState(booking) !== "upcoming")
+      .sort((a, b) => {
+        const aStart = getBookingStartDateTime(a)?.getTime() ?? 0;
+        const bStart = getBookingStartDateTime(b)?.getTime() ?? 0;
+        return bStart - aStart;
+      });
+
+    return {
+      nextBooking: upcoming[0] ?? null,
+      historyBookings: history
+    };
+  }, [bookings]);
+
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-5">
         {profile ? (
           <div className="card rounded-2xl p-4">
             <p className="text-sm text-slate-500">Jugador</p>
@@ -68,93 +218,54 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
           </div>
         ) : null}
 
-        {bookings.map((booking) => {
-          const bookingEnd = getBookingEndDateTime(booking);
-          const isPast = Boolean(bookingEnd && bookingEnd < new Date());
-          const isCurrent = booking.status === "confirmed" && !isPast;
-          const canCancelCurrentBooking =
-            profile?.role === "admin"
-              ? true
-              : Boolean(
-                  booking.time_slots?.slot_date &&
-                    booking.time_slots?.start_time &&
-                    canCancelBooking(
-                      booking.time_slots.slot_date,
-                      booking.time_slots.start_time
-                    )
-                );
-          const cardClass = isCurrent
-            ? "border-green-300 bg-green-50"
-            : "border-slate-300 bg-slate-100";
-          const badgeClass = isCurrent
-            ? "bg-green-100 text-green-800"
-            : "bg-slate-200 text-slate-700";
-          const badgeText =
-            booking.status === "cancelled"
-              ? "Cancelada"
-              : isPast
-                ? "Finalizada"
-                : "Vigente";
+        {nextBooking ? (
+          <section className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Próxima reserva
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Tu próximo turno confirmado aparece destacado acá.
+              </p>
+            </div>
 
-          return (
-            <article
-              key={booking.id}
-              className={`card rounded-2xl border p-4 ${cardClass}`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <p className="font-semibold">
-                    {booking.time_slots?.courts?.name ?? "Cancha"}
-                  </p>
+            <BookingCard
+              booking={nextBooking}
+              role={profile?.role}
+              loadingId={loadingId}
+              onCancel={cancel}
+            />
+          </section>
+        ) : null}
 
-                  <p className="text-sm text-slate-600">
-                    {booking.time_slots?.slot_date} ·{" "}
-                    {booking.time_slots?.start_time.slice(0, 5)}
-                  </p>
+        {historyBookings.length ? (
+          <section className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Historial
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                Reservas canceladas o ya pasadas.
+              </p>
+            </div>
 
-                  <p className="mt-2">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-medium uppercase tracking-wide ${badgeClass}`}
-                    >
-                      {badgeText}
-                    </span>
-                  </p>
+            <div className="space-y-4">
+              {historyBookings.map((booking) => (
+                <BookingCard
+                  key={booking.id}
+                  booking={booking}
+                  role={profile?.role}
+                  loadingId={loadingId}
+                  onCancel={cancel}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
 
-                  {profile?.category ? (
-                    <p className="mt-2 text-sm text-slate-600">
-                      Tu categoría:{" "}
-                      <span className="font-medium">{profile.category}</span>
-                    </p>
-                  ) : null}
-
-                  {isCurrent && !canCancelCurrentBooking && profile?.role !== "admin" ? (
-                    <p className="mt-2 text-sm text-amber-700">
-                      La cancelación solo se permite con más de 1 hora de anticipación.
-                    </p>
-                  ) : null}
-                </div>
-
-                <button
-                  className="btn-secondary"
-                  disabled={
-                    !isCurrent || !canCancelCurrentBooking || loadingId === booking.id
-                  }
-                  onClick={() => cancel(booking.id)}
-                >
-                  {loadingId === booking.id
-                    ? "Cancelando..."
-                    : !canCancelCurrentBooking && isCurrent
-                      ? "No cancelable"
-                      : "Cancelar"}
-                </button>
-              </div>
-            </article>
-          );
-        })}
-
-        {!bookings.length && (
+        {!nextBooking && !historyBookings.length ? (
           <p className="text-sm text-slate-600">No tienes reservas.</p>
-        )}
+        ) : null}
       </div>
 
       <AppNoticeModal

@@ -33,7 +33,7 @@ export function ScheduleGrid({
   slots: SlotWithRelations[];
   selectedDate: string;
 }) {
-  const fallbackNoticeStorageKey = "sr-booking-fallback-notice";
+  const [reloadAfterNotice, setReloadAfterNotice] = useState(false);
   const [pendingSlotId, setPendingSlotId] = useState<string | null>(null);
   const [pendingCancelId, setPendingCancelId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -64,19 +64,6 @@ export function ScheduleGrid({
     loadSessionData();
   }, []);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const storedMessage = window.sessionStorage.getItem(
-      fallbackNoticeStorageKey
-    );
-
-    if (storedMessage) {
-      setNoticeMessage(storedMessage);
-      window.sessionStorage.removeItem(fallbackNoticeStorageKey);
-    }
-  }, []);
-
   async function reserve(slotId: string) {
     try {
       setPendingSlotId(slotId);
@@ -101,14 +88,21 @@ export function ScheduleGrid({
         throw new Error(payload.error || "No se pudo reservar");
       }
 
-      if (payload.message && typeof window !== "undefined") {
-        window.sessionStorage.setItem(
-          fallbackNoticeStorageKey,
-          payload.message
-        );
-      }
+      const reservedSlot = slots.find((slot) => slot.id === slotId);
+      const dateText = reservedSlot
+        ? formatReservationDate(reservedSlot.slot_date)
+        : "la fecha elegida";
+      const timeText = reservedSlot
+        ? `${reservedSlot.start_time.slice(0, 5)} a ${reservedSlot.end_time.slice(0, 5)}`
+        : "el horario elegido";
+      const baseCourtName = reservedSlot?.courts?.name ?? "la cancha seleccionada";
 
-      window.location.reload();
+      const successMessage = payload.message
+        ? `Reserva confirmada para ${dateText}, de ${timeText}. ${payload.message}`
+        : `Reserva confirmada para ${dateText}, de ${timeText}, en ${baseCourtName}.`;
+
+      setReloadAfterNotice(true);
+      setNoticeMessage(successMessage);
     } catch (error) {
       setNoticeMessage(
         error instanceof Error ? error.message : "Error al reservar"
@@ -349,7 +343,14 @@ export function ScheduleGrid({
       <AppNoticeModal
         open={Boolean(noticeMessage)}
         message={noticeMessage}
-        onClose={() => setNoticeMessage("")}
+        onClose={() => {
+          setNoticeMessage("");
+
+          if (reloadAfterNotice) {
+            setReloadAfterNotice(false);
+            window.location.reload();
+          }
+        }}
       />
 
       <AppConfirmModal

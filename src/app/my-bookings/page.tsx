@@ -32,20 +32,22 @@ export default function MyBookingsPage() {
         const data = await fetchMyBookings(user.id, token);
         setBookings(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudieron cargar las reservas");
+        setError(
+          err instanceof Error ? err.message : "No se pudieron cargar las reservas"
+        );
       } finally {
         setLoading(false);
       }
     }
 
-    load();
+    void load();
   }, []);
 
   return (
     <div className="space-y-6">
       <SectionTitle
         title="Mis reservas"
-        subtitle="Consultá tus turnos confirmados y cancelá cuando lo necesites."
+        subtitle="Consulta tu próximo turno destacado y deja el historial separado para revisar más fácil."
       />
 
       {loading ? <p>Cargando reservas...</p> : null}
