@@ -1,8 +1,9 @@
 "use client";
 
 import Script from "next/script";
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { signInWithPassword, signUp } from "@/lib/supabase";
+import { requestPasswordReset, signInWithPassword, signUp } from "@/lib/supabase";
 
 declare global {
   interface Window {
@@ -16,7 +17,7 @@ declare global {
 const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || "";
 
 export function AuthForm() {
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -74,7 +75,15 @@ export function AuthForm() {
       if (mode === "register") {
         const captchaToken = await runRecaptcha("register");
         await signUp(email, password, captchaToken);
-        setMessage("Cuenta creada. Ahora iniciá sesión.");
+        setMessage(
+          "Cuenta creada. Revisá tu email para confirmar la cuenta antes de iniciar sesión."
+        );
+        setMode("login");
+      } else if (mode === "forgot") {
+        await requestPasswordReset(email);
+        setMessage(
+          "Te enviamos un mail para cambiar la contraseña. Revisá tu bandeja y spam."
+        );
         setMode("login");
       } else {
         await signInWithPassword(email, password);
@@ -97,7 +106,7 @@ export function AuthForm() {
         />
       ) : null}
 
-      <div className="mb-4 flex gap-2">
+      <div className="mb-4 flex flex-wrap gap-2">
         <button
           type="button"
           className={mode === "login" ? "btn-primary" : "btn-secondary"}
@@ -111,6 +120,13 @@ export function AuthForm() {
           onClick={() => setMode("register")}
         >
           Registrarse
+        </button>
+        <button
+          type="button"
+          className={mode === "forgot" ? "btn-primary" : "btn-secondary"}
+          onClick={() => setMode("forgot")}
+        >
+          Recuperar clave
         </button>
       </div>
 
@@ -128,19 +144,21 @@ export function AuthForm() {
           />
         </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">
-            Contraseña
-          </label>
-          <input
-            type="password"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            minLength={6}
-          />
-        </div>
+        {mode !== "forgot" ? (
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              minLength={6}
+            />
+          </div>
+        ) : null}
 
         <button
           type="submit"
@@ -151,11 +169,25 @@ export function AuthForm() {
             ? "Procesando..."
             : mode === "login"
               ? "Ingresar"
-              : !recaptchaReady
-                ? "Cargando seguridad..."
-                : "Crear cuenta"}
+              : mode === "forgot"
+                ? "Enviar mail"
+                : !recaptchaReady
+                  ? "Cargando seguridad..."
+                  : "Crear cuenta"}
         </button>
       </form>
+
+      {mode === "login" ? (
+        <div className="mt-4 text-sm">
+          <button
+            type="button"
+            className="text-slate-600 underline"
+            onClick={() => setMode("forgot")}
+          >
+            Olvidé mi contraseña
+          </button>
+        </div>
+      ) : null}
 
       {mode === "register" ? (
         <p className="mt-4 text-xs text-slate-500">
@@ -164,8 +196,20 @@ export function AuthForm() {
         </p>
       ) : null}
 
+      {mode === "forgot" ? (
+        <p className="mt-4 text-xs text-slate-500">
+          Te vamos a mandar un enlace para definir una nueva contraseña.
+        </p>
+      ) : null}
+
       {message ? (
         <p className="mt-4 text-sm text-slate-600">{message}</p>
+      ) : null}
+
+      {mode === "forgot" ? (
+        <p className="mt-4 text-xs text-slate-500">
+          El enlace te va a llevar a una pantalla para actualizar la contraseña.
+        </p>
       ) : null}
     </div>
   );

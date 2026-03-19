@@ -106,6 +106,47 @@ export async function signUp(
   }
 }
 
+export async function requestPasswordReset(email: string) {
+  const redirectTo =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/reset-password`
+      : undefined;
+
+  const response = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({
+      email,
+      ...(redirectTo ? { redirect_to: redirectTo } : {})
+    })
+  });
+
+  const data = (await response.json()) as {
+    msg?: string;
+    error_description?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(data.error_description || data.msg || "No se pudo enviar el mail.");
+  }
+}
+
+export async function updatePassword(accessToken: string, password: string) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    method: "PUT",
+    headers: headers(accessToken),
+    body: JSON.stringify({ password })
+  });
+
+  const data = (await response.json()) as { msg?: string; error_description?: string };
+
+  if (!response.ok) {
+    throw new Error(
+      data.error_description || data.msg || "No se pudo actualizar la contraseña."
+    );
+  }
+}
+
 export async function signInWithPassword(email: string, password: string) {
   const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
     method: "POST",
