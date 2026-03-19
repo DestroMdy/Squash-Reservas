@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { getSession, fetchProfile, updateProfile } from "../../lib/supabase";
+import {
+  fetchProfile,
+  getSession,
+  updateProfile,
+  uploadProfileAvatar
+} from "../../lib/supabase";
 import { SectionTitle } from "../../components/SectionTitle";
 
 const categories = [
@@ -17,10 +22,12 @@ const categories = [
 export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -38,6 +45,7 @@ export default function ProfilePage() {
           setName(profile.full_name ?? "");
           setPhone(profile.phone ?? "");
           setCategory(profile.category ?? "");
+          setAvatarUrl(profile.avatar_url ?? "");
         }
       } finally {
         setLoading(false);
@@ -50,6 +58,38 @@ export default function ProfilePage() {
   const isComplete = useMemo(() => {
     return Boolean(name.trim() && phone.trim() && category.trim());
   }, [name, phone, category]);
+
+  async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      const session = getSession();
+      if (!session?.user?.id || !session?.access_token) {
+        alert("Debes iniciar sesión");
+        return;
+      }
+
+      setUploadingPhoto(true);
+      const uploadedUrl = await uploadProfileAvatar(
+        session.user.id,
+        session.access_token,
+        file
+      );
+
+      await updateProfile(session.user.id, session.access_token, {
+        avatar_url: uploadedUrl
+      });
+
+      setAvatarUrl(uploadedUrl);
+      alert("Foto actualizada");
+    } catch {
+      alert("No se pudo subir la foto");
+    } finally {
+      setUploadingPhoto(false);
+      event.target.value = "";
+    }
+  }
 
   async function save() {
     try {
@@ -81,13 +121,36 @@ export default function ProfilePage() {
   return (
     <div className="mx-auto max-w-xl space-y-6">
       <Link href="/" className="btn-secondary">
-        {"← Volver al inicio"}
+        Volver al inicio
       </Link>
 
       <SectionTitle
         title="Mi perfil"
         subtitle="Completá tu información para poder reservar."
       />
+
+      <div className="card rounded-2xl p-5">
+        <div className="flex items-center gap-4">
+          <img
+            src={avatarUrl || "/icon-192.png"}
+            alt="Foto de perfil"
+            className="h-24 w-24 rounded-full border border-slate-200 object-cover"
+          />
+          <div className="flex-1 space-y-2">
+            <p className="text-sm text-slate-500">Foto de perfil</p>
+            <label className="btn-secondary inline-flex cursor-pointer">
+              {uploadingPhoto ? "Subiendo..." : "Cambiar foto"}
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+                disabled={uploadingPhoto}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
 
       <div className="card rounded-2xl p-5">
         <p className="text-sm text-slate-500">Categoría actual</p>

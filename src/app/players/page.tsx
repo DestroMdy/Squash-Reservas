@@ -66,7 +66,7 @@ export default function PlayersPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <Link href="/" className="btn-secondary">
-        {"← Volver al inicio"}
+        Volver al inicio
       </Link>
 
       <SectionTitle
@@ -98,17 +98,26 @@ export default function PlayersPage() {
                         key={player.id}
                         className="rounded-xl border border-slate-200 bg-white p-4"
                       >
-                        <p className="font-semibold text-slate-900">
-                          {player.full_name || "Sin nombre"}
-                        </p>
+                        <div className="flex items-center gap-4">
+                          <img
+                            src={player.avatar_url || "/icon-192.png"}
+                            alt={player.full_name || "Jugador"}
+                            className="h-16 w-16 rounded-full border border-slate-200 object-cover"
+                          />
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              {player.full_name || "Sin nombre"}
+                            </p>
 
-                        <p className="mt-1 text-sm text-slate-600">
-                          Teléfono: {player.phone || "No informado"}
-                        </p>
+                            <p className="mt-1 text-sm text-slate-600">
+                              Teléfono: {player.phone || "No informado"}
+                            </p>
 
-                        <p className="mt-1 text-sm text-slate-500">
-                          Rol: {player.role}
-                        </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              Rol: {player.role}
+                            </p>
+                          </div>
+                        </div>
                       </article>
                     ))}
                   </div>

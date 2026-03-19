@@ -6,6 +6,7 @@ export interface Profile {
   full_name: string | null;
   phone: string | null;
   category: string | null;
+  avatar_url?: string | null;
   role: Role;
 }
 
@@ -34,7 +35,7 @@ export interface Booking {
   status: BookingStatus;
   notes: string | null;
   created_at: string;
-  profiles?: Pick<Profile, "id" | "full_name" | "category"> | null;
+  profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
   time_slots?: TimeSlot & { courts?: Court };
   courts?: Court;
 }

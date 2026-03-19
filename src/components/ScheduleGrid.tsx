@@ -155,6 +155,7 @@ export function ScheduleGrid({
         const playerName = confirmedBooking?.profiles?.full_name?.trim() || "Sin nombre";
         const playerCategory =
           confirmedBooking?.profiles?.category?.trim() || "Sin categoría";
+        const playerAvatar = confirmedBooking?.profiles?.avatar_url || "/icon-192.png";
 
         return (
           <article
@@ -184,13 +185,20 @@ export function ScheduleGrid({
                 </p>
 
                 {confirmedBooking ? (
-                  <div className="rounded-xl bg-white/70 px-3 py-2 text-sm text-slate-700">
-                    <p>
-                      Jugador: <span className="font-medium">{playerName}</span>
-                    </p>
-                    <p>
-                      Categoría: <span className="font-medium">{playerCategory}</span>
-                    </p>
+                  <div className="flex items-center gap-3 rounded-xl bg-white/70 px-3 py-3 text-sm text-slate-700">
+                    <img
+                      src={playerAvatar}
+                      alt={playerName}
+                      className="h-14 w-14 rounded-full border border-slate-200 object-cover"
+                    />
+                    <div>
+                      <p>
+                        Jugador: <span className="font-medium">{playerName}</span>
+                      </p>
+                      <p>
+                        Categoría: <span className="font-medium">{playerCategory}</span>
+                      </p>
+                    </div>
                   </div>
                 ) : null}
 

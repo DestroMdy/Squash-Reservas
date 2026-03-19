@@ -15,6 +15,7 @@ type SupabaseErrorPayload = {
 };
 
 const STORAGE_KEY = "sr_session";
+const AVATAR_BUCKET = "avatars";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
@@ -254,9 +255,41 @@ async function rest<T>(
   return JSON.parse(responseText) as T;
 }
 
+export async function uploadProfileAvatar(
+  userId: string,
+  token: string,
+  file: File
+) {
+  const extension = file.name.includes(".")
+    ? file.name.split(".").pop()?.toLowerCase() || "jpg"
+    : "jpg";
+  const filePath = `${userId}/avatar.${extension}`;
+
+  const response = await fetch(
+    `${supabaseUrl}/storage/v1/object/${AVATAR_BUCKET}/${filePath}`,
+    {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${token}`,
+        "x-upsert": "true",
+        "Content-Type": file.type || "application/octet-stream"
+      },
+      body: file
+    }
+  );
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(errorBody || "No se pudo subir la foto.");
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/${AVATAR_BUCKET}/${filePath}`;
+}
+
 export async function fetchSlotsByDate(date: string, token?: string) {
   return rest<any[]>(
-    `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category))&slot_date=eq.${date}&order=start_time.asc`,
+    `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category,avatar_url))&slot_date=eq.${date}&order=start_time.asc`,
     token ? { token } : undefined
   );
 }
@@ -270,7 +303,7 @@ export async function fetchMyBookings(userId: string, token: string) {
 
 export async function fetchAllBookings(token: string) {
   return rest<any[]>(
-    "bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,profiles(id,full_name,category),time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&order=created_at.desc",
+    "bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,profiles(id,full_name,category,avatar_url),time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&order=created_at.desc",
     { token }
   );
 }
@@ -409,7 +442,7 @@ export async function createBooking(
 
 export async function fetchProfile(userId: string, token: string) {
   const data = await rest<any[]>(
-    `profiles?select=id,full_name,phone,category,role&id=eq.${userId}&limit=1`,
+    `profiles?select=id,full_name,phone,category,role,avatar_url&id=eq.${userId}&limit=1`,
     { token }
   );
 
@@ -423,6 +456,7 @@ export async function updateProfile(
     full_name?: string | null;
     phone?: string | null;
     category?: string | null;
+    avatar_url?: string | null;
   }
 ) {
   await rest(`profiles?id=eq.${userId}`, {
@@ -447,7 +481,7 @@ export async function isProfileComplete(userId: string, token: string) {
 
 export async function fetchPlayers(token: string) {
   return rest<any[]>(
-    "profiles?select=id,full_name,phone,category,role&order=category.asc,full_name.asc",
+    "profiles?select=id,full_name,phone,category,role,avatar_url&order=category.asc,full_name.asc",
     { token }
   );
 }
