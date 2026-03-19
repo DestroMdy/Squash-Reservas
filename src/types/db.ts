@@ -21,6 +21,27 @@ export interface PrivateMessage {
   updated_at: string;
 }
 
+export interface PrivateMessageGroup {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  unread_count?: number;
+  last_message_at?: string | null;
+  members?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url">[];
+}
+
+export interface PrivateGroupMessage {
+  id: string;
+  group_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
+}
+
 export interface AdminAuditLog {
   id: string;
   actor_id: string;

@@ -585,8 +585,20 @@ export async function fetchUnreadPrivateMessagesCount(
     `private_messages?select=id&recipient_id=eq.${userId}&read_at=is.null`,
     { token }
   );
+  let groupUnreadCount = 0;
 
-  return data.length;
+  try {
+    const groupData = await fetchPrivateMessageGroups(token);
+    groupUnreadCount = (groupData.groups || []).reduce(
+      (sum: number, group: { unread_count?: number }) =>
+        sum + (group.unread_count || 0),
+      0
+    );
+  } catch {
+    groupUnreadCount = 0;
+  }
+
+  return data.length + groupUnreadCount;
 }
 
 export async function fetchLatestUnreadIncomingMessage(
@@ -599,6 +611,141 @@ export async function fetchLatestUnreadIncomingMessage(
   );
 
   return data[0];
+}
+
+export async function fetchPrivateMessageGroups(token: string) {
+  const response = await fetch("/api/private-message-groups", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string; groups?: any[]; unavailable?: boolean })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudieron cargar los grupos.");
+  }
+
+  return {
+    groups: payload.groups || [],
+    unavailable: payload.unavailable === true
+  };
+}
+
+export async function createPrivateMessageGroup(
+  name: string,
+  memberIds: string[],
+  token: string
+) {
+  const response = await fetch("/api/private-message-groups", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      name,
+      memberIds
+    })
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string; group?: any })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo crear el grupo.");
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-messages-updated"));
+  }
+
+  return payload.group;
+}
+
+export async function fetchPrivateGroupMessages(groupId: string, token: string) {
+  const response = await fetch(`/api/private-message-groups/${groupId}/messages`, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as {
+        error?: string;
+        messages?: any[];
+        members?: any[];
+      })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudieron cargar los mensajes del grupo.");
+  }
+
+  return {
+    messages: payload.messages || [],
+    members: payload.members || []
+  };
+}
+
+export async function sendPrivateGroupMessage(
+  groupId: string,
+  body: string,
+  token: string
+) {
+  const response = await fetch(`/api/private-message-groups/${groupId}/messages`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      body: body.trim()
+    })
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo enviar el mensaje al grupo.");
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-messages-updated"));
+  }
+}
+
+export async function markPrivateGroupAsRead(groupId: string, token: string) {
+  const response = await fetch(`/api/private-message-groups/${groupId}/read`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo marcar el grupo como leído.");
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-messages-updated"));
+  }
 }
 
 export async function sendPrivateMessage(

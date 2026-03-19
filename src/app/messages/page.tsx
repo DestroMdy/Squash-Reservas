@@ -4,26 +4,56 @@ import { useEffect, useMemo, useState } from "react";
 import { AppNoticeModal } from "@/components/AppNoticeModal";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
+  createPrivateMessageGroup,
   fetchPlayers,
+  fetchPrivateGroupMessages,
+  fetchPrivateMessageGroups,
   fetchPrivateMessages,
   getSession,
   getUser,
   markConversationAsRead,
+  markPrivateGroupAsRead,
+  sendPrivateGroupMessage,
   sendPrivateMessage
 } from "@/lib/supabase";
-import { PrivateMessage, Profile } from "@/types/db";
+import {
+  PrivateGroupMessage,
+  PrivateMessage,
+  PrivateMessageGroup,
+  Profile
+} from "@/types/db";
+
+type Tab = "direct" | "group";
 
 export default function MessagesPage() {
+  const [tab, setTab] = useState<Tab>("direct");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [players, setPlayers] = useState<Profile[]>([]);
-  const [messages, setMessages] = useState<PrivateMessage[]>([]);
-  const [selectedPlayerId, setSelectedPlayerId] = useState<string>("");
+  const [directMessages, setDirectMessages] = useState<PrivateMessage[]>([]);
+  const [groups, setGroups] = useState<PrivateMessageGroup[]>([]);
+  const [groupMessages, setGroupMessages] = useState<PrivateGroupMessage[]>([]);
+  const [groupMembers, setGroupMembers] = useState<Profile[]>([]);
+  const [selectedPlayerId, setSelectedPlayerId] = useState("");
+  const [selectedGroupId, setSelectedGroupId] = useState("");
   const [initialRecipientId, setInitialRecipientId] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
+  const [directDraft, setDirectDraft] = useState("");
+  const [groupDraft, setGroupDraft] = useState("");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [newGroupMemberIds, setNewGroupMemberIds] = useState<string[]>([]);
+  const [showCreateGroup, setShowCreateGroup] = useState(false);
+  const [groupsUnavailable, setGroupsUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [groupLoading, setGroupLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState("");
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setInitialRecipientId(params.get("to"));
+  }, []);
 
   async function loadData(preferredRecipientId?: string | null) {
     const token = getSession()?.access_token;
@@ -32,118 +62,117 @@ export default function MessagesPage() {
       setLoading(false);
       return;
     }
-
     const user = await getUser(token);
     if (!user) {
       setError("Sesión inválida");
       setLoading(false);
       return;
     }
-
     setCurrentUserId(user.id);
 
-    const [allPlayers, privateMessages] = await Promise.all([
+    const [allPlayers, messages, groupData] = await Promise.all([
       fetchPlayers(token),
-      fetchPrivateMessages(user.id, token)
+      fetchPrivateMessages(user.id, token),
+      fetchPrivateMessageGroups(token).catch(() => ({ groups: [], unavailable: true }))
     ]);
 
-    const availablePlayers = (allPlayers ?? []).filter(
-      (player) => player.id !== user.id
-    );
-
+    const availablePlayers = (allPlayers ?? []).filter((player) => player.id !== user.id);
     setPlayers(availablePlayers);
-    setMessages(privateMessages ?? []);
+    setDirectMessages(messages ?? []);
+    setGroups(groupData.groups ?? []);
+    setGroupsUnavailable(groupData.unavailable === true);
 
-    const candidateId =
+    const suggestedPlayer =
       (preferredRecipientId &&
       availablePlayers.some((player) => player.id === preferredRecipientId)
         ? preferredRecipientId
         : null) ||
-      (privateMessages ?? [])
+      (messages ?? [])
         .slice()
         .reverse()
-        .map((message) =>
-          message.sender_id === user.id ? message.recipient_id : message.sender_id
-        )
-        .find((playerId) =>
-          availablePlayers.some((player) => player.id === playerId)
-        ) ||
+        .map((message) => (message.sender_id === user.id ? message.recipient_id : message.sender_id))
+        .find((playerId) => availablePlayers.some((player) => player.id === playerId)) ||
       availablePlayers[0]?.id ||
       "";
 
-    setSelectedPlayerId(candidateId);
+    setSelectedPlayerId(suggestedPlayer);
+    setSelectedGroupId((current) =>
+      current && (groupData.groups ?? []).some((group) => group.id === current)
+        ? current
+        : groupData.groups?.[0]?.id || ""
+    );
     setError(null);
     setLoading(false);
   }
 
-  useEffect(() => {
-    if (typeof window === "undefined") {
+  async function loadGroupConversation(groupId: string) {
+    const token = getSession()?.access_token;
+    if (!token || !groupId) {
+      setGroupMessages([]);
+      setGroupMembers([]);
       return;
     }
-
-    const params = new URLSearchParams(window.location.search);
-    setInitialRecipientId(params.get("to"));
-  }, []);
+    setGroupLoading(true);
+    try {
+      const payload = await fetchPrivateGroupMessages(groupId, token);
+      setGroupMessages(payload.messages ?? []);
+      setGroupMembers(payload.members ?? []);
+    } catch (err) {
+      setNoticeMessage(err instanceof Error ? err.message : "No se pudo cargar el grupo");
+    } finally {
+      setGroupLoading(false);
+    }
+  }
 
   useEffect(() => {
-    async function init() {
-      try {
-        setLoading(true);
-        await loadData(initialRecipientId);
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "No se pudieron cargar los mensajes"
-        );
-        setLoading(false);
-      }
-    }
-
-    init();
+    setLoading(true);
+    void loadData(initialRecipientId).catch((err) => {
+      setError(err instanceof Error ? err.message : "No se pudieron cargar los mensajes");
+      setLoading(false);
+    });
   }, [initialRecipientId]);
+
+  useEffect(() => {
+    if (tab === "group" && selectedGroupId) {
+      void loadGroupConversation(selectedGroupId);
+    }
+  }, [tab, selectedGroupId]);
 
   const selectedPlayer = useMemo(
     () => players.find((player) => player.id === selectedPlayerId) ?? null,
     [players, selectedPlayerId]
   );
+  const selectedGroup = useMemo(
+    () => groups.find((group) => group.id === selectedGroupId) ?? null,
+    [groups, selectedGroupId]
+  );
 
-  const conversationMessages = useMemo(() => {
-    if (!currentUserId || !selectedPlayerId) {
-      return [];
-    }
-
-    return messages.filter((message) => {
-      const isSent =
-        message.sender_id === currentUserId &&
-        message.recipient_id === selectedPlayerId;
-      const isReceived =
-        message.sender_id === selectedPlayerId &&
-        message.recipient_id === currentUserId;
-      return isSent || isReceived;
+  const currentDirectMessages = useMemo(() => {
+    if (!currentUserId || !selectedPlayerId) return [];
+    return directMessages.filter((message) => {
+      const sent =
+        message.sender_id === currentUserId && message.recipient_id === selectedPlayerId;
+      const received =
+        message.sender_id === selectedPlayerId && message.recipient_id === currentUserId;
+      return sent || received;
     });
-  }, [currentUserId, messages, selectedPlayerId]);
+  }, [currentUserId, directMessages, selectedPlayerId]);
 
   useEffect(() => {
-    async function markRead() {
+    async function syncRead() {
       const token = getSession()?.access_token;
-      if (!token || !currentUserId || !selectedPlayerId) {
-        return;
-      }
-
-      const hasUnreadIncoming = messages.some(
+      if (!token || !currentUserId || !selectedPlayerId || tab !== "direct") return;
+      const hasUnread = directMessages.some(
         (message) =>
           message.sender_id === selectedPlayerId &&
           message.recipient_id === currentUserId &&
           !message.read_at
       );
-
-      if (!hasUnreadIncoming) {
-        return;
-      }
-
+      if (!hasUnread) return;
       try {
         await markConversationAsRead(selectedPlayerId, currentUserId, token);
-        setMessages((currentMessages) =>
-          currentMessages.map((message) =>
+        setDirectMessages((current) =>
+          current.map((message) =>
             message.sender_id === selectedPlayerId &&
             message.recipient_id === currentUserId &&
             !message.read_at
@@ -151,217 +180,277 @@ export default function MessagesPage() {
               : message
           )
         );
-      } catch {
-        // Ignore read sync errors on view.
-      }
+      } catch {}
     }
+    void syncRead();
+  }, [tab, currentUserId, selectedPlayerId, directMessages]);
 
-    void markRead();
-  }, [currentUserId, messages, selectedPlayerId]);
+  useEffect(() => {
+    async function syncGroupRead() {
+      const token = getSession()?.access_token;
+      if (!token || tab !== "group" || !selectedGroupId) return;
+      const group = groups.find((item) => item.id === selectedGroupId);
+      if (!group?.unread_count) return;
+      try {
+        await markPrivateGroupAsRead(selectedGroupId, token);
+        setGroups((current) =>
+          current.map((item) =>
+            item.id === selectedGroupId ? { ...item, unread_count: 0 } : item
+          )
+        );
+      } catch {}
+    }
+    void syncGroupRead();
+  }, [tab, selectedGroupId, groups]);
 
-  async function handleSend() {
+  async function handleSendDirect() {
     try {
       const token = getSession()?.access_token;
-      if (!token || !currentUserId) {
-        throw new Error("Debes iniciar sesión");
-      }
-
-      if (!selectedPlayerId) {
-        throw new Error("Debes elegir un jugador");
-      }
-
-      if (!draft.trim()) {
-        throw new Error("Escribe un mensaje antes de enviarlo");
-      }
-
+      if (!token || !currentUserId) throw new Error("Debes iniciar sesión");
+      if (!selectedPlayerId) throw new Error("Debes elegir un jugador");
+      if (!directDraft.trim()) throw new Error("Escribe un mensaje antes de enviarlo");
       setSending(true);
-      await sendPrivateMessage(currentUserId, selectedPlayerId, draft, token);
-      setDraft("");
+      await sendPrivateMessage(currentUserId, selectedPlayerId, directDraft, token);
+      setDirectDraft("");
       await loadData(selectedPlayerId);
     } catch (err) {
-      setNoticeMessage(
-        err instanceof Error ? err.message : "No se pudo enviar el mensaje"
-      );
+      setNoticeMessage(err instanceof Error ? err.message : "No se pudo enviar el mensaje");
     } finally {
       setSending(false);
     }
+  }
+
+  async function handleSendGroup() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) throw new Error("Debes iniciar sesión");
+      if (!selectedGroupId) throw new Error("Debes elegir un grupo");
+      if (!groupDraft.trim()) throw new Error("Escribe un mensaje antes de enviarlo");
+      setSending(true);
+      await sendPrivateGroupMessage(selectedGroupId, groupDraft, token);
+      setGroupDraft("");
+      await Promise.all([loadData(initialRecipientId), loadGroupConversation(selectedGroupId)]);
+    } catch (err) {
+      setNoticeMessage(err instanceof Error ? err.message : "No se pudo enviar al grupo");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleCreateGroup() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) throw new Error("Debes iniciar sesión");
+      if (!newGroupName.trim()) throw new Error("El grupo necesita un nombre.");
+      if (!newGroupMemberIds.length) throw new Error("Debes seleccionar al menos un integrante.");
+      setCreatingGroup(true);
+      const createdGroup = await createPrivateMessageGroup(newGroupName, newGroupMemberIds, token);
+      setNewGroupName("");
+      setNewGroupMemberIds([]);
+      setShowCreateGroup(false);
+      setTab("group");
+      await loadData(initialRecipientId);
+      if (createdGroup?.id) {
+        setSelectedGroupId(createdGroup.id);
+        await loadGroupConversation(createdGroup.id);
+      }
+    } catch (err) {
+      setNoticeMessage(err instanceof Error ? err.message : "No se pudo crear el grupo");
+    } finally {
+      setCreatingGroup(false);
+    }
+  }
+
+  function toggleMember(playerId: string) {
+    setNewGroupMemberIds((current) =>
+      current.includes(playerId) ? current.filter((id) => id !== playerId) : [...current, playerId]
+    );
   }
 
   return (
     <>
       <div className="space-y-6">
         <SectionTitle
-          title="Mensajes privados"
-          subtitle="Contactate con otros jugadores sin mostrar teléfonos en público."
+          title="Mensajes"
+          subtitle="Contactate por privado con otros jugadores o armá grupos cerrados."
         />
 
         {loading ? <p>Cargando mensajes...</p> : null}
         {error ? <p className="text-red-600">{error}</p> : null}
 
         {!loading && !error ? (
-          <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
-            <section className="card space-y-4 p-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Jugador
-                </label>
-                <select
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                  value={selectedPlayerId}
-                  onChange={(event) => setSelectedPlayerId(event.target.value)}
-                >
-                  {players.length ? (
-                    players.map((player) => (
-                      <option key={player.id} value={player.id}>
-                        {player.full_name || "Sin nombre"} ·{" "}
-                        {player.category || "Sin categoría"}
-                      </option>
-                    ))
-                  ) : (
-                    <option value="">No hay jugadores disponibles</option>
-                  )}
-                </select>
-              </div>
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              <button type="button" className={tab === "direct" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("direct")}>Mensajes directos</button>
+              <button type="button" className={tab === "group" ? "btn-primary" : "btn-secondary"} onClick={() => setTab("group")}>Grupos privados</button>
+            </div>
 
-              <div className="space-y-2">
-                {players.slice(0, 8).map((player) => {
-                  const isActive = player.id === selectedPlayerId;
-                  const unreadFromPlayer = messages.filter(
-                    (message) =>
-                      message.sender_id === player.id &&
-                      message.recipient_id === currentUserId &&
-                      !message.read_at
-                  ).length;
-                  return (
-                    <button
-                      key={player.id}
-                      type="button"
-                      onClick={() => setSelectedPlayerId(player.id)}
-                      className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
-                        isActive
-                          ? "border-slate-900 bg-slate-900 text-white"
-                          : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-                      }`}
-                    >
-                      <img
-                        src={player.avatar_url || "/icon-192.png"}
-                        alt={player.full_name || "Jugador"}
-                        className="h-11 w-11 rounded-full object-cover"
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">
-                          {player.full_name || "Sin nombre"}
-                        </p>
-                        <p
-                          className={`truncate text-sm ${
-                            isActive ? "text-slate-200" : "text-slate-500"
-                          }`}
-                        >
-                          {player.category || "Sin categoría"}
-                        </p>
+            <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
+              <section className="card space-y-4 p-4">
+                {tab === "direct" ? (
+                  <>
+                    <label className="block text-sm font-medium text-slate-700">
+                      Jugador
+                    </label>
+                    <select className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500" value={selectedPlayerId} onChange={(e) => setSelectedPlayerId(e.target.value)}>
+                      {players.length ? players.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.full_name || "Sin nombre"} · {player.category || "Sin categoría"}
+                        </option>
+                      )) : <option value="">No hay jugadores disponibles</option>}
+                    </select>
+
+                    <div className="space-y-2">
+                      {players.slice(0, 12).map((player) => {
+                        const unread = directMessages.filter((message) => message.sender_id === player.id && message.recipient_id === currentUserId && !message.read_at).length;
+                        const active = player.id === selectedPlayerId;
+                        return (
+                          <button key={player.id} type="button" onClick={() => setSelectedPlayerId(player.id)} className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"}`}>
+                            <img src={player.avatar_url || "/icon-192.png"} alt={player.full_name || "Jugador"} className="h-11 w-11 rounded-full object-cover" />
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{player.full_name || "Sin nombre"}</p>
+                              <p className={`truncate text-sm ${active ? "text-slate-200" : "text-slate-500"}`}>{player.category || "Sin categoría"}</p>
+                            </div>
+                            {unread > 0 ? <span className="rounded-full bg-red-600 px-2 py-1 text-xs font-semibold text-white">{unread}</span> : null}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-slate-900">Tus grupos</p>
+                        <p className="text-sm text-slate-500">Armá grupos cerrados entre jugadores.</p>
                       </div>
-                      {unreadFromPlayer > 0 ? (
-                        <span className="rounded-full bg-red-600 px-2 py-1 text-xs font-semibold text-white">
-                          {unreadFromPlayer}
-                        </span>
-                      ) : null}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
+                      <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup((current) => !current)} disabled={groupsUnavailable}>Nuevo grupo</button>
+                    </div>
 
-            <section className="card flex min-h-[520px] flex-col p-4">
-              <div className="border-b border-slate-200 pb-4">
-                <div className="flex items-center gap-3">
-                  <img
-                    src={selectedPlayer?.avatar_url || "/icon-192.png"}
-                    alt={selectedPlayer?.full_name || "Jugador"}
-                    className="h-14 w-14 rounded-full object-cover"
-                  />
-                  <div>
-                    <p className="text-lg font-semibold text-slate-900">
-                      {selectedPlayer?.full_name || "Elegí un jugador"}
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      {selectedPlayer?.category || "Sin categoría"}
-                    </p>
-                  </div>
-                </div>
-              </div>
+                    {groupsUnavailable ? <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">Los grupos privados todavía no están habilitados en la base. Falta correr la migración SQL.</div> : null}
 
-              <div className="flex-1 space-y-3 overflow-y-auto py-4">
-                {conversationMessages.length ? (
-                  conversationMessages.map((message) => {
-                    const isOwnMessage = message.sender_id === currentUserId;
-                    return (
-                      <div
-                        key={message.id}
-                        className={`flex ${
-                          isOwnMessage ? "justify-end" : "justify-start"
-                        }`}
-                      >
-                        <div
-                          className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${
-                            isOwnMessage
-                              ? "bg-slate-900 text-white"
-                              : "bg-slate-100 text-slate-900"
-                          }`}
-                        >
-                          <p>{message.body}</p>
-                          <p
-                            className={`mt-2 text-xs ${
-                              isOwnMessage ? "text-slate-300" : "text-slate-500"
-                            }`}
-                          >
-                            {new Intl.DateTimeFormat("es-AR", {
-                              day: "2-digit",
-                              month: "2-digit",
-                              hour: "2-digit",
-                              minute: "2-digit"
-                            }).format(new Date(message.created_at))}
-                          </p>
+                    {showCreateGroup && !groupsUnavailable ? (
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                        <div>
+                          <label className="mb-1 block text-sm font-medium text-slate-700">Nombre del grupo</label>
+                          <input className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500" value={newGroupName} onChange={(e) => setNewGroupName(e.target.value)} placeholder="Ej: Miércoles 21 hs" />
+                        </div>
+                        <div className="max-h-56 space-y-2 overflow-y-auto">
+                          {players.map((player) => (
+                            <label key={player.id} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2">
+                              <input type="checkbox" checked={newGroupMemberIds.includes(player.id)} onChange={() => toggleMember(player.id)} />
+                              <img src={player.avatar_url || "/icon-192.png"} alt={player.full_name || "Jugador"} className="h-9 w-9 rounded-full object-cover" />
+                              <div>
+                                <p className="font-medium text-slate-900">{player.full_name || "Sin nombre"}</p>
+                                <p className="text-sm text-slate-500">{player.category || "Sin categoría"}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button type="button" className="btn-secondary" onClick={() => setShowCreateGroup(false)} disabled={creatingGroup}>Cancelar</button>
+                          <button type="button" className="btn-primary" onClick={handleCreateGroup} disabled={creatingGroup}>{creatingGroup ? "Creando..." : "Crear grupo"}</button>
                         </div>
                       </div>
-                    );
-                  })
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
-                    No hay mensajes todavía con este jugador.
-                  </div>
+                    ) : null}
+
+                    <div className="space-y-2">
+                      {groups.length ? groups.map((group) => {
+                        const active = group.id === selectedGroupId;
+                        const names = (group.members || []).map((member) => member.full_name || "Sin nombre").slice(0, 2).join(", ");
+                        return (
+                          <button key={group.id} type="button" onClick={() => setSelectedGroupId(group.id)} className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"}`}>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{group.name}</p>
+                              <p className={`truncate text-sm ${active ? "text-slate-200" : "text-slate-500"}`}>{names || "Sin integrantes visibles"}</p>
+                            </div>
+                            {group.unread_count ? <span className="rounded-full bg-red-600 px-2 py-1 text-xs font-semibold text-white">{group.unread_count}</span> : null}
+                          </button>
+                        );
+                      }) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Todavía no tenés grupos creados.</div>}
+                    </div>
+                  </>
                 )}
-              </div>
+              </section>
 
-              <div className="border-t border-slate-200 pt-4">
-                <textarea
-                  className="min-h-[120px] w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Escribí tu mensaje privado..."
-                  disabled={!selectedPlayerId || sending}
-                />
+              <section className="card flex min-h-[520px] flex-col p-4">
+                {tab === "direct" ? (
+                  <>
+                    <div className="border-b border-slate-200 pb-4">
+                      <div className="flex items-center gap-3">
+                        <img src={selectedPlayer?.avatar_url || "/icon-192.png"} alt={selectedPlayer?.full_name || "Jugador"} className="h-14 w-14 rounded-full object-cover" />
+                        <div>
+                          <p className="text-lg font-semibold text-slate-900">{selectedPlayer?.full_name || "Elegí un jugador"}</p>
+                          <p className="text-sm text-slate-500">{selectedPlayer?.category || "Sin categoría"}</p>
+                        </div>
+                      </div>
+                    </div>
 
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={handleSend}
-                    disabled={!selectedPlayerId || sending}
-                  >
-                    {sending ? "Enviando..." : "Enviar mensaje"}
-                  </button>
-                </div>
-              </div>
-            </section>
+                    <div className="flex-1 space-y-3 overflow-y-auto py-4">
+                      {currentDirectMessages.length ? currentDirectMessages.map((message) => {
+                        const own = message.sender_id === currentUserId;
+                        return (
+                          <div key={message.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
+                            <div className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900"}`}>
+                              <p>{message.body}</p>
+                              <p className={`mt-2 text-xs ${own ? "text-slate-300" : "text-slate-500"}`}>{new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(message.created_at))}</p>
+                            </div>
+                          </div>
+                        );
+                      }) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No hay mensajes todavía con este jugador.</div>}
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-4">
+                      <textarea className="min-h-[120px] w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500" value={directDraft} onChange={(e) => setDirectDraft(e.target.value)} placeholder="Escribí tu mensaje privado..." disabled={!selectedPlayerId || sending} />
+                      <div className="mt-3 flex justify-end">
+                        <button type="button" className="btn-primary" onClick={handleSendDirect} disabled={!selectedPlayerId || sending}>{sending ? "Enviando..." : "Enviar mensaje"}</button>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="border-b border-slate-200 pb-4">
+                      <p className="text-lg font-semibold text-slate-900">{selectedGroup?.name || "Elegí un grupo"}</p>
+                      <p className="text-sm text-slate-500">{(groupMembers.length || selectedGroup?.members?.length || 0)} integrantes</p>
+                      {(groupMembers.length ? groupMembers : selectedGroup?.members || []).length ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(groupMembers.length ? groupMembers : selectedGroup?.members || []).map((member) => (
+                            <span key={member.id} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">{member.full_name || "Sin nombre"}</span>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="flex-1 space-y-3 overflow-y-auto py-4">
+                      {groupLoading ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">Cargando grupo...</div> : groupMessages.length ? groupMessages.map((message) => {
+                        const own = message.sender_id === currentUserId;
+                        return (
+                          <div key={message.id} className={`flex ${own ? "justify-end" : "justify-start"}`}>
+                            <div className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${own ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-900"}`}>
+                              {!own ? <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{message.profiles?.full_name || "Jugador"}</p> : null}
+                              <p>{message.body}</p>
+                              <p className={`mt-2 text-xs ${own ? "text-slate-300" : "text-slate-500"}`}>{new Intl.DateTimeFormat("es-AR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(message.created_at))}</p>
+                            </div>
+                          </div>
+                        );
+                      }) : <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">No hay mensajes todavía en este grupo.</div>}
+                    </div>
+
+                    <div className="border-t border-slate-200 pt-4">
+                      <textarea className="min-h-[120px] w-full rounded-2xl border border-slate-300 px-4 py-3 outline-none focus:border-slate-500" value={groupDraft} onChange={(e) => setGroupDraft(e.target.value)} placeholder="Escribí tu mensaje para el grupo..." disabled={!selectedGroupId || sending || groupsUnavailable} />
+                      <div className="mt-3 flex justify-end">
+                        <button type="button" className="btn-primary" onClick={handleSendGroup} disabled={!selectedGroupId || sending || groupsUnavailable}>{sending ? "Enviando..." : "Enviar al grupo"}</button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </section>
+            </div>
           </div>
         ) : null}
       </div>
 
-      <AppNoticeModal
-        open={Boolean(noticeMessage)}
-        message={noticeMessage}
-        onClose={() => setNoticeMessage("")}
-      />
+      <AppNoticeModal open={Boolean(noticeMessage)} message={noticeMessage} onClose={() => setNoticeMessage("")} />
     </>
   );
 }
