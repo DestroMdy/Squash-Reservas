@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AppNoticeModal } from "../../components/AppNoticeModal";
+import { SectionTitle } from "../../components/SectionTitle";
 import {
   fetchProfile,
   getSession,
   updateProfile,
   uploadProfileAvatar
 } from "../../lib/supabase";
-import { SectionTitle } from "../../components/SectionTitle";
 
 const categories = [
   "Primera",
@@ -23,6 +24,7 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [noticeMessage, setNoticeMessage] = useState("");
 
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -66,7 +68,7 @@ export default function ProfilePage() {
 
       const session = getSession();
       if (!session?.user?.id || !session?.access_token) {
-        alert("Debes iniciar sesión");
+        setNoticeMessage("Debes iniciar sesión");
         return;
       }
 
@@ -82,9 +84,9 @@ export default function ProfilePage() {
       });
 
       setAvatarUrl(uploadedUrl);
-      alert("Foto actualizada");
+      setNoticeMessage("Foto actualizada");
     } catch {
-      alert("No se pudo subir la foto");
+      setNoticeMessage("No se pudo subir la foto");
     } finally {
       setUploadingPhoto(false);
       event.target.value = "";
@@ -98,7 +100,7 @@ export default function ProfilePage() {
       const session = getSession();
 
       if (!session?.user?.id || !session?.access_token) {
-        alert("Debes iniciar sesión");
+        setNoticeMessage("Debes iniciar sesión");
         return;
       }
 
@@ -108,9 +110,9 @@ export default function ProfilePage() {
         category: category || null
       });
 
-      alert("Perfil actualizado");
+      setNoticeMessage("Perfil actualizado");
     } catch {
-      alert("No se pudo guardar el perfil");
+      setNoticeMessage("No se pudo guardar el perfil");
     } finally {
       setSaving(false);
     }
@@ -119,105 +121,113 @@ export default function ProfilePage() {
   if (loading) return <p>Cargando perfil...</p>;
 
   return (
-    <div className="mx-auto max-w-xl space-y-6">
-      <Link href="/" className="btn-secondary">
-        Volver al inicio
-      </Link>
+    <>
+      <div className="mx-auto max-w-xl space-y-6">
+        <Link href="/" className="btn-secondary">
+          Volver al inicio
+        </Link>
 
-      <SectionTitle
-        title="Mi perfil"
-        subtitle="Completá tu información para poder reservar."
-      />
+        <SectionTitle
+          title="Mi perfil"
+          subtitle="Completá tu información para poder reservar."
+        />
 
-      <div className="card rounded-2xl p-5">
-        <div className="flex items-center gap-4">
-          <img
-            src={avatarUrl || "/icon-192.png"}
-            alt="Foto de perfil"
-            className="h-24 w-24 rounded-full border border-slate-200 object-cover"
-          />
-          <div className="flex-1 space-y-2">
-            <p className="text-sm text-slate-500">Foto de perfil</p>
-            <label className="btn-secondary inline-flex cursor-pointer">
-              {uploadingPhoto ? "Subiendo..." : "Cambiar foto"}
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleAvatarChange}
-                disabled={uploadingPhoto}
-              />
-            </label>
+        <div className="card rounded-2xl p-5">
+          <div className="flex items-center gap-4">
+            <img
+              src={avatarUrl || "/icon-192.png"}
+              alt="Foto de perfil"
+              className="h-24 w-24 rounded-full border border-slate-200 object-cover"
+            />
+            <div className="flex-1 space-y-2">
+              <p className="text-sm text-slate-500">Foto de perfil</p>
+              <label className="btn-secondary inline-flex cursor-pointer">
+                {uploadingPhoto ? "Subiendo..." : "Cambiar foto"}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                  disabled={uploadingPhoto}
+                />
+              </label>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="card rounded-2xl p-5">
-        <p className="text-sm text-slate-500">Categoría actual</p>
-        <p className="mt-1 text-2xl font-bold text-slate-900">
-          {category || "Sin categoría"}
-        </p>
-      </div>
-
-      {!isComplete ? (
-        <div className="card border border-amber-300 bg-amber-50 p-4">
-          <p className="font-medium text-amber-900">Perfil incompleto</p>
-          <p className="mt-1 text-sm text-amber-800">
-            Debes completar nombre, teléfono y categoría.
+        <div className="card rounded-2xl p-5">
+          <p className="text-sm text-slate-500">Categoría actual</p>
+          <p className="mt-1 text-2xl font-bold text-slate-900">
+            {category || "Sin categoría"}
           </p>
         </div>
-      ) : (
-        <div className="card border border-green-300 bg-green-50 p-4">
-          <p className="font-medium text-green-900">Perfil completo</p>
-          <p className="mt-1 text-sm text-green-800">
-            Ya puedes reservar turnos.
-          </p>
-        </div>
-      )}
 
-      <div className="card space-y-4 p-6">
-        <div>
-          <label className="mb-1 block text-sm font-medium">Nombre</label>
-          <input
-            className="w-full rounded-xl border px-3 py-2"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
+        {!isComplete ? (
+          <div className="card border border-amber-300 bg-amber-50 p-4">
+            <p className="font-medium text-amber-900">Perfil incompleto</p>
+            <p className="mt-1 text-sm text-amber-800">
+              Debes completar nombre, teléfono y categoría.
+            </p>
+          </div>
+        ) : (
+          <div className="card border border-green-300 bg-green-50 p-4">
+            <p className="font-medium text-green-900">Perfil completo</p>
+            <p className="mt-1 text-sm text-green-800">
+              Ya puedes reservar turnos.
+            </p>
+          </div>
+        )}
 
-        <div>
-          <label className="mb-1 block text-sm font-medium">Teléfono</label>
-          <input
-            className="w-full rounded-xl border px-3 py-2"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
-        </div>
+        <div className="card space-y-4 p-6">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Nombre</label>
+            <input
+              className="w-full rounded-xl border px-3 py-2"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
 
-        <div>
-          <label className="mb-1 block text-sm font-medium">Categoría</label>
-          <select
-            className="w-full rounded-xl border px-3 py-2"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
+          <div>
+            <label className="mb-1 block text-sm font-medium">Teléfono</label>
+            <input
+              className="w-full rounded-xl border px-3 py-2"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">Categoría</label>
+            <select
+              className="w-full rounded-xl border px-3 py-2"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="">Seleccionar</option>
+              {categories.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={save}
+            className="btn-primary w-full"
+            disabled={saving}
           >
-            <option value="">Seleccionar</option>
-            {categories.map((cat) => (
-              <option key={cat} value={cat}>
-                {cat}
-              </option>
-            ))}
-          </select>
+            {saving ? "Guardando..." : "Guardar cambios"}
+          </button>
         </div>
-
-        <button
-          onClick={save}
-          className="btn-primary w-full"
-          disabled={saving}
-        >
-          {saving ? "Guardando..." : "Guardar cambios"}
-        </button>
       </div>
-    </div>
+
+      <AppNoticeModal
+        open={Boolean(noticeMessage)}
+        message={noticeMessage}
+        onClose={() => setNoticeMessage("")}
+      />
+    </>
   );
 }
