@@ -227,10 +227,6 @@ export function ScheduleGrid({
                     {slot.start_time.slice(0, 5)} - {slot.end_time.slice(0, 5)}
                   </p>
 
-                  <p className="text-sm text-slate-500">
-                    Precio: ${Number(slot.price || 0).toLocaleString("es-AR")}
-                  </p>
-
                   {confirmedBooking ? (
                     <div className="flex items-center gap-3 rounded-xl bg-white/70 px-3 py-3 text-sm text-slate-700">
                       <img
@@ -330,7 +326,7 @@ export function ScheduleGrid({
         title="Confirmar reserva"
         message={
           confirmingSlot
-            ? `¿Quieres reservar ${confirmingSlot.courts?.name ?? "la cancha"} de ${confirmingSlot.start_time.slice(0, 5)} a ${confirmingSlot.end_time.slice(0, 5)}?`
+            ? `¿Quieres reservar ${confirmingSlot.courts?.name ?? "la cancha"} el ${confirmingSlot.slot_date} de ${confirmingSlot.start_time.slice(0, 5)} a ${confirmingSlot.end_time.slice(0, 5)}?`
             : ""
         }
         confirmLabel="Reservar"
