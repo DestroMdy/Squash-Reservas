@@ -34,6 +34,13 @@ function normalizeSupabaseError(error: SupabaseErrorPayload | string | null | un
   }
 
   if (typeof error === "string") {
+    if (
+      error.includes("P0001") &&
+      error.includes("reserva confirmada por día por usuario")
+    ) {
+      return "Solo se permite una reserva confirmada por día por usuario.";
+    }
+
     return error;
   }
 
@@ -42,6 +49,13 @@ function normalizeSupabaseError(error: SupabaseErrorPayload | string | null | un
     error.message?.includes("bookings_time_slot_id_key")
   ) {
     return "El turno ya fue reservado por otro usuario.";
+  }
+
+  if (
+    error.code === "P0001" &&
+    error.message?.includes("reserva confirmada por día por usuario")
+  ) {
+    return "Solo se permite una reserva confirmada por día por usuario.";
   }
 
   return error.error || error.message || "Error en Supabase";
@@ -234,12 +248,17 @@ async function rest<T>(
       throw new Error("Error en Supabase");
     }
 
+    let parsedError: SupabaseErrorPayload | null = null;
+
     try {
-      const parsedError = JSON.parse(errorBody) as SupabaseErrorPayload;
-      throw new Error(normalizeSupabaseError(parsedError));
+      parsedError = JSON.parse(errorBody) as SupabaseErrorPayload;
     } catch {
-      throw new Error(normalizeSupabaseError(errorBody));
+      parsedError = null;
     }
+
+    throw new Error(
+      normalizeSupabaseError(parsedError ?? errorBody)
+    );
   }
 
   if (response.status === 204) {
