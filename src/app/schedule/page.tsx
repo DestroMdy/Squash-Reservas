@@ -19,6 +19,14 @@ function todayLocalDate() {
   return local.toISOString().split("T")[0];
 }
 
+function tomorrowLocalDate() {
+  const now = new Date();
+  now.setDate(now.getDate() + 1);
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60 * 1000);
+  return local.toISOString().split("T")[0];
+}
+
 export default function SchedulePage() {
   const [mounted, setMounted] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
@@ -62,6 +70,8 @@ export default function SchedulePage() {
     });
   }, [slots]);
 
+  const tomorrow = useMemo(() => tomorrowLocalDate(), []);
+
   if (!mounted) return null;
 
   return (
@@ -82,12 +92,22 @@ export default function SchedulePage() {
           Fecha
         </label>
 
-        <input
-          type="date"
-          className="rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-        />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <input
+            type="date"
+            className="rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+          />
+
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => setSelectedDate(tomorrow)}
+          >
+            Ir a mañana
+          </button>
+        </div>
       </section>
 
       {loading ? <p className="text-sm text-slate-600">Cargando agenda...</p> : null}
