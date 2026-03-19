@@ -110,7 +110,7 @@ export default function PlayersPage() {
                             </p>
 
                             <p className="mt-1 text-sm text-slate-600">
-                              Teléfono: {player.phone || "No informado"}
+                              Contacto privado protegido
                             </p>
 
                             <p className="mt-1 text-sm text-slate-500">
