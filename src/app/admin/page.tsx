@@ -27,6 +27,12 @@ type EditState = {
 
 const statusOptions: BookingStatus[] = ["confirmed", "cancelled", "completed"];
 
+function getCurrentMonthKey() {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${now.getFullYear()}-${month}`;
+}
+
 export default function AdminPage() {
   const [role, setRole] = useState<string | null>(null);
   const [stats, setStats] = useState<{
@@ -37,6 +43,7 @@ export default function AdminPage() {
   const [bookings, setBookings] = useState<BookingWithRelations[]>([]);
   const [players, setPlayers] = useState<Profile[]>([]);
   const [filter, setFilter] = useState("");
+  const [reportMonth, setReportMonth] = useState(getCurrentMonthKey());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -125,6 +132,57 @@ export default function AdminPage() {
         .includes(normalizedFilter);
     });
   }, [bookings, filter]);
+
+  const monthlyReport = useMemo(() => {
+    const monthlyBookings = bookings.filter((booking) =>
+      booking.time_slots?.slot_date?.startsWith(reportMonth)
+    );
+
+    const activeBookings = monthlyBookings.filter(
+      (booking) => booking.status !== "cancelled"
+    );
+
+    const byCourt = activeBookings.reduce<Record<string, number>>((acc, booking) => {
+      const courtName =
+        booking.time_slots?.courts?.name || booking.courts?.name || "Cancha sin nombre";
+      acc[courtName] = (acc[courtName] || 0) + 1;
+      return acc;
+    }, {});
+
+    const byHour = activeBookings.reduce<Record<string, number>>((acc, booking) => {
+      const startTime = booking.time_slots?.start_time?.slice(0, 5) || "--:--";
+      const endTime = booking.time_slots?.end_time?.slice(0, 5) || "--:--";
+      const key = `${startTime} - ${endTime}`;
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    const byDay = activeBookings.reduce<Record<string, number>>((acc, booking) => {
+      const dayKey = booking.time_slots?.slot_date || "Sin fecha";
+      acc[dayKey] = (acc[dayKey] || 0) + 1;
+      return acc;
+    }, {});
+
+    return {
+      total: monthlyBookings.length,
+      confirmed: monthlyBookings.filter((booking) => booking.status === "confirmed").length,
+      completed: monthlyBookings.filter((booking) => booking.status === "completed").length,
+      cancelled: monthlyBookings.filter((booking) => booking.status === "cancelled").length,
+      active: activeBookings.length,
+      byCourt: Object.entries(byCourt).sort((a, b) => b[1] - a[1]),
+      byHour: Object.entries(byHour).sort((a, b) => b[1] - a[1]),
+      byDay: Object.entries(byDay).sort((a, b) => b[1] - a[1])
+    };
+  }, [bookings, reportMonth]);
+
+  const reportMonthLabel = useMemo(() => {
+    const [year, month] = reportMonth.split("-");
+    const date = new Date(Number(year), Number(month) - 1, 1);
+    return new Intl.DateTimeFormat("es-AR", {
+      month: "long",
+      year: "numeric"
+    }).format(date);
+  }, [reportMonth]);
 
   function startEditing(booking: BookingWithRelations) {
     setEditingId(booking.id);
@@ -262,6 +320,162 @@ export default function AdminPage() {
             <p className="mt-2 text-3xl font-bold">{stats.cancelled}</p>
           </article>
         </div>
+      ) : null}
+
+      {!error && role === "admin" ? (
+        <section className="card space-y-5 p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">
+                Historial mensual de reservas
+              </h2>
+              <p className="text-sm text-slate-500">
+                Resumen para cierre mensual y deteccion de horarios mas usados.
+              </p>
+            </div>
+
+            <div className="w-full md:w-56">
+              <label className="mb-1 block text-sm font-medium text-slate-700">
+                Mes del reporte
+              </label>
+              <input
+                type="month"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                value={reportMonth}
+                onChange={(event) => setReportMonth(event.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-4">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Reservas del mes</p>
+              <p className="mt-2 text-3xl font-bold text-slate-900">
+                {monthlyReport.total}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">{reportMonthLabel}</p>
+            </article>
+
+            <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-sm text-emerald-700">Activas</p>
+              <p className="mt-2 text-3xl font-bold text-emerald-900">
+                {monthlyReport.active}
+              </p>
+              <p className="mt-1 text-xs text-emerald-700">
+                Confirmadas + completadas
+              </p>
+            </article>
+
+            <article className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+              <p className="text-sm text-sky-700">Completadas</p>
+              <p className="mt-2 text-3xl font-bold text-sky-900">
+                {monthlyReport.completed}
+              </p>
+              <p className="mt-1 text-xs text-sky-700">
+                Turnos ya jugados
+              </p>
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm text-slate-500">Canceladas</p>
+              <p className="mt-2 text-3xl font-bold text-slate-900">
+                {monthlyReport.cancelled}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Confirmadas actuales: {monthlyReport.confirmed}
+              </p>
+            </article>
+          </div>
+
+          <div className="grid gap-4 xl:grid-cols-3">
+            <article className="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Horarios mas usados
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                Ranking del mes segun reservas activas.
+              </p>
+
+              {monthlyReport.byHour.length ? (
+                <div className="space-y-3">
+                  {monthlyReport.byHour.slice(0, 5).map(([label, count]) => (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
+                    >
+                      <span className="font-medium text-slate-800">{label}</span>
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  No hay reservas para ese mes.
+                </p>
+              )}
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Canchas mas usadas
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                Ranking por cantidad de reservas activas.
+              </p>
+
+              {monthlyReport.byCourt.length ? (
+                <div className="space-y-3">
+                  {monthlyReport.byCourt.slice(0, 5).map(([label, count]) => (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
+                    >
+                      <span className="font-medium text-slate-800">{label}</span>
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  No hay reservas para ese mes.
+                </p>
+              )}
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-white p-4">
+              <h3 className="text-base font-semibold text-slate-900">
+                Dias con mas movimiento
+              </h3>
+              <p className="mb-3 text-sm text-slate-500">
+                Fechas con mayor cantidad de reservas activas.
+              </p>
+
+              {monthlyReport.byDay.length ? (
+                <div className="space-y-3">
+                  {monthlyReport.byDay.slice(0, 5).map(([label, count]) => (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
+                    >
+                      <span className="font-medium text-slate-800">{label}</span>
+                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
+                        {count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  No hay reservas para ese mes.
+                </p>
+              )}
+            </article>
+          </div>
+        </section>
       ) : null}
 
       {!error && role === "admin" ? (
