@@ -61,6 +61,16 @@ export interface CasualMatch {
   player_two?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
 }
 
+export interface MatchAvailabilityRequest {
+  id: string;
+  user_id: string;
+  available_on: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
+}
+
 export interface AdminAuditLog {
   id: string;
   actor_id: string;

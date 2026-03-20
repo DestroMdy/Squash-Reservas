@@ -3,15 +3,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
+  activateMatchAvailability,
   createCasualMatch,
+  deactivateMatchAvailability,
   deleteCasualMatch,
   fetchCasualMatches,
+  fetchMatchAvailability,
   fetchPlayers,
   getSession,
   getUser,
   updateCasualMatch
 } from "@/lib/supabase";
-import { CasualMatch, Profile } from "@/types/db";
+import { CasualMatch, MatchAvailabilityRequest, Profile } from "@/types/db";
 
 type MatchFormState = {
   opponent_id: string;
@@ -71,11 +74,18 @@ export default function MatchesPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [players, setPlayers] = useState<Profile[]>([]);
   const [matches, setMatches] = useState<CasualMatch[]>([]);
+  const [availabilityRequests, setAvailabilityRequests] = useState<
+    MatchAvailabilityRequest[]
+  >([]);
+  const [currentAvailability, setCurrentAvailability] =
+    useState<MatchAvailabilityRequest | null>(null);
   const [editingMatchId, setEditingMatchId] = useState<string | null>(null);
   const [form, setForm] = useState<MatchFormState>(getEmptyForm());
+  const [availabilityNote, setAvailabilityNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
+  const [availabilityUnavailable, setAvailabilityUnavailable] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -94,15 +104,24 @@ export default function MatchesPage() {
       return;
     }
 
-    const [playersData, matchesData] = await Promise.all([
+    const [playersData, matchesData, availabilityData] = await Promise.all([
       fetchPlayers(token),
-      fetchCasualMatches(token)
+      fetchCasualMatches(token),
+      fetchMatchAvailability(token).catch(() => ({
+        requests: [],
+        currentRequest: null,
+        unavailable: true
+      }))
     ]);
 
     setCurrentUserId(user.id);
     setPlayers((playersData || []).filter((player) => player.id !== user.id));
     setMatches(matchesData.matches || []);
     setUnavailable(matchesData.unavailable === true);
+    setAvailabilityRequests(availabilityData.requests || []);
+    setCurrentAvailability(availabilityData.currentRequest || null);
+    setAvailabilityNote(availabilityData.currentRequest?.notes || "");
+    setAvailabilityUnavailable(availabilityData.unavailable === true);
     setLoading(false);
     setError(null);
   }
@@ -296,6 +315,58 @@ export default function MatchesPage() {
     }
   }
 
+  async function handleActivateAvailability() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setSaving(true);
+      setMessage(null);
+      setError(null);
+      await activateMatchAvailability(token, {
+        notes: availabilityNote || null
+      });
+      setMessage(
+        "Avisamos a los jugadores de tu misma categoría que estás buscando partido."
+      );
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo publicar tu búsqueda de partido"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeactivateAvailability() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setSaving(true);
+      setMessage(null);
+      setError(null);
+      await deactivateMatchAvailability(token);
+      setMessage("Tu aviso de búsqueda de partido se quitó.");
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo quitar tu búsqueda de partido"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -330,6 +401,116 @@ export default function MatchesPage() {
               <p className="mt-2 text-3xl font-bold text-rose-900">{summary.losses}</p>
             </article>
           </div>
+
+          <section className="card space-y-4 p-5">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Busco partido hoy
+                </h2>
+                <p className="text-sm text-slate-500">
+                  Publica que estás disponible y avisamos por mail a jugadores de tu
+                  misma categoría.
+                </p>
+              </div>
+              {currentAvailability ? (
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                  Publicado hoy
+                </span>
+              ) : null}
+            </div>
+
+            {availabilityUnavailable ? (
+              <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                La función de búsqueda de partido todavía no está habilitada en la base.
+                Falta correr la migración SQL.
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4 lg:grid-cols-[1fr,1fr]">
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Nota opcional
+                    </label>
+                    <textarea
+                      className="min-h-[100px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={availabilityNote}
+                      onChange={(event) => setAvailabilityNote(event.target.value)}
+                      placeholder="Ej: Hoy puedo después de las 20 hs."
+                    />
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {currentAvailability ? (
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          onClick={handleDeactivateAvailability}
+                          disabled={saving}
+                        >
+                          {saving ? "Quitando..." : "Ya no busco partido"}
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-accent"
+                          onClick={handleActivateAvailability}
+                          disabled={saving}
+                        >
+                          {saving ? "Publicando..." : "Avisar que busco partido"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Jugadores disponibles en tu categoría
+                    </p>
+                    {availabilityRequests.length ? (
+                      <div className="mt-3 space-y-3">
+                        {availabilityRequests.map((request) => (
+                          <article
+                            key={request.id}
+                            className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={request.profiles?.avatar_url || "/icon-192.png"}
+                                alt={request.profiles?.full_name || "Jugador"}
+                                className="h-12 w-12 rounded-full border border-slate-200 object-cover"
+                              />
+                              <div>
+                                <p className="font-semibold text-slate-900">
+                                  {request.profiles?.full_name || "Sin nombre"}
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                  {request.profiles?.category || "Sin categoría"}
+                                </p>
+                                {request.notes ? (
+                                  <p className="mt-1 text-sm text-slate-600">
+                                    {request.notes}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </div>
+                            <a
+                              href={`/messages?to=${request.user_id}`}
+                              className="btn-secondary text-center"
+                            >
+                              Escribirle
+                            </a>
+                          </article>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
+                        Nadie de tu categoría se publicó todavía para hoy.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
 
           <section className="card space-y-4 p-5">
             <div>

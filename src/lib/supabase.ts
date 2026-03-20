@@ -1130,3 +1130,75 @@ export async function deleteCasualMatch(matchId: string, token: string) {
     throw new Error(data.error || "No se pudo borrar el partido.");
   }
 }
+
+export async function fetchMatchAvailability(token: string) {
+  const response = await fetch("/api/match-availability", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as {
+        error?: string;
+        requests?: any[];
+        currentRequest?: any | null;
+        unavailable?: boolean;
+      })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudo cargar quién busca partido.");
+  }
+
+  return {
+    requests: payload.requests || [],
+    currentRequest: payload.currentRequest || null,
+    unavailable: payload.unavailable === true
+  };
+}
+
+export async function activateMatchAvailability(
+  token: string,
+  payload?: { notes?: string | null }
+) {
+  const response = await fetch("/api/match-availability", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload || {})
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string; request?: any })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo activar la búsqueda de partido.");
+  }
+
+  return data.request;
+}
+
+export async function deactivateMatchAvailability(token: string) {
+  const response = await fetch("/api/match-availability", {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo desactivar la búsqueda de partido.");
+  }
+}
