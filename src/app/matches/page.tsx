@@ -46,6 +46,15 @@ function formatPlayedOn(value: string) {
   }).format(new Date(`${value}T12:00:00`));
 }
 
+function formatPublishedAt(value: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 function getMatchResult(match: CasualMatch, currentUserId: string | null) {
   const isPlayerOne = match.player_one_id === currentUserId;
   const myScore = isPlayerOne ? match.score_player_one : match.score_player_two;
@@ -231,6 +240,15 @@ export default function MatchesPage() {
       });
   }, [currentUserId, matches]);
 
+  const sortedAvailabilityRequests = useMemo(
+    () =>
+      [...availabilityRequests].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      ),
+    [availabilityRequests]
+  );
+
   async function handleSubmit() {
     try {
       const token = getSession()?.access_token;
@@ -354,7 +372,7 @@ export default function MatchesPage() {
       setMessage(null);
       setError(null);
       await deactivateMatchAvailability(token);
-      setMessage("Tu aviso de búsqueda de partido se quitó.");
+      setMessage("Listo. Ya no figuras como disponible para jugar hoy.");
       await loadData();
     } catch (err) {
       setError(
@@ -446,7 +464,7 @@ export default function MatchesPage() {
                           onClick={handleDeactivateAvailability}
                           disabled={saving}
                         >
-                          {saving ? "Quitando..." : "Ya no busco partido"}
+                          {saving ? "Cerrando..." : "Ya conseguí rival"}
                         </button>
                       ) : (
                         <button
@@ -465,9 +483,9 @@ export default function MatchesPage() {
                     <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                       Jugadores disponibles en tu categoría
                     </p>
-                    {availabilityRequests.length ? (
+                    {sortedAvailabilityRequests.length ? (
                       <div className="mt-3 space-y-3">
-                        {availabilityRequests.map((request) => (
+                        {sortedAvailabilityRequests.map((request) => (
                           <article
                             key={request.id}
                             className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
@@ -484,6 +502,9 @@ export default function MatchesPage() {
                                 </p>
                                 <p className="text-sm text-slate-500">
                                   {request.profiles?.category || "Sin categoría"}
+                                </p>
+                                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
+                                  Publicado {formatPublishedAt(request.created_at)}
                                 </p>
                                 {request.notes ? (
                                   <p className="mt-1 text-sm text-slate-600">
