@@ -232,7 +232,7 @@ export function ScheduleGrid({
           return (
             <article
               key={slot.id}
-              className={`card rounded-2xl border p-5 shadow-sm transition ${cardClass}`}
+              className={`card animate-fade-up rounded-2xl border p-5 shadow-sm transition ${cardClass}`}
             >
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-2">
@@ -253,7 +253,7 @@ export function ScheduleGrid({
                   </p>
 
                   {confirmedBooking ? (
-                    <div className="flex items-center gap-3 rounded-xl bg-white/70 px-3 py-3 text-sm text-slate-700">
+                    <div className="animate-pop-in flex items-center gap-3 rounded-xl bg-white/70 px-3 py-3 text-sm text-slate-700">
                       <img
                         src={playerAvatar}
                         alt={playerName}

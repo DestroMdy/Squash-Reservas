@@ -27,6 +27,17 @@ import {
 type Tab = "direct" | "group";
 type GroupEditorMode = "create" | "edit";
 
+function formatMessageTimestamp(dateValue?: string | null) {
+  if (!dateValue) return "";
+
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(dateValue));
+}
+
 export default function MessagesPage() {
   const [tab, setTab] = useState<Tab>("direct");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -196,6 +207,24 @@ export default function MessagesPage() {
       return sent || received;
     });
   }, [currentUserId, directMessages, selectedPlayerId]);
+
+  const directSummaries = useMemo(() => {
+    if (!currentUserId) return new Map<string, { preview: string; created_at?: string }>();
+
+    const summaries = new Map<string, { preview: string; created_at?: string }>();
+
+    for (const message of directMessages) {
+      const playerId =
+        message.sender_id === currentUserId ? message.recipient_id : message.sender_id;
+
+      summaries.set(playerId, {
+        preview: message.body,
+        created_at: message.created_at
+      });
+    }
+
+    return summaries;
+  }, [currentUserId, directMessages]);
 
   useEffect(() => {
     async function syncRead() {
@@ -533,24 +562,27 @@ export default function MessagesPage() {
                             !message.read_at
                         ).length;
                         const active = player.id === selectedPlayerId;
+                        const summary = directSummaries.get(player.id);
 
                         return (
                           <button
                             key={player.id}
                             type="button"
                             onClick={() => setSelectedPlayerId(player.id)}
-                            className={`flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                            className={`animate-pop-in flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                               active
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+                                ? "border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10"
+                                : "border-slate-200 bg-white text-slate-900 hover:-translate-y-0.5 hover:bg-slate-50"
                             }`}
                           >
                             <img
                               src={player.avatar_url || "/icon-192.png"}
                               alt={player.full_name || "Jugador"}
-                              className="h-11 w-11 rounded-full object-cover"
+                              className={`h-11 w-11 rounded-full border object-cover ${
+                                active ? "border-slate-700" : "border-slate-200"
+                              }`}
                             />
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <p className="truncate font-medium">
                                 {player.full_name || "Sin nombre"}
                               </p>
@@ -561,7 +593,23 @@ export default function MessagesPage() {
                               >
                                 {player.category || "Sin categoría"}
                               </p>
+                              <p
+                                className={`mt-1 truncate text-xs ${
+                                  active ? "text-slate-300" : "text-slate-400"
+                                }`}
+                              >
+                                {summary?.preview || "Todavía no hablaron."}
+                              </p>
                             </div>
+                            {summary?.created_at ? (
+                              <span
+                                className={`shrink-0 text-[11px] ${
+                                  active ? "text-slate-300" : "text-slate-400"
+                                }`}
+                              >
+                                {formatMessageTimestamp(summary.created_at)}
+                              </span>
+                            ) : null}
                             {unread > 0 ? (
                               <span className="rounded-full bg-red-600 px-2 py-1 text-xs font-semibold text-white">
                                 {unread}
@@ -620,6 +668,10 @@ export default function MessagesPage() {
                     <div className="space-y-2">
                       {groups.length ? (
                         groups.map((group) => {
+                          const currentGroup = group as PrivateMessageGroup & {
+                            last_message_body?: string | null;
+                            last_message_at?: string | null;
+                          };
                           const active = group.id === selectedGroupId;
                           const names = (group.members || [])
                             .map((member) => member.full_name || "Sin nombre")
@@ -631,20 +683,57 @@ export default function MessagesPage() {
                               key={group.id}
                               type="button"
                               onClick={() => setSelectedGroupId(group.id)}
-                              className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                              className={`animate-pop-in flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                                 active
-                                  ? "border-slate-900 bg-slate-900 text-white"
-                                  : "border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+                                  ? "border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10"
+                                  : "border-slate-200 bg-white text-slate-900 hover:-translate-y-0.5 hover:bg-slate-50"
                               }`}
                             >
-                              <div className="min-w-0">
-                                <p className="truncate font-medium">{group.name}</p>
+                              <div className="flex min-w-0 flex-1 items-center gap-3">
+                                <div className="flex -space-x-3">
+                                  {(group.members || []).slice(0, 3).map((member) => (
+                                    <img
+                                      key={member.id}
+                                      src={member.avatar_url || "/icon-192.png"}
+                                      alt={member.full_name || "Jugador"}
+                                      className={`h-10 w-10 rounded-full border-2 object-cover ${
+                                        active ? "border-slate-900" : "border-white"
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium">{group.name}</p>
+                                  <p
+                                    className={`truncate text-sm ${
+                                      active ? "text-slate-200" : "text-slate-500"
+                                    }`}
+                                  >
+                                    {names || "Sin integrantes visibles"}
+                                  </p>
+                                  <p
+                                    className={`mt-1 truncate text-xs ${
+                                      active ? "text-slate-300" : "text-slate-400"
+                                    }`}
+                                  >
+                                    {currentGroup.last_message_body || "Todavía no hay mensajes."}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex shrink-0 items-center gap-2">
+                                {currentGroup.last_message_at ? (
+                                  <span
+                                    className={`text-[11px] ${
+                                      active ? "text-slate-300" : "text-slate-400"
+                                    }`}
+                                  >
+                                    {formatMessageTimestamp(currentGroup.last_message_at)}
+                                  </span>
+                                ) : null}
                                 <p
-                                  className={`truncate text-sm ${
-                                    active ? "text-slate-200" : "text-slate-500"
-                                  }`}
+                                  className="sr-only"
                                 >
-                                  {names || "Sin integrantes visibles"}
+                                  {group.name}
                                 </p>
                               </div>
                               {group.unread_count ? (
@@ -692,28 +781,32 @@ export default function MessagesPage() {
                           return (
                             <div
                               key={message.id}
-                              className={`flex ${own ? "justify-end" : "justify-start"}`}
+                              className={`animate-pop-in flex ${own ? "justify-end" : "justify-start"}`}
                             >
-                              <div
-                                className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${
-                                  own
-                                    ? "bg-slate-900 text-white"
-                                    : "bg-slate-100 text-slate-900"
-                                }`}
-                              >
-                                <p>{message.body}</p>
-                                <p
-                                  className={`mt-2 text-xs ${
-                                    own ? "text-slate-300" : "text-slate-500"
+                              <div className={`flex max-w-[88%] items-end gap-2 ${own ? "flex-row-reverse" : ""}`}>
+                                {!own ? (
+                                  <img
+                                    src={selectedPlayer?.avatar_url || "/icon-192.png"}
+                                    alt={selectedPlayer?.full_name || "Jugador"}
+                                    className="h-9 w-9 rounded-full border border-slate-200 object-cover"
+                                  />
+                                ) : null}
+                                <div
+                                  className={`rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                                    own
+                                      ? "bg-slate-900 text-white"
+                                      : "bg-slate-100 text-slate-900"
                                   }`}
                                 >
-                                  {new Intl.DateTimeFormat("es-AR", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    hour: "2-digit",
-                                    minute: "2-digit"
-                                  }).format(new Date(message.created_at))}
-                                </p>
+                                  <p>{message.body}</p>
+                                  <p
+                                    className={`mt-2 text-xs ${
+                                      own ? "text-slate-300" : "text-slate-500"
+                                    }`}
+                                  >
+                                    {formatMessageTimestamp(message.created_at)}
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           );
@@ -792,33 +885,37 @@ export default function MessagesPage() {
                           return (
                             <div
                               key={message.id}
-                              className={`flex ${own ? "justify-end" : "justify-start"}`}
+                              className={`animate-pop-in flex ${own ? "justify-end" : "justify-start"}`}
                             >
-                              <div
-                                className={`max-w-[85%] rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${
-                                  own
-                                    ? "bg-slate-900 text-white"
-                                    : "bg-slate-100 text-slate-900"
-                                }`}
-                              >
+                              <div className={`flex max-w-[88%] items-end gap-2 ${own ? "flex-row-reverse" : ""}`}>
                                 {!own ? (
-                                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    {message.profiles?.full_name || "Jugador"}
-                                  </p>
+                                  <img
+                                    src={message.profiles?.avatar_url || "/icon-192.png"}
+                                    alt={message.profiles?.full_name || "Jugador"}
+                                    className="h-9 w-9 rounded-full border border-slate-200 object-cover"
+                                  />
                                 ) : null}
-                                <p>{message.body}</p>
-                                <p
-                                  className={`mt-2 text-xs ${
-                                    own ? "text-slate-300" : "text-slate-500"
+                                <div
+                                  className={`rounded-3xl px-4 py-3 text-sm leading-6 shadow-sm ${
+                                    own
+                                      ? "bg-slate-900 text-white"
+                                      : "bg-slate-100 text-slate-900"
                                   }`}
                                 >
-                                  {new Intl.DateTimeFormat("es-AR", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    hour: "2-digit",
-                                    minute: "2-digit"
-                                  }).format(new Date(message.created_at))}
-                                </p>
+                                  {!own ? (
+                                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                      {message.profiles?.full_name || "Jugador"}
+                                    </p>
+                                  ) : null}
+                                  <p>{message.body}</p>
+                                  <p
+                                    className={`mt-2 text-xs ${
+                                      own ? "text-slate-300" : "text-slate-500"
+                                    }`}
+                                  >
+                                    {formatMessageTimestamp(message.created_at)}
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           );
