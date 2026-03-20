@@ -514,11 +514,6 @@ export default function TournamentsPage() {
 
                   {featuredTournament ? (
                     <>
-                      {spotlightTournament ? (
-                        <div className="inline-flex w-fit items-center rounded-full border border-orange-400/40 bg-orange-500/12 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">
-                          Nuestra fecha más importante
-                        </div>
-                      ) : null}
                       <div className="flex flex-wrap items-center gap-2">
                         <h2
                           className={`text-3xl font-black tracking-tight ${
@@ -593,18 +588,18 @@ export default function TournamentsPage() {
               </div>
             </section>
 
-            <section className="card rounded-2xl p-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                <div>
+            <section className="card rounded-2xl p-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                     Explorar
                   </p>
-                  <p className="mt-1 text-sm text-slate-600">
+                  <p className="text-sm text-slate-600">
                     {totalUpcoming} torneo{totalUpcoming === 1 ? "" : "s"} próximo
                     {totalUpcoming === 1 ? "" : "s"} cargado{totalUpcoming === 1 ? "" : "s"}.
                   </p>
                   {!locationEnabled ? (
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="text-xs text-slate-500">
                       Si activas ubicación, verás la distancia aproximada a cada sede.
                     </p>
                   ) : null}
@@ -618,8 +613,8 @@ export default function TournamentsPage() {
                       onClick={() => setFilter(key)}
                       className={
                         filter === key
-                          ? "rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
-                          : "rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700"
+                          ? "rounded-full bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white"
+                          : "rounded-full border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700"
                       }
                     >
                       {filterLabels[key]}
