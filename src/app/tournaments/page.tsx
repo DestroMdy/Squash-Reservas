@@ -66,13 +66,7 @@ const filterLabels: Record<TournamentFilter, string> = {
 
 function isLaMartinetaFeaturedTournament(tournament: ExternalTournament) {
   const normalizedUrl = tournament.url?.toLowerCase() || "";
-  const normalizedTitle = tournament.title?.toLowerCase() || "";
-  const normalizedLocation = tournament.location?.toLowerCase() || "";
-
-  return (
-    normalizedUrl.includes("patagonico.la-martineta.com.ar") ||
-    (normalizedTitle.includes("patag") && normalizedLocation.includes("comodoro"))
-  );
+  return normalizedUrl.includes("patagonico.la-martineta.com.ar");
 }
 
 function getTodayMarker() {
