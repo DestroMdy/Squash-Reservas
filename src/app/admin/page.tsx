@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
   createExternalTournament,
@@ -73,6 +73,7 @@ function getEmptyTournamentForm(): TournamentFormState {
 }
 
 export default function AdminPage() {
+  const tournamentEditorRef = useRef<HTMLDivElement | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [stats, setStats] = useState<{
     total: number;
@@ -363,7 +364,13 @@ export default function AdminPage() {
       notes: tournament.notes || "",
       is_active: tournament.is_active
     });
-    setMessage(null);
+    setMessage(`Editando torneo: ${tournament.title}`);
+    setTimeout(() => {
+      tournamentEditorRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+      });
+    }, 50);
   }
 
   function resetTournamentForm() {
@@ -648,7 +655,32 @@ export default function AdminPage() {
             </a>
           </div>
 
-          <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+          <div
+            ref={tournamentEditorRef}
+            className={`grid gap-4 rounded-2xl p-4 md:grid-cols-2 ${
+              editingTournamentId
+                ? "border-2 border-orange-300 bg-orange-50/60"
+                : "border border-slate-200 bg-slate-50"
+            }`}
+          >
+            <div className="md:col-span-2 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  {editingTournamentId ? "Editando torneo" : "Nuevo torneo"}
+                </p>
+                <p className="text-sm text-slate-600">
+                  {editingTournamentId
+                    ? "Modifica los datos y guarda los cambios."
+                    : "Carga un torneo nuevo para mostrarlo en la app."}
+                </p>
+              </div>
+              {editingTournamentId ? (
+                <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
+                  Modo edición
+                </span>
+              ) : null}
+            </div>
+
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Nombre del torneo
@@ -796,7 +828,11 @@ export default function AdminPage() {
               tournaments.map((tournament) => (
                 <article
                   key={tournament.id}
-                  className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                  className={`flex flex-col gap-3 rounded-2xl p-4 md:flex-row md:items-center md:justify-between ${
+                    editingTournamentId === tournament.id
+                      ? "border-2 border-orange-300 bg-orange-50/40"
+                      : "border border-slate-200 bg-white"
+                  }`}
                 >
                   <div>
                     <p className="font-medium text-slate-900">{tournament.title}</p>
