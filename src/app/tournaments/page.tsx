@@ -75,10 +75,90 @@ function getTournamentDateMarker(eventDate: string | null) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
 }
 
+const monthMap: Record<string, number> = {
+  enero: 0,
+  febrero: 1,
+  marzo: 2,
+  abril: 3,
+  mayo: 4,
+  junio: 5,
+  julio: 6,
+  agosto: 7,
+  septiembre: 8,
+  setiembre: 8,
+  octubre: 9,
+  noviembre: 10,
+  diciembre: 11
+};
+
+function normalizeMonth(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getTournamentEndMarker(tournament: ExternalTournament) {
+  if (!tournament.event_date) return null;
+
+  const startDate = new Date(`${tournament.event_date}T12:00:00`);
+  const fallback = new Date(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate()
+  ).getTime();
+  const notes = tournament.notes ?? "";
+
+  const crossMonthMatch = notes.match(
+    /(\d{1,2})\s+de\s+([a-záéíóúñ]+)\s+al\s+(\d{1,2})\s+de\s+([a-záéíóúñ]+)/i
+  );
+
+  if (crossMonthMatch) {
+    const [, , , endDay, endMonthRaw] = crossMonthMatch;
+    const endMonth = monthMap[normalizeMonth(endMonthRaw)];
+
+    if (endMonth !== undefined) {
+      return new Date(
+        startDate.getFullYear(),
+        endMonth,
+        Number(endDay)
+      ).getTime();
+    }
+  }
+
+  const sameMonthMatch = notes.match(
+    /(\d{1,2})\s+al\s+(\d{1,2})\s+de\s+([a-záéíóúñ]+)/i
+  );
+
+  if (sameMonthMatch) {
+    const [, , endDay, endMonthRaw] = sameMonthMatch;
+    const endMonth = monthMap[normalizeMonth(endMonthRaw)];
+
+    if (endMonth !== undefined) {
+      return new Date(
+        startDate.getFullYear(),
+        endMonth,
+        Number(endDay)
+      ).getTime();
+    }
+  }
+
+  return fallback;
+}
+
+function isOngoingTournament(tournament: ExternalTournament) {
+  const startMarker = getTournamentDateMarker(tournament.event_date);
+  const endMarker = getTournamentEndMarker(tournament);
+  const today = getTodayMarker();
+
+  if (startMarker === null || endMarker === null) return false;
+  return today >= startMarker && today <= endMarker;
+}
+
 function isUpcomingTournament(tournament: ExternalTournament) {
   const marker = getTournamentDateMarker(tournament.event_date);
   if (marker === null) return true;
-  return marker >= getTodayMarker();
+  return marker > getTodayMarker();
 }
 
 function formatDate(eventDate: string | null) {
@@ -108,6 +188,13 @@ function getStatusMeta(tournament: ExternalTournament) {
     return {
       label: "Fecha a confirmar",
       className: "bg-slate-100 text-slate-700"
+    };
+  }
+
+  if (isOngoingTournament(tournament)) {
+    return {
+      label: "Torneo en curso",
+      className: "bg-orange-100 text-orange-800"
     };
   }
 
@@ -305,15 +392,22 @@ export default function TournamentsPage() {
       if (filter === "tournamentsoftware") {
         return tournament.platform === "tournamentsoftware";
       }
-      if (filter === "upcoming") return isUpcomingTournament(tournament);
-      if (filter === "past") return !isUpcomingTournament(tournament);
+      if (filter === "upcoming") {
+        return isUpcomingTournament(tournament) || isOngoingTournament(tournament);
+      }
+      if (filter === "past") {
+        return !isUpcomingTournament(tournament) && !isOngoingTournament(tournament);
+      }
       return true;
     });
   }, [filter, tournaments]);
 
   const { featuredTournament, upcomingTournaments, pastTournaments } = useMemo(() => {
     const upcoming = filteredTournaments
-      .filter((tournament) => isUpcomingTournament(tournament))
+      .filter(
+        (tournament) =>
+          isUpcomingTournament(tournament) || isOngoingTournament(tournament)
+      )
       .sort((a, b) => {
         const aMarker = getTournamentDateMarker(a.event_date) ?? Number.MAX_SAFE_INTEGER;
         const bMarker = getTournamentDateMarker(b.event_date) ?? Number.MAX_SAFE_INTEGER;
@@ -321,7 +415,10 @@ export default function TournamentsPage() {
       });
 
     const past = filteredTournaments
-      .filter((tournament) => !isUpcomingTournament(tournament))
+      .filter(
+        (tournament) =>
+          !isUpcomingTournament(tournament) && !isOngoingTournament(tournament)
+      )
       .sort((a, b) => {
         const aMarker = getTournamentDateMarker(a.event_date) ?? 0;
         const bMarker = getTournamentDateMarker(b.event_date) ?? 0;
@@ -336,7 +433,11 @@ export default function TournamentsPage() {
   }, [filteredTournaments]);
 
   const totalUpcoming = useMemo(
-    () => tournaments.filter((tournament) => isUpcomingTournament(tournament)).length,
+    () =>
+      tournaments.filter(
+        (tournament) =>
+          isUpcomingTournament(tournament) || isOngoingTournament(tournament)
+      ).length,
     [tournaments]
   );
 
