@@ -14,6 +14,7 @@ import {
 const navItems = [
   { href: "/schedule", label: "Agenda" },
   { href: "/my-bookings", label: "Mis reservas" },
+  { href: "/matches", label: "Partidos" },
   { href: "/messages", label: "Mensajes" },
   { href: "/tournaments", label: "Torneos" },
   { href: "/profile", label: "Mi perfil" },

@@ -45,6 +45,22 @@ export interface PrivateGroupMessage {
   profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
 }
 
+export interface CasualMatch {
+  id: string;
+  created_by: string;
+  player_one_id: string;
+  player_two_id: string;
+  played_on: string;
+  location: string | null;
+  score_player_one: number;
+  score_player_two: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  player_one?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
+  player_two?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
+}
+
 export interface AdminAuditLog {
   id: string;
   actor_id: string;

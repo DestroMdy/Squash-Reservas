@@ -1021,3 +1021,112 @@ export async function deleteExternalTournament(
     throw new Error(data.error || "No se pudo borrar el torneo externo.");
   }
 }
+
+export async function fetchCasualMatches(token: string) {
+  const response = await fetch("/api/casual-matches", {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const payload = text.trim()
+    ? (JSON.parse(text) as {
+        error?: string;
+        matches?: any[];
+        unavailable?: boolean;
+      })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(payload.error || "No se pudieron cargar los partidos.");
+  }
+
+  return {
+    matches: payload.matches || [],
+    unavailable: payload.unavailable === true
+  };
+}
+
+export async function createCasualMatch(
+  token: string,
+  payload: {
+    opponent_id: string;
+    played_on: string;
+    location?: string | null;
+    score_self: number;
+    score_opponent: number;
+    notes?: string | null;
+  }
+) {
+  const response = await fetch("/api/casual-matches", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string; match?: any })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo guardar el partido.");
+  }
+
+  return data.match;
+}
+
+export async function updateCasualMatch(
+  matchId: string,
+  token: string,
+  payload: {
+    played_on: string;
+    location?: string | null;
+    score_self: number;
+    score_opponent: number;
+    notes?: string | null;
+  }
+) {
+  const response = await fetch(`/api/casual-matches/${matchId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string; match?: any })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo actualizar el partido.");
+  }
+
+  return data.match;
+}
+
+export async function deleteCasualMatch(matchId: string, token: string) {
+  const response = await fetch(`/api/casual-matches/${matchId}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  });
+
+  const text = await response.text();
+  const data = text.trim()
+    ? (JSON.parse(text) as { error?: string })
+    : {};
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo borrar el partido.");
+  }
+}
