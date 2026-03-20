@@ -13,6 +13,37 @@ type TournamentFilter =
   | "upcoming"
   | "past";
 
+type UserCoordinates = {
+  latitude: number;
+  longitude: number;
+};
+
+const GENERIC_TOURNAMENT_URLS = new Set([
+  "https://aasra.com.ar/",
+  "https://aasra.com.ar"
+]);
+
+const venueCoordinates: Record<string, UserCoordinates> = {
+  "Comodoro Rivadavia": { latitude: -45.8641, longitude: -67.4966 },
+  "Asunción, Paraguay": { latitude: -25.2637, longitude: -57.5759 },
+  Córdoba: { latitude: -31.4201, longitude: -64.1888 },
+  Trelew: { latitude: -43.2489, longitude: -65.3051 },
+  "San Juan": { latitude: -31.5375, longitude: -68.5364 },
+  Rosario: { latitude: -32.9442, longitude: -60.6505 },
+  "San Salvador, El Salvador": { latitude: 13.6929, longitude: -89.2182 },
+  Chaco: { latitude: -27.4514, longitude: -58.9867 },
+  "Puerto Madryn": { latitude: -42.7692, longitude: -65.0385 },
+  "Tucumán": { latitude: -26.8083, longitude: -65.2176 },
+  "Bucaramanga, Colombia": { latitude: 7.1193, longitude: -73.1227 },
+  "Rosario, Santa Fe, Argentina": { latitude: -32.9442, longitude: -60.6505 },
+  Salta: { latitude: -24.7829, longitude: -65.4232 },
+  "Buenos Aires": { latitude: -34.6037, longitude: -58.3816 },
+  Bariloche: { latitude: -41.1335, longitude: -71.3103 },
+  "Mar del Plata": { latitude: -38.0055, longitude: -57.5426 },
+  Mendoza: { latitude: -32.8895, longitude: -68.8458 },
+  "Neuquén": { latitude: -38.9516, longitude: -68.0591 }
+};
+
 const platformLabels: Record<ExternalTournamentPlatform, string> = {
   rankedin: "Rankedin",
   tournamentsoftware: "Tournament Software",
@@ -35,11 +66,7 @@ const filterLabels: Record<TournamentFilter, string> = {
 
 function getTodayMarker() {
   const now = new Date();
-  return new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  ).getTime();
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 }
 
 function getTournamentDateMarker(eventDate: string | null) {
@@ -97,15 +124,55 @@ function getStatusMeta(tournament: ExternalTournament) {
   };
 }
 
+function hasRealTournamentLink(tournament: ExternalTournament) {
+  return Boolean(tournament.url?.trim()) && !GENERIC_TOURNAMENT_URLS.has(tournament.url.trim());
+}
+
+function toRadians(value: number) {
+  return (value * Math.PI) / 180;
+}
+
+function calculateDistanceKm(
+  from: UserCoordinates,
+  to: UserCoordinates
+) {
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(to.latitude - from.latitude);
+  const dLon = toRadians(to.longitude - from.longitude);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(from.latitude)) *
+      Math.cos(toRadians(to.latitude)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(earthRadiusKm * c);
+}
+
+function getTournamentDistance(
+  tournament: ExternalTournament,
+  userCoordinates: UserCoordinates | null
+) {
+  if (!userCoordinates || !tournament.location) return null;
+  const coords = venueCoordinates[tournament.location];
+  if (!coords) return null;
+  return calculateDistanceKm(userCoordinates, coords);
+}
+
 function TournamentCard({
-  tournament
+  tournament,
+  userCoordinates
 }: {
   tournament: ExternalTournament;
+  userCoordinates: UserCoordinates | null;
 }) {
   const status = getStatusMeta(tournament);
   const compactDate = formatDateCompact(tournament.event_date);
   const platformClass =
     platformBadgeClasses[tournament.platform] || platformBadgeClasses.otro;
+  const realLink = hasRealTournamentLink(tournament);
+  const distanceKm = getTournamentDistance(tournament, userCoordinates);
 
   return (
     <article className="card rounded-2xl p-5">
@@ -142,7 +209,14 @@ function TournamentCard({
             </p>
 
             {tournament.location ? (
-              <p className="text-sm text-slate-600">Sede: {tournament.location}</p>
+              <p className="text-sm text-slate-600">
+                Sede: {tournament.location}
+                {distanceKm !== null ? (
+                  <span className="ml-2 font-medium text-orange-700">
+                    · Aprox. {distanceKm} km
+                  </span>
+                ) : null}
+              </p>
             ) : null}
 
             {tournament.notes ? (
@@ -150,27 +224,27 @@ function TournamentCard({
                 {tournament.notes}
               </p>
             ) : null}
+
+            {!realLink ? (
+              <p className="text-sm font-medium text-slate-500">
+                Link del torneo pendiente de carga.
+              </p>
+            ) : null}
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col gap-2 md:min-w-[168px]">
-          <a
-            href={tournament.url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-primary justify-center whitespace-nowrap"
-          >
-            Ver torneo
-          </a>
-          <a
-            href={tournament.url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-secondary justify-center whitespace-nowrap"
-          >
-            Abrir plataforma
-          </a>
-        </div>
+        {realLink ? (
+          <div className="flex shrink-0 flex-col gap-2 md:min-w-[168px]">
+            <a
+              href={tournament.url}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-primary justify-center whitespace-nowrap"
+            >
+              Ver torneo
+            </a>
+          </div>
+        ) : null}
       </div>
     </article>
   );
@@ -181,6 +255,10 @@ export default function TournamentsPage() {
   const [filter, setFilter] = useState<TournamentFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [userCoordinates, setUserCoordinates] = useState<UserCoordinates | null>(
+    null
+  );
+  const [locationEnabled, setLocationEnabled] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -199,6 +277,30 @@ export default function TournamentsPage() {
     }
 
     void load();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !navigator.geolocation) {
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setUserCoordinates({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude
+        });
+        setLocationEnabled(true);
+      },
+      () => {
+        setLocationEnabled(false);
+      },
+      {
+        enableHighAccuracy: false,
+        maximumAge: 1000 * 60 * 30,
+        timeout: 10000
+      }
+    );
   }, []);
 
   const filteredTournaments = useMemo(() => {
@@ -251,7 +353,7 @@ export default function TournamentsPage() {
 
       <SectionTitle
         title="Torneos externos"
-        subtitle="Consulta próximos torneos, accede rápido a la plataforma original y deja el historial separado para leer mejor."
+        subtitle="Consulta próximos torneos, muestra la distancia desde tu ubicación cuando está disponible y habilita los links solo cuando el torneo ya tiene enlace real cargado."
       />
 
       {loading ? <p>Cargando torneos...</p> : null}
@@ -290,12 +392,23 @@ export default function TournamentsPage() {
                       {featuredTournament.location ? (
                         <p className="text-sm text-slate-600">
                           Sede: {featuredTournament.location}
+                          {getTournamentDistance(featuredTournament, userCoordinates) !== null ? (
+                            <span className="ml-2 font-medium text-orange-700">
+                              · Aprox. {getTournamentDistance(featuredTournament, userCoordinates)} km
+                            </span>
+                          ) : null}
                         </p>
                       ) : null}
 
                       {featuredTournament.notes ? (
                         <p className="max-w-2xl text-sm leading-6 text-slate-600">
                           {featuredTournament.notes}
+                        </p>
+                      ) : null}
+
+                      {!hasRealTournamentLink(featuredTournament) ? (
+                        <p className="text-sm font-medium text-slate-500">
+                          Link del torneo pendiente de carga.
                         </p>
                       ) : null}
                     </>
@@ -306,7 +419,7 @@ export default function TournamentsPage() {
                   )}
                 </div>
 
-                {featuredTournament ? (
+                {featuredTournament && hasRealTournamentLink(featuredTournament) ? (
                   <a
                     href={featuredTournament.url}
                     target="_blank"
@@ -329,6 +442,11 @@ export default function TournamentsPage() {
                     {totalUpcoming} torneo{totalUpcoming === 1 ? "" : "s"} próximo
                     {totalUpcoming === 1 ? "" : "s"} cargado{totalUpcoming === 1 ? "" : "s"}.
                   </p>
+                  {!locationEnabled ? (
+                    <p className="mt-1 text-sm text-slate-500">
+                      Si activas ubicación, verás la distancia aproximada a cada sede.
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
@@ -356,14 +474,18 @@ export default function TournamentsPage() {
                   Próximos torneos
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
-                  Inscripciones, cuadros y enlaces activos.
+                  Inscripciones, sedes y enlaces activos.
                 </p>
               </div>
 
               {upcomingTournaments.length ? (
                 <div className="grid gap-4">
                   {upcomingTournaments.map((tournament) => (
-                    <TournamentCard key={tournament.id} tournament={tournament} />
+                    <TournamentCard
+                      key={tournament.id}
+                      tournament={tournament}
+                      userCoordinates={userCoordinates}
+                    />
                   ))}
                 </div>
               ) : featuredTournament ? (
@@ -390,7 +512,11 @@ export default function TournamentsPage() {
               {pastTournaments.length ? (
                 <div className="grid gap-4">
                   {pastTournaments.map((tournament) => (
-                    <TournamentCard key={tournament.id} tournament={tournament} />
+                    <TournamentCard
+                      key={tournament.id}
+                      tournament={tournament}
+                      userCoordinates={userCoordinates}
+                    />
                   ))}
                 </div>
               ) : (
