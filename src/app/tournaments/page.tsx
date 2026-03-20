@@ -225,11 +225,6 @@ function TournamentCard({
               </p>
             ) : null}
 
-            {!realLink ? (
-              <p className="text-sm font-medium text-slate-500">
-                Link del torneo pendiente de carga.
-              </p>
-            ) : null}
           </div>
         </div>
 
@@ -406,11 +401,6 @@ export default function TournamentsPage() {
                         </p>
                       ) : null}
 
-                      {!hasRealTournamentLink(featuredTournament) ? (
-                        <p className="text-sm font-medium text-slate-500">
-                          Link del torneo pendiente de carga.
-                        </p>
-                      ) : null}
                     </>
                   ) : (
                     <p className="text-sm text-slate-600">
