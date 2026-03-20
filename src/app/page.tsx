@@ -47,9 +47,9 @@ export default function HomePage() {
           ) : null}
           <Link
             href={isLogged ? "/schedule" : "/schedule"}
-            className={`${!mounted || !isLogged ? "btn-secondary" : "btn-primary"} text-center`}
+            className="btn-accent text-center"
           >
-            Ver agenda
+            Reserva aquí
           </Link>
           <Link href="/my-bookings" className="btn-secondary text-center">
             Mis reservas
