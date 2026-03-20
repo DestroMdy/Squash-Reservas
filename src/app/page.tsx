@@ -304,7 +304,10 @@ export default function HomePage() {
                     {featuredTournament.location || "Sede a confirmar"}
                   </p>
                 </div>
-                <Link href="/tournaments" className="btn-secondary text-center">
+                <Link
+                  href="/tournaments"
+                  className="btn-secondary block w-full text-center sm:w-auto"
+                >
                   Ver calendario de torneos
                 </Link>
               </div>
