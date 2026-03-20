@@ -16,7 +16,6 @@ import { CasualMatch, Profile } from "@/types/db";
 type MatchFormState = {
   opponent_id: string;
   played_on: string;
-  location: string;
   score_self: string;
   score_opponent: string;
   notes: string;
@@ -30,7 +29,6 @@ function getEmptyForm(): MatchFormState {
   return {
     opponent_id: "",
     played_on: getTodayInputDate(),
-    location: "",
     score_self: "",
     score_opponent: "",
     notes: ""
@@ -155,6 +153,65 @@ export default function MatchesPage() {
       .slice(0, 4);
   }, [currentUserId, matches]);
 
+  const ranking = useMemo(() => {
+    if (!currentUserId) return [];
+
+    const table = new Map<
+      string,
+      {
+        player: NonNullable<ReturnType<typeof getOpponent>>;
+        played: number;
+        wins: number;
+        losses: number;
+        pointsFor: number;
+        pointsAgainst: number;
+      }
+    >();
+
+    for (const match of matches) {
+      const opponent = getOpponent(match, currentUserId);
+      if (!opponent) continue;
+
+      const isPlayerOne = match.player_one_id === currentUserId;
+      const myScore = isPlayerOne ? match.score_player_one : match.score_player_two;
+      const opponentScore = isPlayerOne
+        ? match.score_player_two
+        : match.score_player_one;
+
+      const current = table.get(opponent.id) ?? {
+        player: opponent,
+        played: 0,
+        wins: 0,
+        losses: 0,
+        pointsFor: 0,
+        pointsAgainst: 0
+      };
+
+      current.played += 1;
+      current.pointsFor += myScore;
+      current.pointsAgainst += opponentScore;
+
+      if (myScore > opponentScore) {
+        current.wins += 1;
+      } else {
+        current.losses += 1;
+      }
+
+      table.set(opponent.id, current);
+    }
+
+    return [...table.values()]
+      .map((entry) => ({
+        ...entry,
+        winRate: entry.played ? Math.round((entry.wins / entry.played) * 100) : 0
+      }))
+      .sort((a, b) => {
+        if (b.wins !== a.wins) return b.wins - a.wins;
+        if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+        return b.played - a.played;
+      });
+  }, [currentUserId, matches]);
+
   async function handleSubmit() {
     try {
       const token = getSession()?.access_token;
@@ -169,7 +226,6 @@ export default function MatchesPage() {
       const payload = {
         opponent_id: form.opponent_id,
         played_on: form.played_on,
-        location: form.location || null,
         score_self: Number(form.score_self),
         score_opponent: Number(form.score_opponent),
         notes: form.notes || null
@@ -203,7 +259,6 @@ export default function MatchesPage() {
     setForm({
       opponent_id: opponent?.id || "",
       played_on: match.played_on,
-      location: match.location || "",
       score_self: String(isPlayerOne ? match.score_player_one : match.score_player_two),
       score_opponent: String(
         isPlayerOne ? match.score_player_two : match.score_player_one
@@ -275,6 +330,65 @@ export default function MatchesPage() {
               <p className="mt-2 text-3xl font-bold text-rose-900">{summary.losses}</p>
             </article>
           </div>
+
+          <section className="card space-y-4 p-5">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Ranking casual</h2>
+              <p className="text-sm text-slate-500">
+                Tu resumen de resultados contra cada rival.
+              </p>
+            </div>
+
+            {ranking.length ? (
+              <div className="space-y-3">
+                {ranking.slice(0, 6).map((entry, index) => (
+                  <article
+                    key={entry.player.id}
+                    className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
+                        {index + 1}
+                      </span>
+                      <img
+                        src={entry.player.avatar_url || "/icon-192.png"}
+                        alt={entry.player.full_name || "Jugador"}
+                        className="h-12 w-12 rounded-full border border-slate-200 object-cover"
+                      />
+                      <div>
+                        <p className="font-semibold text-slate-900">
+                          {entry.player.full_name || "Sin nombre"}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {entry.player.category || "Sin categoría"} · {entry.played} partido
+                          {entry.played === 1 ? "" : "s"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">
+                        {entry.wins} ganados
+                      </span>
+                      <span className="rounded-full bg-rose-100 px-3 py-1 text-xs font-semibold text-rose-800">
+                        {entry.losses} perdidos
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                        {entry.winRate}% efectividad
+                      </span>
+                      <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
+                        {entry.pointsFor}-{entry.pointsAgainst}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5 text-sm text-slate-500">
+                El ranking aparece apenas cargues tus primeros partidos.
+              </div>
+            )}
+          </section>
 
           <section className="card space-y-5 p-5">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -364,20 +478,6 @@ export default function MatchesPage() {
                   onChange={(event) =>
                     setForm({ ...form, score_opponent: event.target.value })
                   }
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Lugar
-                </label>
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                  value={form.location}
-                  onChange={(event) =>
-                    setForm({ ...form, location: event.target.value })
-                  }
-                  placeholder="Ej: La Martineta"
                 />
               </div>
 
@@ -473,7 +573,6 @@ export default function MatchesPage() {
                           </p>
                           <p className="mt-1 text-sm text-slate-600">
                             {formatPlayedOn(match.played_on)}
-                            {match.location ? ` · ${match.location}` : ""}
                           </p>
                           {match.notes ? (
                             <p className="mt-1 text-sm text-slate-500">{match.notes}</p>
