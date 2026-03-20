@@ -64,6 +64,17 @@ const filterLabels: Record<TournamentFilter, string> = {
   past: "Finalizados"
 };
 
+function isLaMartinetaFeaturedTournament(tournament: ExternalTournament) {
+  const normalizedUrl = tournament.url?.toLowerCase() || "";
+  const normalizedTitle = tournament.title?.toLowerCase() || "";
+  const normalizedLocation = tournament.location?.toLowerCase() || "";
+
+  return (
+    normalizedUrl.includes("patagonico.la-martineta.com.ar") ||
+    (normalizedTitle.includes("patag") && normalizedLocation.includes("comodoro"))
+  );
+}
+
 function getTodayMarker() {
   const now = new Date();
   return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -249,10 +260,12 @@ function getTournamentDistance(
 
 function TournamentCard({
   tournament,
-  userCoordinates
+  userCoordinates,
+  emphasized = false
 }: {
   tournament: ExternalTournament;
   userCoordinates: UserCoordinates | null;
+  emphasized?: boolean;
 }) {
   const status = getStatusMeta(tournament);
   const compactDate = formatDateCompact(tournament.event_date);
@@ -262,14 +275,30 @@ function TournamentCard({
   const distanceKm = getTournamentDistance(tournament, userCoordinates);
 
   return (
-    <article className="card rounded-2xl p-5">
+    <article
+      className={`card rounded-2xl p-5 ${
+        emphasized
+          ? "border-orange-300 bg-gradient-to-br from-orange-50 via-white to-orange-50/70 shadow-[0_18px_50px_-28px_rgba(249,115,22,0.55)]"
+          : ""
+      }`}
+    >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex gap-4">
-          <div className="flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl border border-orange-200 bg-orange-50 text-center">
-            <span className="text-2xl font-black text-slate-950">
+          <div
+            className={`flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl text-center ${
+              emphasized
+                ? "border border-orange-300 bg-slate-950"
+                : "border border-orange-200 bg-orange-50"
+            }`}
+          >
+            <span className={`text-2xl font-black ${emphasized ? "text-white" : "text-slate-950"}`}>
               {compactDate.day}
             </span>
-            <span className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-700">
+            <span
+              className={`text-xs font-semibold uppercase tracking-[0.16em] ${
+                emphasized ? "text-orange-400" : "text-orange-700"
+              }`}
+            >
               {compactDate.month}
             </span>
           </div>
@@ -289,6 +318,11 @@ function TournamentCard({
               >
                 {status.label}
               </span>
+              {emphasized ? (
+                <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-orange-400">
+                  Fecha destacada La Martineta
+                </span>
+              ) : null}
             </div>
 
             <p className="text-sm font-medium text-slate-700">
@@ -321,9 +355,13 @@ function TournamentCard({
               href={tournament.url}
               target="_blank"
               rel="noreferrer"
-              className="btn-primary justify-center whitespace-nowrap"
+              className={`justify-center whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                emphasized
+                  ? "bg-orange-500 text-white shadow-[0_12px_30px_-18px_rgba(249,115,22,0.9)] hover:bg-orange-400"
+                  : "btn-primary"
+              }`}
             >
-              Ver torneo
+              {emphasized ? "Inscribirme ahora" : "Ver torneo"}
             </a>
           </div>
         ) : null}
@@ -402,7 +440,7 @@ export default function TournamentsPage() {
     });
   }, [filter, tournaments]);
 
-  const { featuredTournament, upcomingTournaments, pastTournaments } = useMemo(() => {
+  const { featuredTournament, upcomingTournaments, pastTournaments, spotlightTournament } = useMemo(() => {
     const upcoming = filteredTournaments
       .filter(
         (tournament) =>
@@ -425,9 +463,14 @@ export default function TournamentsPage() {
         return bMarker - aMarker;
       });
 
+    const spotlight =
+      upcoming.find((tournament) => isLaMartinetaFeaturedTournament(tournament)) ?? null;
+    const featured = spotlight ?? upcoming[0] ?? null;
+
     return {
-      featuredTournament: upcoming[0] ?? null,
-      upcomingTournaments: upcoming.slice(1),
+      spotlightTournament: spotlight,
+      featuredTournament: featured,
+      upcomingTournaments: upcoming.filter((tournament) => tournament.id !== featured?.id),
       pastTournaments: past
     };
   }, [filteredTournaments]);
@@ -458,17 +501,36 @@ export default function TournamentsPage() {
       {!loading && !error ? (
         tournaments.length ? (
           <div className="space-y-6">
-            <section className="card rounded-2xl border-orange-200 bg-gradient-to-br from-orange-50 to-white p-6">
+            <section
+              className={`card rounded-2xl p-6 ${
+                spotlightTournament
+                  ? "border-orange-300 bg-[radial-gradient(circle_at_top_right,_rgba(249,115,22,0.28),_transparent_34%),linear-gradient(135deg,#050505_0%,#111827_58%,#1f2937_100%)] text-white shadow-[0_30px_70px_-32px_rgba(249,115,22,0.65)]"
+                  : "border-orange-200 bg-gradient-to-br from-orange-50 to-white"
+              }`}
+            >
               <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-3">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-700">
-                    Próximo torneo destacado
+                  <p
+                    className={`text-xs font-semibold uppercase tracking-[0.22em] ${
+                      spotlightTournament ? "text-orange-400" : "text-orange-700"
+                    }`}
+                  >
+                    {spotlightTournament ? "Fecha destacada La Martineta" : "Próximo torneo destacado"}
                   </p>
 
                   {featuredTournament ? (
                     <>
+                      {spotlightTournament ? (
+                        <div className="inline-flex w-fit items-center rounded-full border border-orange-400/40 bg-orange-500/12 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">
+                          Nuestra fecha más importante
+                        </div>
+                      ) : null}
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-3xl font-black tracking-tight text-slate-950">
+                        <h2
+                          className={`text-3xl font-black tracking-tight ${
+                            spotlightTournament ? "text-white" : "text-slate-950"
+                          }`}
+                        >
                           {featuredTournament.title}
                         </h2>
                         <span
@@ -481,15 +543,19 @@ export default function TournamentsPage() {
                         </span>
                       </div>
 
-                      <p className="text-base font-medium text-slate-700">
+                      <p
+                        className={`text-base font-medium ${
+                          spotlightTournament ? "text-slate-100" : "text-slate-700"
+                        }`}
+                      >
                         {formatDate(featuredTournament.event_date)}
                       </p>
 
                       {featuredTournament.location ? (
-                        <p className="text-sm text-slate-600">
+                        <p className={`text-sm ${spotlightTournament ? "text-slate-200" : "text-slate-600"}`}>
                           Sede: {featuredTournament.location}
                           {getTournamentDistance(featuredTournament, userCoordinates) !== null ? (
-                            <span className="ml-2 font-medium text-orange-700">
+                            <span className={`ml-2 font-medium ${spotlightTournament ? "text-orange-300" : "text-orange-700"}`}>
                               · Aprox. {getTournamentDistance(featuredTournament, userCoordinates)} km
                             </span>
                           ) : null}
@@ -497,8 +563,14 @@ export default function TournamentsPage() {
                       ) : null}
 
                       {featuredTournament.notes ? (
-                        <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                        <p className={`max-w-2xl text-sm leading-6 ${spotlightTournament ? "text-slate-200" : "text-slate-600"}`}>
                           {featuredTournament.notes}
+                        </p>
+                      ) : null}
+
+                      {spotlightTournament ? (
+                        <p className="max-w-2xl text-sm font-medium leading-6 text-slate-100">
+                          Toda la información oficial, inscripción y novedades de nuestra fecha están concentradas en el sitio especial del torneo.
                         </p>
                       ) : null}
 
@@ -515,9 +587,13 @@ export default function TournamentsPage() {
                     href={featuredTournament.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="btn-primary justify-center whitespace-nowrap"
+                    className={`justify-center whitespace-nowrap rounded-xl px-5 py-3 text-sm font-semibold transition ${
+                      spotlightTournament
+                        ? "bg-orange-500 text-white shadow-[0_20px_40px_-24px_rgba(249,115,22,0.95)] hover:bg-orange-400"
+                        : "btn-primary"
+                    }`}
                   >
-                    Ver torneo
+                    {spotlightTournament ? "Entrar al sitio oficial" : "Ver torneo"}
                   </a>
                 ) : null}
               </div>
