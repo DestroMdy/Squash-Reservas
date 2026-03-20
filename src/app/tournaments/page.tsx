@@ -588,42 +588,6 @@ export default function TournamentsPage() {
               </div>
             </section>
 
-            <section className="card rounded-2xl p-4">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                    Explorar
-                  </p>
-                  <p className="text-sm text-slate-600">
-                    {totalUpcoming} torneo{totalUpcoming === 1 ? "" : "s"} próximo
-                    {totalUpcoming === 1 ? "" : "s"} cargado{totalUpcoming === 1 ? "" : "s"}.
-                  </p>
-                  {!locationEnabled ? (
-                    <p className="text-xs text-slate-500">
-                      Si activas ubicación, verás la distancia aproximada a cada sede.
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {(Object.keys(filterLabels) as TournamentFilter[]).map((key) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setFilter(key)}
-                      className={
-                        filter === key
-                          ? "rounded-full bg-slate-900 px-3.5 py-2 text-sm font-semibold text-white"
-                          : "rounded-full border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700"
-                      }
-                    >
-                      {filterLabels[key]}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </section>
-
             <section className="space-y-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
