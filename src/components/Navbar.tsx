@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   fetchUnreadPrivateMessagesCount,
@@ -21,6 +22,7 @@ const navItems = [
 ];
 
 export function Navbar() {
+  const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [isLogged, setIsLogged] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
@@ -135,7 +137,9 @@ export function Navbar() {
                 className="relative whitespace-nowrap rounded-xl border border-white/15 bg-white px-4 py-2 text-sm font-medium text-slate-800 transition hover:border-orange-400 hover:text-black"
               >
                 {item.label}
-                {item.href === "/messages" && unreadCount > 0 ? (
+                {item.href === "/messages" &&
+                unreadCount > 0 &&
+                pathname !== "/messages" ? (
                   <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-black">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
