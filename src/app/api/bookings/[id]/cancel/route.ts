@@ -1,44 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
+import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 import { canCancelBooking } from "@/lib/time-rules";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
-import { fetchProfileRole, getUser } from "@/lib/supabase";
 
-function headers(token: string, anonKey: string) {
-  return {
-    apikey: anonKey,
-    Authorization: `Bearer ${token}`,
-    "Content-Type": "application/json"
-  };
+async function fetchRole(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/profiles?select=role&id=eq.${userId}&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const rows = (await response.json()) as Array<{ role?: string | null }>;
+  return rows[0]?.role ?? null;
 }
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "");
-
-  if (!supabaseUrl || !anonKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de Supabase." },
-      { status: 503 }
-    );
-  }
-
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Token inválido" }, { status: 401 });
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const ip = getRequestIp(request);
   const rateLimit = await checkRateLimit({
-    key: `booking-cancel:${ip}:${user.id}`,
+    key: `booking-cancel:${ip}:${auth.user.id}`,
     max: 12,
     windowMs: 60 * 1000
   });
@@ -58,14 +58,19 @@ export async function POST(
     );
   }
 
-  const callerRole = await fetchProfileRole(user.id, token);
+  const callerRole = await fetchRole(
+    auth.supabaseUrl,
+    auth.serviceRoleKey as string,
+    auth.user.id
+  );
   const isAdmin = callerRole === "admin";
 
   const bookingResponse = await fetch(
-    `${supabaseUrl}/rest/v1/bookings?select=id,user_id,status,time_slots(slot_date,start_time,end_time)&id=eq.${params.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/bookings?select=id,user_id,status,time_slots(slot_date,start_time,end_time)&id=eq.${params.id}&limit=1`,
     {
       method: "GET",
-      headers: headers(token, anonKey)
+      headers: adminHeaders(auth.serviceRoleKey as string),
+      cache: "no-store"
     }
   );
 
@@ -89,7 +94,7 @@ export async function POST(
     );
   }
 
-  if (booking.user_id !== user.id && !isAdmin) {
+  if (booking.user_id !== auth.user.id && !isAdmin) {
     return NextResponse.json(
       { error: "No puedes cancelar una reserva de otro usuario." },
       { status: 403 }
@@ -124,14 +129,15 @@ export async function POST(
   }
 
   const cancelResponse = await fetch(
-    `${supabaseUrl}/rest/v1/bookings?id=eq.${params.id}&status=eq.confirmed`,
+    `${auth.supabaseUrl}/rest/v1/bookings?id=eq.${params.id}&status=eq.confirmed`,
     {
       method: "PATCH",
       headers: {
-        ...headers(token, anonKey),
+        ...adminHeaders(auth.serviceRoleKey as string),
         Prefer: "return=minimal"
       },
-      body: JSON.stringify({ status: "cancelled" })
+      body: JSON.stringify({ status: "cancelled" }),
+      cache: "no-store"
     }
   );
 

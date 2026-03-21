@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { fetchProfileRole, getUser } from "@/lib/supabase";
+import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 
 type MatchRow = {
   id: string;
@@ -23,14 +23,6 @@ type MatchUpdatePayload = {
   notes?: string | null;
 };
 
-function adminHeaders(apiKey: string) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
-
 async function fetchMatchById(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -40,7 +32,8 @@ async function fetchMatchById(
     `${supabaseUrl}/rest/v1/casual_matches?select=id,created_by,player_one_id,player_two_id,played_on,location,score_player_one,score_player_two,notes,created_at,updated_at&id=eq.${id}&limit=1`,
     {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -50,6 +43,28 @@ async function fetchMatchById(
 
   const rows = (await response.json()) as MatchRow[];
   return rows[0] ?? null;
+}
+
+async function fetchRole(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/profiles?select=role&id=eq.${userId}&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const rows = (await response.json()) as Array<{ role?: string | null }>;
+  return rows[0]?.role ?? null;
 }
 
 function canManageMatch(
@@ -87,35 +102,30 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "").trim();
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de backend para partidos." },
-      { status: 503 }
-    );
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
-
-  const role = await fetchProfileRole(user.id, token);
-  const currentMatch = await fetchMatchById(supabaseUrl, serviceRoleKey, params.id);
+  const role = await fetchRole(
+    auth.supabaseUrl,
+    auth.serviceRoleKey as string,
+    auth.user.id
+  );
+  const currentMatch = await fetchMatchById(
+    auth.supabaseUrl,
+    auth.serviceRoleKey as string,
+    params.id
+  );
 
   if (!currentMatch) {
     return NextResponse.json({ error: "Partido no encontrado." }, { status: 404 });
   }
 
-  if (!canManageMatch(user.id, role, currentMatch)) {
+  if (!canManageMatch(auth.user.id, role, currentMatch)) {
     return NextResponse.json(
       { error: "No puedes editar este partido." },
       { status: 403 }
@@ -134,11 +144,11 @@ export async function PATCH(
   }
 
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/casual_matches?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/casual_matches?id=eq.${params.id}`,
     {
       method: "PATCH",
       headers: {
-        ...adminHeaders(serviceRoleKey),
+        ...adminHeaders(auth.serviceRoleKey as string),
         Prefer: "return=representation"
       },
       body: JSON.stringify({
@@ -147,7 +157,8 @@ export async function PATCH(
         score_player_one: body.score_self,
         score_player_two: body.score_opponent,
         notes: body.notes?.trim() || null
-      })
+      }),
+      cache: "no-store"
     }
   );
 
@@ -168,35 +179,30 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "").trim();
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de backend para partidos." },
-      { status: 503 }
-    );
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
-
-  const role = await fetchProfileRole(user.id, token);
-  const currentMatch = await fetchMatchById(supabaseUrl, serviceRoleKey, params.id);
+  const role = await fetchRole(
+    auth.supabaseUrl,
+    auth.serviceRoleKey as string,
+    auth.user.id
+  );
+  const currentMatch = await fetchMatchById(
+    auth.supabaseUrl,
+    auth.serviceRoleKey as string,
+    params.id
+  );
 
   if (!currentMatch) {
     return NextResponse.json({ error: "Partido no encontrado." }, { status: 404 });
   }
 
-  if (!canManageMatch(user.id, role, currentMatch)) {
+  if (!canManageMatch(auth.user.id, role, currentMatch)) {
     return NextResponse.json(
       { error: "No puedes borrar este partido." },
       { status: 403 }
@@ -204,13 +210,14 @@ export async function DELETE(
   }
 
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/casual_matches?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/casual_matches?id=eq.${params.id}`,
     {
       method: "DELETE",
       headers: {
-        ...adminHeaders(serviceRoleKey),
+        ...adminHeaders(auth.serviceRoleKey as string),
         Prefer: "return=representation"
-      }
+      },
+      cache: "no-store"
     }
   );
 

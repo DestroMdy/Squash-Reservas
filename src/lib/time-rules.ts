@@ -1,9 +1,14 @@
+function buildLocalDate(slotDate: string, hours = 0, minutes = 0, seconds = 0) {
+  const [year, month, day] = slotDate.split("-").map(Number);
+  return new Date(year, month - 1, day, hours, minutes, seconds, 0);
+}
+
 function buildSlotDateTime(slotDate: string, time: string) {
   return new Date(`${slotDate}T${time}`);
 }
 
 function getWeekday(slotDate: string) {
-  return new Date(`${slotDate}T12:00:00`).getDay();
+  return buildLocalDate(slotDate, 12).getDay();
 }
 
 function timeToMinutes(time: string) {
@@ -13,11 +18,9 @@ function timeToMinutes(time: string) {
 
 export function canBookSlot(slotDate: string): boolean {
   const now = new Date();
-  const slot = new Date(slotDate);
-  const openTime = new Date(slot);
+  const openTime = buildLocalDate(slotDate, 22);
 
   openTime.setDate(openTime.getDate() - 1);
-  openTime.setHours(22, 0, 0, 0);
 
   return now >= openTime;
 }

@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  adminHeaders,
+  requireAdminRequest,
+  requireAuthenticatedRequest
+} from "@/lib/server-auth";
 import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import {
   createBooking,
   fetchSlot,
   findAlternativeOpenSlot,
-  getUser,
   hasConfirmedBooking
 } from "@/lib/supabase";
 
@@ -21,12 +25,183 @@ function normalizeBookingError(error: unknown) {
   return error instanceof Error ? error.message : "Error al reservar";
 }
 
-export async function POST(request: NextRequest) {
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "");
+function publicHeaders(anonKey: string, accessToken?: string) {
+  return {
+    apikey: anonKey,
+    Authorization: `Bearer ${accessToken || anonKey}`,
+    "Content-Type": "application/json"
+  };
+}
 
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const date = url.searchParams.get("date");
+  const scope = url.searchParams.get("scope");
+
+  if (date) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !anonKey) {
+      return NextResponse.json(
+        { error: "Falta configuración de backend." },
+        { status: 503 }
+      );
+    }
+
+    const maybeAuth = await requireAuthenticatedRequest(request);
+    const accessToken = "error" in maybeAuth ? undefined : maybeAuth.accessToken;
+
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category,avatar_url))&slot_date=eq.${date}&order=start_time.asc`,
+      {
+        method: "GET",
+        headers: publicHeaders(anonKey, accessToken),
+        cache: "no-store"
+      }
+    );
+
+    const rows = (await response.json()) as Array<Record<string, unknown>>;
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "No se pudo cargar la agenda." },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ slots: rows });
+  }
+
+  if (scope === "my") {
+    const auth = await requireAuthenticatedRequest(request, {
+      requireServiceRole: true
+    });
+
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    const response = await fetch(
+      `${auth.supabaseUrl}/rest/v1/bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&user_id=eq.${auth.user.id}&order=created_at.desc`,
+      {
+        method: "GET",
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
+      }
+    );
+
+    const rows = (await response.json()) as Array<Record<string, unknown>>;
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "No se pudieron cargar tus reservas." },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ bookings: rows });
+  }
+
+  if (scope === "all" || scope === "stats" || scope === "latest") {
+    const auth = await requireAdminRequest(request);
+
+    if ("error" in auth) {
+      return NextResponse.json({ error: auth.error }, { status: auth.status });
+    }
+
+    if (scope === "all") {
+      const response = await fetch(
+        `${auth.supabaseUrl}/rest/v1/bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,profiles(id,full_name,category,avatar_url),time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&order=created_at.desc`,
+        {
+          method: "GET",
+          headers: adminHeaders(auth.serviceRoleKey),
+          cache: "no-store"
+        }
+      );
+
+      const rows = (await response.json()) as Array<Record<string, unknown>>;
+
+      if (!response.ok) {
+        return NextResponse.json(
+          { error: "No se pudieron cargar las reservas." },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({ bookings: rows });
+    }
+
+    if (scope === "stats") {
+      const [allResponse, confirmedResponse, cancelledResponse] = await Promise.all([
+        fetch(`${auth.supabaseUrl}/rest/v1/bookings?select=id`, {
+          method: "GET",
+          headers: adminHeaders(auth.serviceRoleKey),
+          cache: "no-store"
+        }),
+        fetch(`${auth.supabaseUrl}/rest/v1/bookings?select=id&status=eq.confirmed`, {
+          method: "GET",
+          headers: adminHeaders(auth.serviceRoleKey),
+          cache: "no-store"
+        }),
+        fetch(`${auth.supabaseUrl}/rest/v1/bookings?select=id&status=eq.cancelled`, {
+          method: "GET",
+          headers: adminHeaders(auth.serviceRoleKey),
+          cache: "no-store"
+        })
+      ]);
+
+      const [all, confirmed, cancelled] = await Promise.all([
+        allResponse.json() as Promise<Array<Record<string, unknown>>>,
+        confirmedResponse.json() as Promise<Array<Record<string, unknown>>>,
+        cancelledResponse.json() as Promise<Array<Record<string, unknown>>>
+      ]);
+
+      if (!allResponse.ok || !confirmedResponse.ok || !cancelledResponse.ok) {
+        return NextResponse.json(
+          { error: "No se pudieron cargar las métricas de reservas." },
+          { status: 400 }
+        );
+      }
+
+      return NextResponse.json({
+        total: all.length,
+        confirmed: confirmed.length,
+        cancelled: cancelled.length
+      });
+    }
+
+    const response = await fetch(
+      `${auth.supabaseUrl}/rest/v1/bookings?select=id,created_at,status,time_slots(slot_date,start_time,end_time),courts(name)&status=eq.confirmed&order=created_at.desc&limit=1`,
+      {
+        method: "GET",
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
+      }
+    );
+
+    const rows = (await response.json()) as Array<Record<string, unknown>>;
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "No se pudo cargar la última reserva confirmada." },
+        { status: 400 }
+      );
+    }
+
+    return NextResponse.json({ booking: rows[0] ?? null });
+  }
+
+  return NextResponse.json(
+    { error: "Consulta de reservas no soportada." },
+    { status: 400 }
+  );
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requireAuthenticatedRequest(request);
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const body = (await request.json()) as { slotId?: string };
@@ -35,14 +210,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "slotId es requerido" }, { status: 400 });
   }
 
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Token inválido" }, { status: 401 });
-  }
-
   const ip = getRequestIp(request);
   const rateLimit = await checkRateLimit({
-    key: `booking-create:${ip}:${user.id}`,
+    key: `booking-create:${ip}:${auth.user.id}`,
     max: 12,
     windowMs: 60 * 1000
   });
@@ -62,7 +232,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const slot = await fetchSlot(body.slotId, token);
+  const slot = await fetchSlot(body.slotId, auth.accessToken);
   if (!slot) {
     return NextResponse.json({ error: "Turno no encontrado" }, { status: 404 });
   }
@@ -86,15 +256,24 @@ export async function POST(request: NextRequest) {
 
   let selectedSlot = slot;
   let fallbackCourtName: string | null = null;
-  let alreadyBooked = await hasConfirmedBooking(selectedSlot.id, token);
+  let alreadyBooked = await hasConfirmedBooking(
+    selectedSlot.id,
+    auth.accessToken
+  );
 
   if (alreadyBooked) {
-    const alternativeSlot = await findAlternativeOpenSlot(selectedSlot, token);
+    const alternativeSlot = await findAlternativeOpenSlot(
+      selectedSlot,
+      auth.accessToken
+    );
 
     if (alternativeSlot) {
       selectedSlot = alternativeSlot;
       fallbackCourtName = alternativeSlot.courts?.name ?? null;
-      alreadyBooked = await hasConfirmedBooking(selectedSlot.id, token);
+      alreadyBooked = await hasConfirmedBooking(
+        selectedSlot.id,
+        auth.accessToken
+      );
     }
   }
 
@@ -106,7 +285,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await createBooking(selectedSlot.id, selectedSlot.court_id, user.id, token);
+    await createBooking(
+      selectedSlot.id,
+      selectedSlot.court_id,
+      auth.user.id,
+      auth.accessToken
+    );
 
     return NextResponse.json({
       ok: true,

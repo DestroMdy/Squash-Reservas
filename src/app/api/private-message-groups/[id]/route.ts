@@ -1,59 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-
-type SupabaseUser = {
-  id: string;
-  email?: string;
-};
+import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 
 type UpdateGroupBody = {
   name?: string;
   memberIds?: string[];
 };
 
-function adminHeaders(apiKey: string) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
-
-async function requireGroupCreator(
-  request: NextRequest,
-  groupId: string
-) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return { error: "Falta configuración de backend.", status: 503 as const };
-  }
-
-  if (!authHeader?.startsWith("Bearer ")) {
-    return { error: "No autenticado", status: 401 as const };
-  }
-
-  const accessToken = authHeader.replace("Bearer ", "").trim();
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    method: "GET",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${accessToken}`
-    }
+async function requireGroupCreator(request: NextRequest, groupId: string) {
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
   });
 
-  if (!userResponse.ok) {
-    return { error: "Sesión inválida.", status: 401 as const };
+  if ("error" in auth) {
+    return auth;
   }
 
-  const user = (await userResponse.json()) as SupabaseUser;
   const groupResponse = await fetch(
-    `${supabaseUrl}/rest/v1/private_message_groups?select=id,name,created_by&id=eq.${groupId}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/private_message_groups?select=id,name,created_by&id=eq.${groupId}&limit=1`,
     {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(auth.serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -65,7 +32,7 @@ async function requireGroupCreator(
     return { error: "No se encontró el grupo.", status: 404 as const };
   }
 
-  if (group.created_by !== user.id) {
+  if (group.created_by !== auth.user.id) {
     return {
       error: "Solo quien creó el grupo puede editarlo.",
       status: 403 as const
@@ -73,9 +40,7 @@ async function requireGroupCreator(
   }
 
   return {
-    supabaseUrl,
-    serviceRoleKey,
-    user,
+    ...auth,
     group
   };
 }
@@ -118,14 +83,16 @@ export async function PATCH(
       `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${params.id}`,
       {
         method: "GET",
-        headers: adminHeaders(auth.serviceRoleKey)
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
       }
     ),
     fetch(
       `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${[auth.user.id, ...memberIds].join(",")})`,
       {
         method: "GET",
-        headers: adminHeaders(auth.serviceRoleKey)
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
       }
     )
   ]);
@@ -166,7 +133,8 @@ export async function PATCH(
         ...adminHeaders(auth.serviceRoleKey),
         Prefer: "return=representation"
       },
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name }),
+      cache: "no-store"
     }
   );
 
@@ -196,7 +164,8 @@ export async function PATCH(
             user_id: memberId,
             added_by: auth.user.id
           }))
-        )
+        ),
+        cache: "no-store"
       }
     );
 
@@ -217,7 +186,8 @@ export async function PATCH(
         headers: {
           ...adminHeaders(auth.serviceRoleKey),
           Prefer: "return=minimal"
-        }
+        },
+        cache: "no-store"
       }
     );
 

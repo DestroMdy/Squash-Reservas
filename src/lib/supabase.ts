@@ -1,8 +1,14 @@
+import {
+  decodeUserCookie,
+  encodeUserCookie,
+  USER_COOKIE_NAME
+} from "@/lib/session-cookies";
+
 export interface SessionData {
   access_token: string;
-  refresh_token?: string;
   token_type?: string;
   expires_in?: number;
+  expires_at?: number;
   user?: { id: string; email?: string };
 }
 
@@ -14,7 +20,6 @@ type SupabaseErrorPayload = {
   error?: string;
 };
 
-const STORAGE_KEY = "sr_session";
 const AVATAR_BUCKET = "avatars";
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const AVATAR_ALLOWED_MIME_TYPES = new Map([
@@ -25,6 +30,36 @@ const AVATAR_ALLOWED_MIME_TYPES = new Map([
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+let inMemorySession: SessionData | null = null;
+
+function getCookieValue(name: string) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const cookie = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(`${name}=`));
+
+  return cookie ? cookie.slice(name.length + 1) : null;
+}
+
+function hasUserCookie() {
+  return Boolean(getCookieValue(USER_COOKIE_NAME));
+}
+
+function setClientUserCookie(user?: SessionData["user"] | null) {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  if (!user?.id) {
+    document.cookie = `${USER_COOKIE_NAME}=; Max-Age=0; Path=/; SameSite=Lax`;
+    return;
+  }
+
+  document.cookie = `${USER_COOKIE_NAME}=${encodeUserCookie(user)}; Path=/; SameSite=Lax`;
+}
 
 function headers(token?: string) {
   return {
@@ -70,25 +105,42 @@ function normalizeSupabaseError(
 }
 
 export function getSession(): SessionData | null {
-  if (typeof window === "undefined") return null;
-
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return null;
-
-  try {
-    return JSON.parse(raw) as SessionData;
-  } catch {
+  if (typeof window === "undefined") {
     return null;
   }
+
+  if (inMemorySession) {
+    return inMemorySession;
+  }
+
+  const user = decodeUserCookie(getCookieValue(USER_COOKIE_NAME));
+  return user
+    ? {
+        access_token: "",
+        user
+      }
+    : null;
 }
 
 export function setSession(session: SessionData | null) {
   if (typeof window === "undefined") return;
 
   if (!session) {
-    window.localStorage.removeItem(STORAGE_KEY);
+    inMemorySession = null;
+    setClientUserCookie(null);
   } else {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    inMemorySession = {
+      access_token: session.access_token,
+      token_type: session.token_type,
+      expires_in: session.expires_in,
+      expires_at:
+        session.expires_at ??
+        (typeof session.expires_in === "number"
+          ? Date.now() + session.expires_in * 1000 - 30_000
+          : undefined),
+      user: session.user
+    };
+    setClientUserCookie(session.user);
   }
 
   window.dispatchEvent(new Event("sr-auth-change"));
@@ -96,6 +148,53 @@ export function setSession(session: SessionData | null) {
 
 export function clearSession() {
   setSession(null);
+}
+
+function isSessionExpired(session: SessionData | null | undefined) {
+  if (!session?.access_token) {
+    return true;
+  }
+
+  if (!session.expires_at) {
+    return false;
+  }
+
+  return session.expires_at <= Date.now();
+}
+
+async function tryRefreshAccessToken() {
+  if (typeof window === "undefined" || !hasUserCookie()) {
+    return null;
+  }
+
+  try {
+    return await refreshSessionFromCookie();
+  } catch {
+    clearSession();
+    return null;
+  }
+}
+
+export async function getValidSession(preferredToken?: string) {
+  const session = getSession();
+
+  if (preferredToken) {
+    return {
+      ...(session || {}),
+      access_token: preferredToken
+    } as SessionData;
+  }
+
+  if (session?.access_token && !isSessionExpired(session)) {
+    return session;
+  }
+
+  return tryRefreshAccessToken();
+}
+
+async function getValidAccessToken(preferredToken?: string) {
+  const session = await getValidSession(preferredToken);
+  return session?.access_token || "";
 }
 
 export async function signUp(
@@ -184,50 +283,161 @@ export async function signInWithPassword(email: string, password: string) {
   }
 
   setSession({
-    ...data,
+    access_token: data.access_token,
+    token_type: data.token_type,
+    expires_in: data.expires_in,
     user: data.user
   });
 }
 
-export async function signOut() {
-  const session = getSession();
+export async function refreshSessionFromCookie() {
+  const response = await fetch("/api/auth/refresh", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
 
-  if (session?.access_token) {
-    await fetch(`${supabaseUrl}/auth/v1/logout`, {
-      method: "POST",
-      headers: headers(session.access_token)
-    });
+  const data = (await response.json()) as SessionData & {
+    error?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(data.error || "No se pudo restaurar la sesión.");
   }
+
+  setSession({
+    access_token: data.access_token,
+    token_type: data.token_type,
+    expires_in: data.expires_in,
+    user: data.user
+  });
+
+  return data;
+}
+
+export async function signOut() {
+  await fetch("/api/auth/logout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" }
+  });
 
   clearSession();
 }
 
 export async function getUser(token: string) {
-  if (!token) return null;
+  const sessionUser = getSession()?.user;
+  if (sessionUser?.id) {
+    return sessionUser;
+  }
 
-  const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    method: "GET",
-    headers: headers(token)
-  });
-
-  if (!response.ok) {
+  if (!token) {
     return null;
   }
 
-  return (await response.json()) as { id: string; email?: string };
+  const refreshedSession = await tryRefreshAccessToken();
+  return refreshedSession?.user || null;
+}
+
+async function authedRouteRequest(
+  input: string,
+  init: RequestInit & {
+    token?: string;
+    requireJsonContentType?: boolean;
+    retryOnUnauthorized?: boolean;
+  } = {}
+) {
+  const {
+    token,
+    retryOnUnauthorized = true,
+    requireJsonContentType = false,
+    headers: providedHeaders,
+    ...restInit
+  } = init;
+
+  const buildHeaders = (accessToken?: string) => {
+    const normalizedHeaders = new Headers(providedHeaders || {});
+
+    if (requireJsonContentType && !normalizedHeaders.has("Content-Type")) {
+      normalizedHeaders.set("Content-Type", "application/json");
+    }
+
+    if (accessToken) {
+      normalizedHeaders.set("Authorization", `Bearer ${accessToken}`);
+    } else {
+      normalizedHeaders.delete("Authorization");
+    }
+
+    return normalizedHeaders;
+  };
+
+  let accessToken = await getValidAccessToken(token);
+  let response = await fetch(input, {
+    ...restInit,
+    headers: buildHeaders(accessToken)
+  });
+
+  if (
+    response.status === 401 &&
+    retryOnUnauthorized &&
+    typeof window !== "undefined"
+  ) {
+    const refreshedSession = await tryRefreshAccessToken();
+
+    if (refreshedSession?.access_token) {
+      accessToken = refreshedSession.access_token;
+      response = await fetch(input, {
+        ...restInit,
+        headers: buildHeaders(accessToken)
+      });
+    }
+  }
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    clearSession();
+    window.location.href = "/login";
+  }
+
+  return response;
+}
+
+async function parseJsonPayload<T>(response: Response) {
+  const text = await response.text();
+
+  if (!text.trim()) {
+    return null;
+  }
+
+  return JSON.parse(text) as T;
 }
 
 async function rest<T>(
   path: string,
   options?: RequestInit & { token?: string }
 ): Promise<T> {
-  const response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+  let accessToken = await getValidAccessToken(options?.token);
+  let response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
     ...options,
     headers: {
-      ...headers(options?.token),
+      ...headers(accessToken),
       ...(options?.headers || {})
     }
   });
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    const refreshedSession = await tryRefreshAccessToken();
+
+    if (refreshedSession?.access_token) {
+      accessToken = refreshedSession.access_token;
+      response = await fetch(`${supabaseUrl}/rest/v1/${path}`, {
+        ...options,
+        headers: {
+          ...headers(accessToken),
+          ...(options?.headers || {})
+        }
+      });
+    }
+  }
 
   if (response.status === 401) {
     if (typeof window !== "undefined") {
@@ -285,56 +495,91 @@ export async function uploadProfileAvatar(
   }
 
   const filePath = `${userId}/avatar.${extension}`;
+  const formData = new FormData();
+  formData.append("file", file, filePath);
 
-  const response = await fetch(
-    `${supabaseUrl}/storage/v1/object/${AVATAR_BUCKET}/${filePath}`,
-    {
-      method: "POST",
-      headers: {
-        apikey: anonKey,
-        Authorization: `Bearer ${token}`,
-        "x-upsert": "true",
-        "Content-Type": file.type
-      },
-      body: file
-    }
-  );
+  const response = await authedRouteRequest("/api/profile/avatar", {
+    method: "POST",
+    token,
+    body: formData
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    avatar_url?: string;
+  }>(response);
 
   if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(errorBody || "No se pudo subir la foto.");
+    throw new Error(payload?.error || "No se pudo subir la foto.");
   }
 
-  return `${supabaseUrl}/storage/v1/object/public/${AVATAR_BUCKET}/${filePath}`;
+  return (
+    payload?.avatar_url ||
+    `${supabaseUrl}/storage/v1/object/public/${AVATAR_BUCKET}/${filePath}`
+  );
 }
 
 export async function fetchSlotsByDate(date: string, token?: string) {
-  return rest<any[]>(
-    `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category,avatar_url))&slot_date=eq.${date}&order=start_time.asc`,
-    token ? { token } : undefined
+  const response = await authedRouteRequest(
+    `/api/bookings?date=${encodeURIComponent(date)}`,
+    {
+      method: "GET",
+      token
+    }
   );
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    slots?: any[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar la agenda.");
+  }
+
+  return payload?.slots || [];
 }
 
 export async function fetchMyBookings(userId: string, token: string) {
-  return rest<any[]>(
-    `bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&user_id=eq.${userId}&order=created_at.desc`,
-    { token }
-  );
+  const response = await authedRouteRequest("/api/bookings?scope=my", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    bookings?: any[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudieron cargar tus reservas.");
+  }
+
+  return (payload?.bookings || []).filter((booking) => booking.user_id === userId);
 }
 
 export async function fetchAllBookings(token: string) {
-  return rest<any[]>(
-    "bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,profiles(id,full_name,category,avatar_url),time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&order=created_at.desc",
-    { token }
-  );
+  const response = await authedRouteRequest("/api/bookings?scope=all", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    bookings?: any[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudieron cargar las reservas.");
+  }
+
+  return payload?.bookings || [];
 }
 
 export async function cancelBooking(bookingId: string, token: string) {
-  const response = await fetch(`/api/bookings/${bookingId}/cancel`, {
+  const response = await authedRouteRequest(`/api/bookings/${bookingId}/cancel`, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -356,12 +601,10 @@ export async function updateBookingAsAdmin(
     notes?: string | null;
   }
 ) {
-  const response = await fetch(`/api/admin/bookings/${bookingId}`, {
+  const response = await authedRouteRequest(`/api/admin/bookings/${bookingId}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify(payload)
   });
 
@@ -379,11 +622,9 @@ export async function deleteProfileAsAdmin(
   profile: { id: string; avatar_url?: string | null },
   token: string
 ) {
-  const response = await fetch(`/api/admin/players/${profile.id}`, {
+  const response = await authedRouteRequest(`/api/admin/players/${profile.id}`, {
     method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -397,12 +638,10 @@ export async function deleteProfileAsAdmin(
 }
 
 export async function promoteProfileToAdmin(profileId: string, token: string) {
-  const response = await fetch(`/api/admin/players/${profileId}/role`, {
+  const response = await authedRouteRequest(`/api/admin/players/${profileId}/role`, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify({ role: "admin" })
   });
 
@@ -417,37 +656,67 @@ export async function promoteProfileToAdmin(profileId: string, token: string) {
 }
 
 export async function fetchProfileRole(userId: string, token: string) {
-  const data = await rest<any[]>(`profiles?select=role&id=eq.${userId}&limit=1`, {
+  const response = await authedRouteRequest("/api/profile", {
+    method: "GET",
     token
   });
-  return data[0]?.role as "admin" | "player" | undefined;
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    profile?: { id?: string; role?: "admin" | "player" };
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar el rol del perfil.");
+  }
+
+  if (payload?.profile?.id && payload.profile.id !== userId) {
+    return undefined;
+  }
+
+  return payload?.profile?.role;
 }
 
 export async function fetchBookingStats(token: string) {
-  const all = await rest<any[]>("bookings?select=id", { token });
-  const confirmed = await rest<any[]>(
-    "bookings?select=id&status=eq.confirmed",
-    { token }
-  );
-  const cancelled = await rest<any[]>(
-    "bookings?select=id&status=eq.cancelled",
-    { token }
-  );
+  const response = await authedRouteRequest("/api/bookings?scope=stats", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    total?: number;
+    confirmed?: number;
+    cancelled?: number;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudieron cargar las métricas.");
+  }
 
   return {
-    total: all.length,
-    confirmed: confirmed.length,
-    cancelled: cancelled.length
+    total: payload?.total || 0,
+    confirmed: payload?.confirmed || 0,
+    cancelled: payload?.cancelled || 0
   };
 }
 
 export async function fetchLatestConfirmedBooking(token: string) {
-  const data = await rest<any[]>(
-    "bookings?select=id,created_at,status,time_slots(slot_date,start_time,end_time),courts(name)&status=eq.confirmed&order=created_at.desc&limit=1",
-    { token }
-  );
+  const response = await authedRouteRequest("/api/bookings?scope=latest", {
+    method: "GET",
+    token
+  });
 
-  return data[0];
+  const payload = await parseJsonPayload<{
+    error?: string;
+    booking?: any;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar la última reserva.");
+  }
+
+  return payload?.booking;
 }
 
 export async function fetchCourts(token?: string) {
@@ -549,12 +818,25 @@ export async function createBooking(
 }
 
 export async function fetchProfile(userId: string, token: string) {
-  const data = await rest<any[]>(
-    `profiles?select=id,full_name,phone,category,role,avatar_url&id=eq.${userId}&limit=1`,
-    { token }
-  );
+  const response = await authedRouteRequest("/api/profile", {
+    method: "GET",
+    token
+  });
 
-  return data[0];
+  const payload = await parseJsonPayload<{
+    error?: string;
+    profile?: any;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar el perfil.");
+  }
+
+  if (payload?.profile?.id && payload.profile.id !== userId) {
+    return null;
+  }
+
+  return payload?.profile || null;
 }
 
 export async function updateProfile(
@@ -567,12 +849,25 @@ export async function updateProfile(
     avatar_url?: string | null;
   }
 ) {
-  await rest(`profiles?id=eq.${userId}`, {
+  const response = await authedRouteRequest("/api/profile", {
     method: "PATCH",
     token,
-    body: JSON.stringify(payload),
-    headers: { Prefer: "return=minimal" }
+    requireJsonContentType: true,
+    body: JSON.stringify(payload)
   });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    profile?: { id?: string };
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo actualizar el perfil.");
+  }
+
+  if (result?.profile?.id && result.profile.id !== userId) {
+    throw new Error("El perfil actualizado no coincide con el usuario actual.");
+  }
 }
 
 export async function isProfileComplete(userId: string, token: string) {
@@ -588,30 +883,48 @@ export async function isProfileComplete(userId: string, token: string) {
 }
 
 export async function fetchPlayers(token: string) {
-  return rest<any[]>(
-    "profiles?select=id,full_name,phone,category,role,avatar_url&order=category.asc,full_name.asc",
-    { token }
-  );
+  const response = await authedRouteRequest("/api/players", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    players?: any[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar la lista de jugadores.");
+  }
+
+  return payload?.players || [];
 }
 
 export async function fetchPrivateMessages(userId: string, token: string) {
-  const senderFilter = `sender_id.eq.${userId}`;
-  const recipientFilter = `recipient_id.eq.${userId}`;
+  const response = await authedRouteRequest("/api/private-messages", {
+    method: "GET",
+    token
+  });
 
-  return rest<any[]>(
-    `private_messages?select=id,sender_id,recipient_id,body,read_at,created_at,updated_at&or=(${senderFilter},${recipientFilter})&order=created_at.asc`,
-    { token }
-  );
+  const payload = await parseJsonPayload<{
+    error?: string;
+    messages?: any[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudieron cargar los mensajes privados.");
+  }
+
+  return (payload?.messages || []).filter((message) => {
+    return message.sender_id === userId || message.recipient_id === userId;
+  });
 }
 
 export async function fetchUnreadPrivateMessagesCount(
   userId: string,
   token: string
 ) {
-  const data = await rest<any[]>(
-    `private_messages?select=id&recipient_id=eq.${userId}&read_at=is.null`,
-    { token }
-  );
+  const data = await fetchPrivateMessages(userId, token);
   let groupUnreadCount = 0;
 
   try {
@@ -625,19 +938,26 @@ export async function fetchUnreadPrivateMessagesCount(
     groupUnreadCount = 0;
   }
 
-  return data.length + groupUnreadCount;
+  return (
+    data.filter(
+      (message) => message.recipient_id === userId && !message.read_at
+    ).length + groupUnreadCount
+  );
 }
 
 export async function fetchLatestUnreadIncomingMessage(
   userId: string,
   token: string
 ) {
-  const data = await rest<any[]>(
-    `private_messages?select=id,sender_id,recipient_id,body,read_at,created_at,updated_at&recipient_id=eq.${userId}&read_at=is.null&order=created_at.desc&limit=1`,
-    { token }
-  );
+  const data = await fetchPrivateMessages(userId, token);
 
-  return data[0];
+  return data
+    .filter((message) => message.recipient_id === userId && !message.read_at)
+    .sort(
+      (a, b) =>
+        new Date(b.created_at || 0).getTime() -
+        new Date(a.created_at || 0).getTime()
+    )[0];
 }
 
 export async function fetchLatestUnreadGroupMessage(token: string) {
@@ -662,11 +982,9 @@ export async function fetchLatestUnreadGroupMessage(token: string) {
 }
 
 export async function fetchPrivateMessageGroups(token: string) {
-  const response = await fetch("/api/private-message-groups", {
+  const response = await authedRouteRequest("/api/private-message-groups", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -689,12 +1007,10 @@ export async function createPrivateMessageGroup(
   memberIds: string[],
   token: string
 ) {
-  const response = await fetch("/api/private-message-groups", {
+  const response = await authedRouteRequest("/api/private-message-groups", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify({
       name,
       memberIds
@@ -725,12 +1041,10 @@ export async function updatePrivateMessageGroup(
   },
   token: string
 ) {
-  const response = await fetch(`/api/private-message-groups/${groupId}`, {
+  const response = await authedRouteRequest(`/api/private-message-groups/${groupId}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify(payload)
   });
 
@@ -751,12 +1065,13 @@ export async function updatePrivateMessageGroup(
 }
 
 export async function fetchPrivateGroupMessages(groupId: string, token: string) {
-  const response = await fetch(`/api/private-message-groups/${groupId}/messages`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
+  const response = await authedRouteRequest(
+    `/api/private-message-groups/${groupId}/messages`,
+    {
+      method: "GET",
+      token
     }
-  });
+  );
 
   const text = await response.text();
   const payload = text.trim()
@@ -782,16 +1097,17 @@ export async function sendPrivateGroupMessage(
   body: string,
   token: string
 ) {
-  const response = await fetch(`/api/private-message-groups/${groupId}/messages`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      body: body.trim()
-    })
-  });
+  const response = await authedRouteRequest(
+    `/api/private-message-groups/${groupId}/messages`,
+    {
+      method: "POST",
+      token,
+      requireJsonContentType: true,
+      body: JSON.stringify({
+        body: body.trim()
+      })
+    }
+  );
 
   const text = await response.text();
   const payload = text.trim()
@@ -808,12 +1124,13 @@ export async function sendPrivateGroupMessage(
 }
 
 export async function markPrivateGroupAsRead(groupId: string, token: string) {
-  const response = await fetch(`/api/private-message-groups/${groupId}/read`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`
+  const response = await authedRouteRequest(
+    `/api/private-message-groups/${groupId}/read`,
+    {
+      method: "POST",
+      token
     }
-  });
+  );
 
   const text = await response.text();
   const payload = text.trim()
@@ -835,12 +1152,10 @@ export async function sendPrivateMessage(
   body: string,
   token: string
 ) {
-  const response = await fetch("/api/private-messages", {
+  const response = await authedRouteRequest("/api/private-messages", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify({
       sender_id: senderId,
       recipient_id: recipientId,
@@ -867,17 +1182,25 @@ export async function markConversationAsRead(
   recipientId: string,
   token: string
 ) {
-  await rest(
-    `private_messages?sender_id=eq.${senderId}&recipient_id=eq.${recipientId}&read_at=is.null`,
-    {
-      method: "PATCH",
-      token,
-      body: JSON.stringify({
-        read_at: new Date().toISOString()
-      }),
-      headers: { Prefer: "return=minimal" }
-    }
-  );
+  const response = await authedRouteRequest("/api/private-messages", {
+    method: "PATCH",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify({
+      sender_id: senderId,
+      recipient_id: recipientId
+    })
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudo marcar la conversación como leída."
+    );
+  }
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("sr-messages-updated"));
@@ -891,11 +1214,9 @@ export async function fetchExternalTournaments() {
 }
 
 export async function fetchAdminExternalTournaments(token: string) {
-  const response = await fetch("/api/admin/external-tournaments", {
+  const response = await authedRouteRequest("/api/admin/external-tournaments", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -912,11 +1233,9 @@ export async function fetchAdminExternalTournaments(token: string) {
 }
 
 export async function fetchAdminAuditLogs(token: string) {
-  const response = await fetch("/api/admin/audit-logs", {
+  const response = await authedRouteRequest("/api/admin/audit-logs", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -946,12 +1265,10 @@ export async function createExternalTournament(
     is_active?: boolean;
   }
 ) {
-  const response = await fetch("/api/admin/external-tournaments", {
+  const response = await authedRouteRequest("/api/admin/external-tournaments", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify(payload)
   });
 
@@ -980,14 +1297,15 @@ export async function updateExternalTournament(
     is_active?: boolean;
   }
 ) {
-  const response = await fetch(`/api/admin/external-tournaments/${tournamentId}`, {
+  const response = await authedRouteRequest(
+    `/api/admin/external-tournaments/${tournamentId}`,
+    {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
-    body: JSON.stringify(payload)
-  });
+      token,
+      requireJsonContentType: true,
+      body: JSON.stringify(payload)
+    }
+  );
 
   const text = await response.text();
   const data = text.trim()
@@ -1005,12 +1323,13 @@ export async function deleteExternalTournament(
   tournamentId: string,
   token: string
 ) {
-  const response = await fetch(`/api/admin/external-tournaments/${tournamentId}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`
+  const response = await authedRouteRequest(
+    `/api/admin/external-tournaments/${tournamentId}`,
+    {
+      method: "DELETE",
+      token
     }
-  });
+  );
 
   const text = await response.text();
   const data = text.trim()
@@ -1023,11 +1342,9 @@ export async function deleteExternalTournament(
 }
 
 export async function fetchCasualMatches(token: string) {
-  const response = await fetch("/api/casual-matches", {
+  const response = await authedRouteRequest("/api/casual-matches", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -1060,12 +1377,10 @@ export async function createCasualMatch(
     notes?: string | null;
   }
 ) {
-  const response = await fetch("/api/casual-matches", {
+  const response = await authedRouteRequest("/api/casual-matches", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify(payload)
   });
 
@@ -1092,12 +1407,10 @@ export async function updateCasualMatch(
     notes?: string | null;
   }
 ) {
-  const response = await fetch(`/api/casual-matches/${matchId}`, {
+  const response = await authedRouteRequest(`/api/casual-matches/${matchId}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify(payload)
   });
 
@@ -1114,11 +1427,9 @@ export async function updateCasualMatch(
 }
 
 export async function deleteCasualMatch(matchId: string, token: string) {
-  const response = await fetch(`/api/casual-matches/${matchId}`, {
+  const response = await authedRouteRequest(`/api/casual-matches/${matchId}`, {
     method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -1132,11 +1443,9 @@ export async function deleteCasualMatch(matchId: string, token: string) {
 }
 
 export async function fetchMatchAvailability(token: string) {
-  const response = await fetch("/api/match-availability", {
+  const response = await authedRouteRequest("/api/match-availability", {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();
@@ -1164,12 +1473,10 @@ export async function activateMatchAvailability(
   token: string,
   payload?: { notes?: string | null }
 ) {
-  const response = await fetch("/api/match-availability", {
+  const response = await authedRouteRequest("/api/match-availability", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+    token,
+    requireJsonContentType: true,
     body: JSON.stringify(payload || {})
   });
 
@@ -1186,11 +1493,9 @@ export async function activateMatchAvailability(
 }
 
 export async function deactivateMatchAvailability(token: string) {
-  const response = await fetch("/api/match-availability", {
+  const response = await authedRouteRequest("/api/match-availability", {
     method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`
-    }
+    token
   });
 
   const text = await response.text();

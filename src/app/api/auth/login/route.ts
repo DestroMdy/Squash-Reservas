@@ -1,5 +1,11 @@
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import {
+  encodeUserCookie,
+  REFRESH_COOKIE_NAME,
+  USER_COOKIE_NAME
+} from "@/lib/session-cookies";
 
 type SessionPayload = {
   access_token: string;
@@ -12,6 +18,11 @@ type SessionPayload = {
   };
   error_description?: string;
 };
+
+function shouldUseSecureCookies(request: NextRequest) {
+  const host = request.headers.get("host") || "";
+  return !/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
+}
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -93,12 +104,46 @@ export async function POST(request: NextRequest) {
     }
   });
 
-  const userData = userResponse.ok
-    ? ((await userResponse.json()) as { id: string; email?: string })
-    : undefined;
+  const rawUser = userResponse.ok
+    ? ((await userResponse.json()) as Record<string, unknown>)
+    : ((loginData.user as unknown as Record<string, unknown> | undefined) ??
+      undefined);
+
+  const cookieStore = cookies();
+  const secure = shouldUseSecureCookies(request);
+  const user =
+    typeof rawUser?.id === "string"
+      ? {
+          id: rawUser.id,
+          email:
+            typeof rawUser.email === "string" ? rawUser.email : undefined
+        }
+      : undefined;
+
+  if (loginData.refresh_token) {
+    cookieStore.set(REFRESH_COOKIE_NAME, loginData.refresh_token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30
+    });
+  }
+
+  if (user?.id) {
+    cookieStore.set(USER_COOKIE_NAME, encodeUserCookie(user), {
+      httpOnly: false,
+      sameSite: "lax",
+      secure,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30
+    });
+  }
 
   return NextResponse.json({
-    ...loginData,
-    user: userData
+    access_token: loginData.access_token,
+    token_type: loginData.token_type,
+    expires_in: loginData.expires_in,
+    user
   });
 }

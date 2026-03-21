@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { AvatarImage } from "../components/AvatarImage";
 import { AppConfirmModal } from "../components/AppConfirmModal";
 import { AppNoticeModal } from "../components/AppNoticeModal";
 import {
@@ -254,9 +255,10 @@ export function ScheduleGrid({
 
                   {confirmedBooking ? (
                     <div className="animate-pop-in flex items-center gap-3 rounded-xl bg-white/70 px-3 py-3 text-sm text-slate-700">
-                      <img
+                      <AvatarImage
                         src={playerAvatar}
                         alt={playerName}
+                        size={56}
                         className="h-14 w-14 rounded-full border border-slate-200 object-cover"
                       />
                       <div>

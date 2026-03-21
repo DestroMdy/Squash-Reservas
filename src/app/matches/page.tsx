@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
   activateMatchAvailability,
@@ -491,9 +492,10 @@ export default function MatchesPage() {
                             className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
                           >
                             <div className="flex items-center gap-3">
-                              <img
-                                src={request.profiles?.avatar_url || "/icon-192.png"}
+                              <AvatarImage
+                                src={request.profiles?.avatar_url}
                                 alt={request.profiles?.full_name || "Jugador"}
+                                size={48}
                                 className="h-12 w-12 rounded-full border border-slate-200 object-cover"
                               />
                               <div>
@@ -552,9 +554,10 @@ export default function MatchesPage() {
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
                         {index + 1}
                       </span>
-                      <img
-                        src={entry.player.avatar_url || "/icon-192.png"}
+                      <AvatarImage
+                        src={entry.player.avatar_url}
                         alt={entry.player.full_name || "Jugador"}
+                        size={48}
                         className="h-12 w-12 rounded-full border border-slate-200 object-cover"
                       />
                       <div>
@@ -754,9 +757,10 @@ export default function MatchesPage() {
                       className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
                     >
                       <div className="flex items-center gap-3">
-                        <img
-                          src={opponent?.avatar_url || "/icon-192.png"}
+                        <AvatarImage
+                          src={opponent?.avatar_url}
                           alt={opponent?.full_name || "Jugador"}
+                          size={56}
                           className="h-14 w-14 rounded-full border border-slate-200 object-cover"
                         />
                         <div>

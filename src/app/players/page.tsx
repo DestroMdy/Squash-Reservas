@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AvatarImage } from "../../components/AvatarImage";
 import { fetchPlayers, getSession } from "../../lib/supabase";
 import { SectionTitle } from "../../components/SectionTitle";
 import { Profile } from "../../types/db";
@@ -106,9 +107,10 @@ export default function PlayersPage() {
                       >
                         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex items-center gap-3">
-                            <img
-                              src={player.avatar_url || "/icon-192.png"}
+                            <AvatarImage
+                              src={player.avatar_url}
                               alt={player.full_name || "Jugador"}
+                              size={64}
                               className="h-16 w-16 rounded-full border border-slate-200 object-cover"
                             />
                             <div className="min-w-0">

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
   createExternalTournament,
@@ -101,19 +102,24 @@ export default function AdminPage() {
   const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  function redirectToLogin() {
+    if (typeof window === "undefined") {
+      return;
+    }
 
-  async function loadAdminData() {
+    window.location.replace("/login?next=/admin");
+  }
+
+  const loadAdminData = useCallback(async () => {
     const token = getSession()?.access_token;
     if (!token) {
-      setError("Debes iniciar sesión");
-      setLoading(false);
+      redirectToLogin();
       return;
     }
 
     const user = await getUser(token);
     if (!user) {
-      setError("Sesión inválida");
-      setLoading(false);
+      redirectToLogin();
       return;
     }
 
@@ -148,7 +154,7 @@ export default function AdminPage() {
     setAuditEnabled(auditData.enabled !== false);
     setError(null);
     setLoading(false);
-  }
+  }, []);
 
   useEffect(() => {
     async function init() {
@@ -162,7 +168,7 @@ export default function AdminPage() {
     }
 
     init();
-  }, []);
+  }, [loadAdminData]);
 
   const filteredBookings = useMemo(() => {
     const normalizedFilter = filter.trim().toLowerCase();
@@ -991,9 +997,10 @@ export default function AdminPage() {
                     className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
                   >
                     <div className="flex items-center gap-3">
-                      <img
-                        src={player.avatar_url || "/icon-192.png"}
+                      <AvatarImage
+                        src={player.avatar_url}
                         alt={player.full_name || "Jugador"}
+                        size={56}
                         className="h-14 w-14 rounded-full border border-slate-200 object-cover"
                       />
                       <div>

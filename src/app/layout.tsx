@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { AdminBookingNotifier } from "@/components/AdminBookingNotifier";
 import { MessageNotifier } from "@/components/MessageNotifier";
 import { Navbar } from "@/components/Navbar";
+import { SessionGate } from "@/components/SessionGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -45,10 +46,12 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className="bg-slate-50 text-slate-900">
-        <AdminBookingNotifier />
-        <MessageNotifier />
-        <Navbar />
-        <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+        <SessionGate>
+          <AdminBookingNotifier />
+          <MessageNotifier />
+          <Navbar />
+          <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
+        </SessionGate>
       </body>
     </html>
   );

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  adminHeaders,
+  requireAuthenticatedRequest
+} from "@/lib/server-auth";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
-
-type SupabaseUser = {
-  id: string;
-  email?: string;
-};
 
 type ProfileRecord = {
   id: string;
@@ -18,13 +17,10 @@ type CreateMessageBody = {
   body?: string;
 };
 
-function adminHeaders(apiKey: string) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
+type MarkReadBody = {
+  sender_id?: string;
+  recipient_id?: string;
+};
 
 function escapeHtml(value: string) {
   return value
@@ -40,13 +36,10 @@ async function fetchAuthUserById(
   serviceRoleKey: string,
   userId: string
 ) {
-  const response = await fetch(
-    `${supabaseUrl}/auth/v1/admin/users/${userId}`,
-    {
-      method: "GET",
-      headers: adminHeaders(serviceRoleKey)
-    }
-  );
+  const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    method: "GET",
+    headers: adminHeaders(serviceRoleKey)
+  });
 
   if (!response.ok) {
     return null;
@@ -113,26 +106,19 @@ async function sendNotificationEmail({
 }
 
 export async function POST(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
   const resendApiKey = process.env.RESEND_API_KEY;
   const fromEmail =
     process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
-  const authHeader = request.headers.get("authorization");
 
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de Supabase para enviar mensajes." },
-      { status: 503 }
-    );
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  if (!authHeader?.startsWith("Bearer ")) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
+  const serviceRoleKey = auth.serviceRoleKey as string;
 
-  const accessToken = authHeader.replace("Bearer ", "").trim();
   const body = (await request.json()) as CreateMessageBody;
 
   if (!body.sender_id || !body.recipient_id || !body.body?.trim()) {
@@ -149,21 +135,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    method: "GET",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${accessToken}`
-    }
-  });
-
-  if (!userResponse.ok) {
-    return NextResponse.json({ error: "Sesión inválida." }, { status: 401 });
-  }
-
-  const user = (await userResponse.json()) as SupabaseUser;
-
-  if (user.id !== body.sender_id) {
+  if (auth.user.id !== body.sender_id) {
     return NextResponse.json(
       { error: "No puedes enviar mensajes en nombre de otro usuario." },
       { status: 403 }
@@ -193,7 +165,7 @@ export async function POST(request: NextRequest) {
   }
 
   const profilesResponse = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category&id=in.(${body.sender_id},${body.recipient_id})`,
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category&id=in.(${body.sender_id},${body.recipient_id})`,
     {
       method: "GET",
       headers: adminHeaders(serviceRoleKey)
@@ -213,9 +185,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const insertResponse = await fetch(`${supabaseUrl}/rest/v1/private_messages`, {
-    method: "POST",
-    headers: {
+  const insertResponse = await fetch(`${auth.supabaseUrl}/rest/v1/private_messages`, {
+      method: "POST",
+      headers: {
       ...adminHeaders(serviceRoleKey),
       Prefer: "return=representation"
     },
@@ -238,15 +210,15 @@ export async function POST(request: NextRequest) {
 
   if (resendApiKey) {
     try {
-      const recipientEmail = await fetchAuthUserById(
-        supabaseUrl,
-        serviceRoleKey,
-        body.recipient_id
-      );
+        const recipientEmail = await fetchAuthUserById(
+          auth.supabaseUrl,
+          serviceRoleKey,
+          body.recipient_id
+        );
 
       if (recipientEmail) {
         const senderName =
-          senderProfile.full_name?.trim() || user.email || "Un jugador";
+          senderProfile.full_name?.trim() || auth.user.email || "Un jugador";
 
         await sendNotificationEmail({
           apiKey: resendApiKey,
@@ -263,4 +235,87 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, message: insertedMessages[0] });
+}
+
+export async function GET(request: NextRequest) {
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
+
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const senderFilter = `sender_id.eq.${auth.user.id}`;
+  const recipientFilter = `recipient_id.eq.${auth.user.id}`;
+
+  const response = await fetch(
+    `${auth.supabaseUrl}/rest/v1/private_messages?select=id,sender_id,recipient_id,body,read_at,created_at,updated_at&or=(${senderFilter},${recipientFilter})&order=created_at.asc`,
+    {
+      method: "GET",
+      headers: adminHeaders(auth.serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  const rows = (await response.json()) as Array<Record<string, unknown>>;
+
+  if (!response.ok) {
+    return NextResponse.json(
+      { error: "No se pudieron cargar los mensajes privados." },
+      { status: 400 }
+    );
+  }
+
+  return NextResponse.json({ messages: rows });
+}
+
+export async function PATCH(request: NextRequest) {
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
+
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const body = (await request.json()) as MarkReadBody;
+
+  if (!body.sender_id || !body.recipient_id) {
+    return NextResponse.json(
+      { error: "Faltan datos para marcar la conversación como leída." },
+      { status: 400 }
+    );
+  }
+
+  if (body.recipient_id !== auth.user.id) {
+    return NextResponse.json(
+      { error: "No puedes marcar mensajes de otra conversación." },
+      { status: 403 }
+    );
+  }
+
+  const response = await fetch(
+    `${auth.supabaseUrl}/rest/v1/private_messages?sender_id=eq.${body.sender_id}&recipient_id=eq.${body.recipient_id}&read_at=is.null`,
+    {
+      method: "PATCH",
+      headers: {
+        ...adminHeaders(auth.serviceRoleKey),
+        Prefer: "return=minimal"
+      },
+      body: JSON.stringify({
+        read_at: new Date().toISOString()
+      }),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    return NextResponse.json(
+      { error: "No se pudo marcar la conversación como leída." },
+      { status: 400 }
+    );
+  }
+
+  return NextResponse.json({ ok: true });
 }

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AvatarImage } from "@/components/AvatarImage";
 import {
   fetchExternalTournaments,
   fetchMyBookings,
@@ -177,9 +178,10 @@ export default function HomePage() {
 
             {isLogged ? (
               <div className="animate-pop-in flex items-center gap-3 rounded-2xl border border-orange-200 bg-white/90 px-4 py-3 shadow-sm">
-                <img
-                  src={profile?.avatar_url || "/icon-192.png"}
+                <AvatarImage
+                  src={profile?.avatar_url}
                   alt={profile?.full_name || "Tu perfil"}
+                  size={56}
                   className="h-14 w-14 rounded-full border border-orange-200 object-cover"
                 />
                 <div>

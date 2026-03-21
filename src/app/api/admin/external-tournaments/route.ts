@@ -1,48 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
-import { fetchProfileRole, getUser } from "@/lib/supabase";
-
-function adminHeaders(apiKey: string) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
-
-async function requireAdmin(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "");
-
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return { error: "Falta configuración de backend.", status: 503 as const };
-  }
-
-  if (!token) {
-    return { error: "No autenticado", status: 401 as const };
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return { error: "Sesión inválida", status: 401 as const };
-  }
-
-  const role = await fetchProfileRole(user.id, token);
-  if (role !== "admin") {
-    return {
-      error: "No tienes permisos de administrador.",
-      status: 403 as const
-    };
-  }
-
-  return { supabaseUrl, serviceRoleKey, actorId: user.id };
-}
+import { adminHeaders, requireAdminRequest } from "@/lib/server-auth";
 
 export async function GET(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -51,7 +12,8 @@ export async function GET(request: NextRequest) {
     `${auth.supabaseUrl}/rest/v1/external_tournaments?select=id,title,platform,event_date,location,url,notes,is_active,created_at&order=event_date.asc.nullslast,created_at.desc`,
     {
       method: "GET",
-      headers: adminHeaders(auth.serviceRoleKey)
+      headers: adminHeaders(auth.serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -69,7 +31,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin(request);
+  const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -105,7 +67,8 @@ export async function POST(request: NextRequest) {
       url: body.url.trim(),
       notes: body.notes?.trim() || null,
       is_active: body.is_active ?? true
-    })
+    }),
+    cache: "no-store"
   });
 
   const text = await response.text();
@@ -119,7 +82,7 @@ export async function POST(request: NextRequest) {
   }
 
   await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
-    actorId: auth.actorId,
+    actorId: auth.user.id,
     action: "external_tournament.created",
     targetType: "external_tournament",
     targetId: payload[0].id,

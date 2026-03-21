@@ -1,23 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
-
-type SupabaseUser = {
-  id: string;
-  email?: string;
-};
+import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 
 type CreateGroupBody = {
   name?: string;
   memberIds?: string[];
 };
-
-function adminHeaders(apiKey: string) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
 
 function isMissingGroupsError(text: string) {
   return (
@@ -27,45 +15,10 @@ function isMissingGroupsError(text: string) {
   );
 }
 
-async function requireAuth(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return { error: "Falta configuración de backend.", status: 503 as const };
-  }
-
-  if (!authHeader?.startsWith("Bearer ")) {
-    return { error: "No autenticado", status: 401 as const };
-  }
-
-  const accessToken = authHeader.replace("Bearer ", "").trim();
-  const userResponse = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    method: "GET",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${accessToken}`
-    }
-  });
-
-  if (!userResponse.ok) {
-    return { error: "Sesión inválida.", status: 401 as const };
-  }
-
-  const user = (await userResponse.json()) as SupabaseUser;
-  return {
-    supabaseUrl,
-    anonKey,
-    serviceRoleKey,
-    accessToken,
-    user
-  };
-}
-
 export async function GET(request: NextRequest) {
-  const auth = await requireAuth(request);
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -74,7 +27,8 @@ export async function GET(request: NextRequest) {
     `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=group_id,last_read_at&user_id=eq.${auth.user.id}`,
     {
       method: "GET",
-      headers: adminHeaders(auth.serviceRoleKey)
+      headers: adminHeaders(auth.serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -107,21 +61,24 @@ export async function GET(request: NextRequest) {
       `${auth.supabaseUrl}/rest/v1/private_message_groups?select=id,name,created_by,created_at,updated_at&id=in.(${groupFilter})&order=updated_at.desc`,
       {
         method: "GET",
-        headers: adminHeaders(auth.serviceRoleKey)
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
       }
     ),
     fetch(
       `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=group_id,user_id&group_id=in.(${groupFilter})`,
       {
         method: "GET",
-        headers: adminHeaders(auth.serviceRoleKey)
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
       }
     ),
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,body,created_at,profiles(full_name)&group_id=in.(${groupFilter})&order=created_at.desc`,
+      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,body,created_at&group_id=in.(${groupFilter})&order=created_at.desc`,
       {
         method: "GET",
-        headers: adminHeaders(auth.serviceRoleKey)
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
       }
     )
   ]);
@@ -162,7 +119,8 @@ export async function GET(request: NextRequest) {
       `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${profileIds.join(",")})`,
       {
         method: "GET",
-        headers: adminHeaders(auth.serviceRoleKey)
+        headers: adminHeaders(auth.serviceRoleKey),
+        cache: "no-store"
       }
     );
 
@@ -221,7 +179,6 @@ export async function GET(request: NextRequest) {
           sender_id: string;
           body?: string | null;
           created_at: string;
-          profiles?: { full_name?: string | null } | null;
         }) => message.group_id === group.id
       );
 
@@ -253,7 +210,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuth(request);
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -308,7 +267,8 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         name,
         created_by: auth.user.id
-      })
+      }),
+      cache: "no-store"
     }
   );
 
@@ -357,7 +317,8 @@ export async function POST(request: NextRequest) {
           added_by: auth.user.id,
           last_read_at: new Date().toISOString()
         }))
-      )
+      ),
+      cache: "no-store"
     }
   );
 

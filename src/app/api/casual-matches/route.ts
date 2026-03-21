@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import {
+  adminHeaders,
+  requireAuthenticatedRequest
+} from "@/lib/server-auth";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
-import { fetchProfileRole, getUser } from "@/lib/supabase";
 
 type MatchRow = {
   id: string;
@@ -24,14 +27,6 @@ type MatchPayload = {
   score_opponent?: number;
   notes?: string | null;
 };
-
-function adminHeaders(apiKey: string) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
 
 async function fetchProfilesMap(
   supabaseUrl: string,
@@ -110,7 +105,10 @@ function formatMatches(
   }));
 }
 
-function validateScores(scoreSelf: number | undefined, scoreOpponent: number | undefined) {
+function validateScores(
+  scoreSelf: number | undefined,
+  scoreOpponent: number | undefined
+) {
   if (
     typeof scoreSelf !== "number" ||
     Number.isNaN(scoreSelf) ||
@@ -132,35 +130,35 @@ function validateScores(scoreSelf: number | undefined, scoreOpponent: number | u
 }
 
 export async function GET(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "").trim();
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de backend para partidos." },
-      { status: 503 }
-    );
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
+  const serviceRoleKey = auth.serviceRoleKey as string;
 
   try {
-    const result = await fetchMatchesForUser(supabaseUrl, serviceRoleKey, user.id);
+    const result = await fetchMatchesForUser(
+      auth.supabaseUrl,
+      serviceRoleKey,
+      auth.user.id
+    );
     if (result.unavailable) {
       return NextResponse.json({ matches: [], unavailable: true });
     }
 
-    const ids = result.rows.flatMap((match) => [match.player_one_id, match.player_two_id]);
-    const profilesMap = await fetchProfilesMap(supabaseUrl, serviceRoleKey, ids);
+    const ids = result.rows.flatMap((match) => [
+      match.player_one_id,
+      match.player_two_id
+    ]);
+    const profilesMap = await fetchProfilesMap(
+      auth.supabaseUrl,
+      serviceRoleKey,
+      ids
+    );
 
     return NextResponse.json({
       matches: formatMatches(result.rows, profilesMap)
@@ -177,26 +175,15 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "").trim();
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de backend para partidos." },
-      { status: 503 }
-    );
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
+  const serviceRoleKey = auth.serviceRoleKey as string;
 
   const body = (await request.json()) as MatchPayload;
 
@@ -207,7 +194,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (body.opponent_id === user.id) {
+  if (body.opponent_id === auth.user.id) {
     return NextResponse.json(
       { error: "No puedes cargarte un partido contra ti mismo." },
       { status: 400 }
@@ -221,14 +208,17 @@ export async function POST(request: NextRequest) {
 
   const ip = getRequestIp(request);
   const rateLimit = await checkRateLimit({
-    key: `casual-match-create:${ip}:${user.id}`,
+    key: `casual-match-create:${ip}:${auth.user.id}`,
     max: 10,
     windowMs: 60 * 1000
   });
 
   if (!rateLimit.ok) {
     return NextResponse.json(
-      { error: "Demasiados partidos cargados en poco tiempo. Espera unos segundos." },
+      {
+        error:
+          "Demasiados partidos cargados en poco tiempo. Espera unos segundos."
+      },
       {
         status: 429,
         headers: {
@@ -238,15 +228,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const insertResponse = await fetch(`${supabaseUrl}/rest/v1/casual_matches`, {
+  const insertResponse = await fetch(`${auth.supabaseUrl}/rest/v1/casual_matches`, {
     method: "POST",
     headers: {
       ...adminHeaders(serviceRoleKey),
       Prefer: "return=representation"
     },
     body: JSON.stringify({
-      created_by: user.id,
-      player_one_id: user.id,
+      created_by: auth.user.id,
+      player_one_id: auth.user.id,
       player_two_id: body.opponent_id,
       played_on: body.played_on,
       location: body.location?.trim() || null,
@@ -266,7 +256,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const profilesMap = await fetchProfilesMap(supabaseUrl, serviceRoleKey, [
+  const profilesMap = await fetchProfilesMap(auth.supabaseUrl, serviceRoleKey, [
     rows[0].player_one_id,
     rows[0].player_two_id
   ]);

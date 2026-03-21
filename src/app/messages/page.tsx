@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { AvatarImage } from "@/components/AvatarImage";
 import { AppNoticeModal } from "@/components/AppNoticeModal";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
@@ -438,9 +439,10 @@ export default function MessagesPage() {
                 checked={groupFormMemberIds.includes(player.id)}
                 onChange={() => toggleGroupFormMember(player.id)}
               />
-              <img
-                src={player.avatar_url || "/icon-192.png"}
+              <AvatarImage
+                src={player.avatar_url}
                 alt={player.full_name || "Jugador"}
+                size={36}
                 className="h-9 w-9 rounded-full object-cover"
               />
               <div>
@@ -575,9 +577,10 @@ export default function MessagesPage() {
                                 : "border-slate-200 bg-white text-slate-900 hover:-translate-y-0.5 hover:bg-slate-50"
                             }`}
                           >
-                            <img
-                              src={player.avatar_url || "/icon-192.png"}
+                            <AvatarImage
+                              src={player.avatar_url}
                               alt={player.full_name || "Jugador"}
+                              size={44}
                               className={`h-11 w-11 rounded-full border object-cover ${
                                 active ? "border-slate-700" : "border-slate-200"
                               }`}
@@ -692,10 +695,11 @@ export default function MessagesPage() {
                               <div className="flex min-w-0 flex-1 items-center gap-3">
                                 <div className="flex -space-x-3">
                                   {(group.members || []).slice(0, 3).map((member) => (
-                                    <img
+                                    <AvatarImage
                                       key={member.id}
-                                      src={member.avatar_url || "/icon-192.png"}
+                                      src={member.avatar_url}
                                       alt={member.full_name || "Jugador"}
+                                      size={40}
                                       className={`h-10 w-10 rounded-full border-2 object-cover ${
                                         active ? "border-slate-900" : "border-white"
                                       }`}
@@ -758,9 +762,10 @@ export default function MessagesPage() {
                   <>
                     <div className="border-b border-slate-200 pb-4">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={selectedPlayer?.avatar_url || "/icon-192.png"}
+                        <AvatarImage
+                          src={selectedPlayer?.avatar_url}
                           alt={selectedPlayer?.full_name || "Jugador"}
+                          size={56}
                           className="h-14 w-14 rounded-full object-cover"
                         />
                         <div>
@@ -785,9 +790,10 @@ export default function MessagesPage() {
                             >
                               <div className={`flex max-w-[88%] items-end gap-2 ${own ? "flex-row-reverse" : ""}`}>
                                 {!own ? (
-                                  <img
-                                    src={selectedPlayer?.avatar_url || "/icon-192.png"}
+                                  <AvatarImage
+                                    src={selectedPlayer?.avatar_url}
                                     alt={selectedPlayer?.full_name || "Jugador"}
+                                    size={36}
                                     className="h-9 w-9 rounded-full border border-slate-200 object-cover"
                                   />
                                 ) : null}
@@ -889,9 +895,10 @@ export default function MessagesPage() {
                             >
                               <div className={`flex max-w-[88%] items-end gap-2 ${own ? "flex-row-reverse" : ""}`}>
                                 {!own ? (
-                                  <img
-                                    src={message.profiles?.avatar_url || "/icon-192.png"}
+                                  <AvatarImage
+                                    src={message.profiles?.avatar_url}
                                     alt={message.profiles?.full_name || "Jugador"}
+                                    size={36}
                                     className="h-9 w-9 rounded-full border border-slate-200 object-cover"
                                   />
                                 ) : null}

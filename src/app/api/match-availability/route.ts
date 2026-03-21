@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
-import { getUser } from "@/lib/supabase";
+import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 
 type AvailabilityRow = {
   id: string;
@@ -17,14 +17,6 @@ type ProfileRecord = {
   category?: string | null;
   avatar_url?: string | null;
 };
-
-function adminHeaders(apiKey: string) {
-  return {
-    apikey: apiKey,
-    Authorization: `Bearer ${apiKey}`,
-    "Content-Type": "application/json"
-  };
-}
 
 function escapeHtml(value: string) {
   return value
@@ -51,7 +43,8 @@ async function fetchProfilesMap(
     `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${uniqueIds.join(",")})`,
     {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -76,7 +69,8 @@ async function fetchAuthEmails(
   for (const userId of userIds) {
     const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
     });
 
     if (!response.ok) continue;
@@ -153,34 +147,24 @@ function formatRequests(
 }
 
 export async function GET(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "").trim();
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de backend para disponibilidad." },
-      { status: 503 }
-    );
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
+  const serviceRoleKey = auth.serviceRoleKey as string;
 
   const today = getTodayDate();
 
   const currentProfileResponse = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=eq.${user.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=eq.${auth.user.id}&limit=1`,
     {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -188,10 +172,11 @@ export async function GET(request: NextRequest) {
   const currentProfile = currentProfileRows[0];
 
   const requestsResponse = await fetch(
-    `${supabaseUrl}/rest/v1/match_availability_requests?select=id,user_id,available_on,notes,created_at,updated_at&available_on=eq.${today}&order=created_at.desc`,
+    `${auth.supabaseUrl}/rest/v1/match_availability_requests?select=id,user_id,available_on,notes,created_at,updated_at&available_on=eq.${today}&order=created_at.desc`,
     {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -213,15 +198,15 @@ export async function GET(request: NextRequest) {
 
   const rows = (await requestsResponse.json()) as AvailabilityRow[];
   const ids = rows.map((row) => row.user_id);
-  const profilesMap = await fetchProfilesMap(supabaseUrl, serviceRoleKey, ids);
+  const profilesMap = await fetchProfilesMap(auth.supabaseUrl, serviceRoleKey, ids);
 
   const sameCategoryRequests = rows.filter((row) => {
     const profile = profilesMap[row.user_id];
     if (!profile || !currentProfile) return false;
-    return profile.category === currentProfile.category && row.user_id !== user.id;
+    return profile.category === currentProfile.category && row.user_id !== auth.user.id;
   });
 
-  const currentRequest = rows.find((row) => row.user_id === user.id) ?? null;
+  const currentRequest = rows.find((row) => row.user_id === auth.user.id) ?? null;
 
   return NextResponse.json({
     requests: formatRequests(sameCategoryRequests, profilesMap),
@@ -235,33 +220,22 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
+
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const serviceRoleKey = auth.serviceRoleKey as string;
+
   const resendApiKey = process.env.RESEND_API_KEY;
   const fromEmail =
     process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "").trim();
-
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de backend para disponibilidad." },
-      { status: 503 }
-    );
-  }
-
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
-
   const ip = getRequestIp(request);
   const rateLimit = await checkRateLimit({
-    key: `match-availability:${ip}:${user.id}`,
+    key: `match-availability:${ip}:${auth.user.id}`,
     max: 6,
     windowMs: 60 * 1000
   });
@@ -282,10 +256,11 @@ export async function POST(request: NextRequest) {
   const today = getTodayDate();
 
   const profileResponse = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=eq.${user.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=eq.${auth.user.id}&limit=1`,
     {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
     }
   );
   const profileRows = (await profileResponse.json()) as ProfileRecord[];
@@ -299,10 +274,11 @@ export async function POST(request: NextRequest) {
   }
 
   const existingResponse = await fetch(
-    `${supabaseUrl}/rest/v1/match_availability_requests?select=id,user_id,available_on,notes,created_at,updated_at&user_id=eq.${user.id}&available_on=eq.${today}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/match_availability_requests?select=id,user_id,available_on,notes,created_at,updated_at&user_id=eq.${auth.user.id}&available_on=eq.${today}&limit=1`,
     {
       method: "GET",
-      headers: adminHeaders(serviceRoleKey)
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
     }
   );
 
@@ -313,7 +289,7 @@ export async function POST(request: NextRequest) {
 
   if (existingRequest) {
     const updateResponse = await fetch(
-      `${supabaseUrl}/rest/v1/match_availability_requests?id=eq.${existingRequest.id}`,
+      `${auth.supabaseUrl}/rest/v1/match_availability_requests?id=eq.${existingRequest.id}`,
       {
         method: "PATCH",
         headers: {
@@ -322,7 +298,8 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           notes: body.notes?.trim() || null
-        })
+        }),
+        cache: "no-store"
       }
     );
 
@@ -330,7 +307,7 @@ export async function POST(request: NextRequest) {
     requestRow = rows[0] ?? existingRequest;
   } else {
     const insertResponse = await fetch(
-      `${supabaseUrl}/rest/v1/match_availability_requests`,
+      `${auth.supabaseUrl}/rest/v1/match_availability_requests`,
       {
         method: "POST",
         headers: {
@@ -338,10 +315,11 @@ export async function POST(request: NextRequest) {
           Prefer: "return=representation"
         },
         body: JSON.stringify({
-          user_id: user.id,
+          user_id: auth.user.id,
           available_on: today,
           notes: body.notes?.trim() || null
-        })
+        }),
+        cache: "no-store"
       }
     );
 
@@ -358,18 +336,19 @@ export async function POST(request: NextRequest) {
 
   if (resendApiKey && !existingRequest) {
     const categoryPeersResponse = await fetch(
-      `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category&category=eq.${encodeURIComponent(
+      `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category&category=eq.${encodeURIComponent(
         currentProfile.category
-      )}&id=neq.${user.id}`,
+      )}&id=neq.${auth.user.id}`,
       {
         method: "GET",
-        headers: adminHeaders(serviceRoleKey)
+        headers: adminHeaders(serviceRoleKey),
+        cache: "no-store"
       }
     );
 
     const peers = (await categoryPeersResponse.json()) as ProfileRecord[];
     const emails = await fetchAuthEmails(
-      supabaseUrl,
+      auth.supabaseUrl,
       serviceRoleKey,
       peers.map((peer) => peer.id)
     );
@@ -399,37 +378,27 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const authHeader = request.headers.get("authorization");
-  const token = authHeader?.replace("Bearer ", "").trim();
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
 
-  if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json(
-      { error: "Falta configuración de backend para disponibilidad." },
-      { status: 503 }
-    );
+  if ("error" in auth) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  if (!token) {
-    return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-  }
-
-  const user = await getUser(token);
-  if (!user) {
-    return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
-  }
+  const serviceRoleKey = auth.serviceRoleKey as string;
 
   const today = getTodayDate();
 
   const deleteResponse = await fetch(
-    `${supabaseUrl}/rest/v1/match_availability_requests?user_id=eq.${user.id}&available_on=eq.${today}`,
+    `${auth.supabaseUrl}/rest/v1/match_availability_requests?user_id=eq.${auth.user.id}&available_on=eq.${today}`,
     {
       method: "DELETE",
       headers: {
         ...adminHeaders(serviceRoleKey),
         Prefer: "return=minimal"
-      }
+      },
+      cache: "no-store"
     }
   );
 

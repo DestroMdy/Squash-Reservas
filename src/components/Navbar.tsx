@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -93,9 +94,13 @@ export function Navbar() {
       <div className="mx-auto max-w-5xl px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
-            <img
+            <Image
               src="/logo.png"
               alt="Squash Reservas"
+              width={48}
+              height={48}
+              sizes="48px"
+              priority
               className="h-12 w-12 shrink-0 rounded-xl bg-white/95 p-1 object-contain"
             />
             <div className="min-w-0">
@@ -129,19 +134,19 @@ export function Navbar() {
           )}
         </div>
 
-        <nav className="-mx-4 mt-3 overflow-x-auto px-4 pb-1">
-          <div className="flex min-w-max gap-2">
+        <nav className="mt-3">
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="relative whitespace-nowrap rounded-xl border border-white/15 bg-white px-4 py-2 text-sm font-medium text-slate-800 transition hover:border-orange-400 hover:text-black"
+                className="relative flex min-h-11 items-center justify-center rounded-xl border border-white/15 bg-white px-3 py-2 text-center text-sm font-medium leading-tight text-slate-800 transition hover:border-orange-400 hover:text-black"
               >
                 {item.label}
                 {item.href === "/messages" &&
                 unreadCount > 0 &&
                 pathname !== "/messages" ? (
-                  <span className="ml-2 inline-flex min-w-6 items-center justify-center rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-black">
+                  <span className="absolute right-1 top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-black">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 ) : null}
@@ -150,7 +155,7 @@ export function Navbar() {
             {isAdminUser ? (
               <Link
                 href="/admin"
-                className="whitespace-nowrap rounded-xl border border-orange-400/70 bg-orange-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-orange-400"
+                className="flex min-h-11 items-center justify-center rounded-xl border border-orange-400/70 bg-orange-500 px-3 py-2 text-center text-sm font-semibold leading-tight text-black transition hover:bg-orange-400"
               >
                 Admin
               </Link>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { AvatarImage } from "../../components/AvatarImage";
 import { AppNoticeModal } from "../../components/AppNoticeModal";
 import { SectionTitle } from "../../components/SectionTitle";
 import {
@@ -138,9 +139,10 @@ export default function ProfilePage() {
 
         <div className="card rounded-2xl p-5">
           <div className="flex items-center gap-4">
-            <img
-              src={avatarUrl || "/icon-192.png"}
+            <AvatarImage
+              src={avatarUrl}
               alt="Foto de perfil"
+              size={96}
               className="h-24 w-24 rounded-full border border-slate-200 object-cover"
             />
             <div className="flex-1 space-y-2">
