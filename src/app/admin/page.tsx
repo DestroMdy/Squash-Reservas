@@ -73,6 +73,58 @@ function getEmptyTournamentForm(): TournamentFormState {
   };
 }
 
+type AdminSectionKey =
+  | "report"
+  | "tournaments"
+  | "audit"
+  | "players"
+  | "bookings";
+
+function AdminAccordionSection({
+  title,
+  description,
+  count,
+  open,
+  onToggle,
+  children
+}: {
+  title: string;
+  description: string;
+  count?: number | string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="card overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-slate-50"
+        aria-expanded={open}
+      >
+        <div className="min-w-0">
+          <p className="text-lg font-semibold text-slate-900">{title}</p>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-3">
+          {typeof count !== "undefined" ? (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+              {count}
+            </span>
+          ) : null}
+          <span className="text-xl leading-none text-slate-400">
+            {open ? "−" : "+"}
+          </span>
+        </div>
+      </button>
+
+      {open ? <div className="border-t border-slate-200 p-5">{children}</div> : null}
+    </section>
+  );
+}
+
 export default function AdminPage() {
   const tournamentEditorRef = useRef<HTMLDivElement | null>(null);
   const [role, setRole] = useState<string | null>(null);
@@ -102,6 +154,13 @@ export default function AdminPage() {
   const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<Record<AdminSectionKey, boolean>>({
+    report: true,
+    tournaments: false,
+    audit: false,
+    players: false,
+    bookings: false
+  });
   function redirectToLogin() {
     if (typeof window === "undefined") {
       return;
@@ -249,6 +308,13 @@ export default function AdminPage() {
       year: "numeric"
     }).format(date);
   }, [reportMonth]);
+
+  function toggleSection(section: AdminSectionKey) {
+    setOpenSections((current) => ({
+      ...current,
+      [section]: !current[section]
+    }));
+  }
 
   function startEditing(booking: BookingWithRelations) {
     setEditingId(booking.id);
@@ -485,17 +551,14 @@ export default function AdminPage() {
       ) : null}
 
       {!error && role === "admin" ? (
-        <section className="card space-y-5 p-5">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Historial mensual de reservas
-              </h2>
-              <p className="text-sm text-slate-500">
-                Resumen para cierre mensual y deteccion de horarios mas usados.
-              </p>
-            </div>
-
+        <AdminAccordionSection
+          title="Historial mensual de reservas"
+          description="Resumen para cierre mensual y detección de horarios más usados."
+          count={monthlyReport.total}
+          open={openSections.report}
+          onToggle={() => toggleSection("report")}
+        >
+          <div className="space-y-5">
             <div className="w-full md:w-56">
               <label className="mb-1 block text-sm font-medium text-slate-700">
                 Mes del reporte
@@ -507,9 +570,8 @@ export default function AdminPage() {
                 onChange={(event) => setReportMonth(event.target.value)}
               />
             </div>
-          </div>
 
-          <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-4">
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-sm text-slate-500">Reservas del mes</p>
               <p className="mt-2 text-3xl font-bold text-slate-900">
@@ -552,10 +614,10 @@ export default function AdminPage() {
           <div className="grid gap-4 xl:grid-cols-3">
             <article className="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 className="text-base font-semibold text-slate-900">
-                Horarios mas usados
+                Horarios más usados
               </h3>
               <p className="mb-3 text-sm text-slate-500">
-                Ranking del mes segun reservas activas.
+                Ranking del mes según reservas activas.
               </p>
 
               {monthlyReport.byHour.length ? (
@@ -581,7 +643,7 @@ export default function AdminPage() {
 
             <article className="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 className="text-base font-semibold text-slate-900">
-                Canchas mas usadas
+                Canchas más usadas
               </h3>
               <p className="mb-3 text-sm text-slate-500">
                 Ranking por cantidad de reservas activas.
@@ -610,7 +672,7 @@ export default function AdminPage() {
 
             <article className="rounded-2xl border border-slate-200 bg-white p-4">
               <h3 className="text-base font-semibold text-slate-900">
-                Dias con mas movimiento
+                Días con más movimiento
               </h3>
               <p className="mb-3 text-sm text-slate-500">
                 Fechas con mayor cantidad de reservas activas.
@@ -636,21 +698,20 @@ export default function AdminPage() {
                 </p>
               )}
             </article>
+            </div>
           </div>
-        </section>
+        </AdminAccordionSection>
       ) : null}
 
       {!error && role === "admin" ? (
-        <section className="card space-y-5 p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Torneos externos
-              </h2>
-              <p className="text-sm text-slate-500">
-                Carga links manuales a torneos de Rankedin, Tournament Software u otras plataformas.
-              </p>
-            </div>
+        <AdminAccordionSection
+          title="Torneos externos"
+          description="Carga y edita links manuales a torneos externos."
+          count={tournaments.length}
+          open={openSections.tournaments}
+          onToggle={() => toggleSection("tournaments")}
+        >
+          <div className="flex justify-start">
             <a
               href="/tournaments"
               target="_blank"
@@ -891,12 +952,18 @@ export default function AdminPage() {
               </p>
             )}
           </div>
-        </section>
+        </AdminAccordionSection>
       ) : null}
 
       {!error && role === "admin" ? (
-        <section className="card space-y-4 p-5">
-          <div className="flex items-center justify-between gap-3">
+        <AdminAccordionSection
+          title="Auditoría admin"
+          description="Historial reciente de acciones sensibles realizadas por administradores."
+          count={auditLogs.length}
+          open={openSections.audit}
+          onToggle={() => toggleSection("audit")}
+        >
+          <div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900">
                 Auditoría admin
@@ -948,7 +1015,7 @@ export default function AdminPage() {
               Todavía no hay acciones auditadas para mostrar.
             </p>
           )}
-        </section>
+        </AdminAccordionSection>
       ) : null}
 
       {!error && role === "admin" ? (
@@ -970,7 +1037,13 @@ export default function AdminPage() {
 
       {!loading && !error && role === "admin" ? (
         <div className="space-y-4">
-          <section className="card p-5">
+          <AdminAccordionSection
+            title="Gestión de jugadores"
+            description="Administra perfiles y permisos sin mezclarlo con el resto del panel."
+            count={players.length}
+            open={openSections.players}
+            onToggle={() => toggleSection("players")}
+          >
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">
@@ -1046,8 +1119,15 @@ export default function AdminPage() {
                 );
               })}
             </div>
-          </section>
+          </AdminAccordionSection>
 
+          <AdminAccordionSection
+            title="Reservas"
+            description="Despliega este bloque solo cuando necesites buscar o editar turnos."
+            count={filteredBookings.length}
+            open={openSections.bookings}
+            onToggle={() => toggleSection("bookings")}
+          >
           {filteredBookings.map((booking) => {
             const playerName = booking.profiles?.full_name || "Sin nombre";
             const playerCategory =
@@ -1201,6 +1281,7 @@ export default function AdminPage() {
               No se encontraron reservas con ese filtro.
             </p>
           ) : null}
+          </AdminAccordionSection>
         </div>
       ) : null}
     </div>
