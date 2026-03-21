@@ -90,63 +90,63 @@ export function Navbar() {
   }
 
   return (
-    <header className="border-b border-orange-500/40 bg-black text-white shadow-[0_14px_34px_-22px_rgba(0,0,0,0.9)]">
-      <div className="mx-auto max-w-5xl px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
+    <header className="border-b border-orange-500/40 bg-black text-white shadow-[0_12px_28px_-22px_rgba(0,0,0,0.9)]">
+      <div className="mx-auto max-w-5xl px-3 py-2 sm:px-4 sm:py-3">
+        <div className="flex items-center justify-between gap-2 sm:gap-3">
           <Link href="/" className="flex min-w-0 items-center gap-3">
             <Image
               src="/logo.png"
               alt="Squash Reservas"
-              width={48}
-              height={48}
-              sizes="48px"
+              width={40}
+              height={40}
+              sizes="(max-width: 640px) 40px, 48px"
               priority
-              className="h-12 w-12 shrink-0 rounded-xl bg-white/95 p-1 object-contain"
+              className="h-10 w-10 shrink-0 rounded-lg bg-white/95 p-1 object-contain sm:h-12 sm:w-12 sm:rounded-xl"
             />
             <div className="min-w-0">
-              <p className="font-dodger truncate text-sm text-white/75">
+              <p className="font-dodger truncate text-[11px] text-white/75 sm:text-sm">
                 La Martineta
               </p>
-              <p className="truncate text-xl font-bold leading-tight text-white">
+              <p className="truncate text-lg font-bold leading-tight text-white sm:text-xl">
                 Squash Reservas
               </p>
             </div>
           </Link>
 
           {!mounted ? (
-            <span className="shrink-0 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white/80">
+            <span className="shrink-0 rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/80 sm:rounded-xl sm:px-4 sm:py-2 sm:text-sm">
               Cargando...
             </span>
           ) : isLogged ? (
             <button
               onClick={handleLogout}
-              className="shrink-0 rounded-xl border border-orange-400/60 bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-orange-50"
+              className="shrink-0 rounded-lg border border-orange-400/60 bg-white px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-orange-50 sm:rounded-xl sm:px-4 sm:py-2 sm:text-sm"
             >
               Salir
             </button>
           ) : (
             <Link
               href="/login"
-              className="shrink-0 rounded-xl bg-orange-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-orange-400"
+              className="shrink-0 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-black transition hover:bg-orange-400 sm:rounded-xl sm:px-4 sm:py-2 sm:text-sm"
             >
               Ingresar
             </Link>
           )}
         </div>
 
-        <nav className="mt-3">
-          <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+        <nav className="mt-2 sm:mt-3">
+          <div className="grid grid-cols-4 gap-1.5 sm:flex sm:flex-wrap sm:gap-2">
             {navItems.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="relative flex min-h-11 items-center justify-center rounded-xl border border-white/15 bg-white px-3 py-2 text-center text-sm font-medium leading-tight text-slate-800 transition hover:border-orange-400 hover:text-black"
+                className="relative flex min-h-9 items-center justify-center rounded-lg border border-white/15 bg-white px-2 py-1.5 text-center text-xs font-medium leading-tight text-slate-800 transition hover:border-orange-400 hover:text-black sm:min-h-11 sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm"
               >
                 {item.label}
                 {item.href === "/messages" &&
                 unreadCount > 0 &&
                 pathname !== "/messages" ? (
-                  <span className="absolute right-1 top-1 inline-flex min-w-6 items-center justify-center rounded-full bg-orange-500 px-2 py-0.5 text-xs font-semibold text-black">
+                  <span className="absolute right-0.5 top-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-black sm:right-1 sm:top-1 sm:min-w-6 sm:px-2 sm:text-xs">
                     {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 ) : null}
@@ -155,7 +155,7 @@ export function Navbar() {
             {isAdminUser ? (
               <Link
                 href="/admin"
-                className="flex min-h-11 items-center justify-center rounded-xl border border-orange-400/70 bg-orange-500 px-3 py-2 text-center text-sm font-semibold leading-tight text-black transition hover:bg-orange-400"
+                className="flex min-h-9 items-center justify-center rounded-lg border border-orange-400/70 bg-orange-500 px-2 py-1.5 text-center text-xs font-semibold leading-tight text-black transition hover:bg-orange-400 sm:min-h-11 sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm"
               >
                 Admin
               </Link>
