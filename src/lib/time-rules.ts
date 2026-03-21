@@ -4,7 +4,8 @@ function buildLocalDate(slotDate: string, hours = 0, minutes = 0, seconds = 0) {
 }
 
 function buildSlotDateTime(slotDate: string, time: string) {
-  return new Date(`${slotDate}T${time}`);
+  const [hours, minutes, seconds] = time.split(":").map(Number);
+  return buildLocalDate(slotDate, hours || 0, minutes || 0, seconds || 0);
 }
 
 function getWeekday(slotDate: string) {
