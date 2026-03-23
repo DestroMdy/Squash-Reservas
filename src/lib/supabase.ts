@@ -3,7 +3,13 @@ import {
   encodeUserCookie,
   USER_COOKIE_NAME
 } from "@/lib/session-cookies";
-import { LiveScoreboard, LiveStreamConfig } from "@/types/db";
+import {
+  AdminLiveCourtState,
+  LiveCourtId,
+  LiveCourtState,
+  LiveScoreboard,
+  LiveStreamConfig
+} from "@/types/db";
 
 export interface SessionData {
   access_token: string;
@@ -1215,11 +1221,15 @@ export async function fetchExternalTournaments() {
 }
 
 export async function fetchLiveStream() {
-  const payload = await fetchLiveStreamStatus();
+  const payload = await fetchLiveCenterStatus();
   return payload.stream;
 }
 
 export async function fetchLiveStreamStatus() {
+  return fetchLiveCenterStatus();
+}
+
+export async function fetchLiveCenterStatus() {
   const response = await fetch("/api/live-stream", {
     method: "GET",
     cache: "no-store"
@@ -1227,6 +1237,7 @@ export async function fetchLiveStreamStatus() {
 
   const payload = await parseJsonPayload<{
     error?: string;
+    courts?: LiveCourtState[];
     stream?: LiveStreamConfig | null;
     scoreboard?: LiveScoreboard | null;
     unavailable?: boolean;
@@ -1237,6 +1248,7 @@ export async function fetchLiveStreamStatus() {
   }
 
   return {
+    courts: payload?.courts || [],
     stream: payload?.stream || null,
     scoreboard: payload?.scoreboard || null,
     unavailable: payload?.unavailable === true
@@ -1251,8 +1263,7 @@ export async function fetchAdminLiveStream(token: string) {
 
   const payload = await parseJsonPayload<{
     error?: string;
-    stream?: LiveStreamConfig | null;
-    squore_post_url?: string | null;
+    courts?: AdminLiveCourtState[];
   }>(response);
 
   if (!response.ok) {
@@ -1262,20 +1273,21 @@ export async function fetchAdminLiveStream(token: string) {
   }
 
   return {
-    stream: payload?.stream || null,
-    squore_post_url: payload?.squore_post_url || null
+    courts: payload?.courts || []
   };
 }
 
 export async function updateLiveStream(
   token: string,
   payload: {
+    court_id: LiveCourtId;
     title: string;
     description?: string | null;
     banner_url?: string | null;
     youtube_url: string;
     starts_at?: string | null;
     is_live: boolean;
+    tournament_software_post_url?: string | null;
   }
 ) {
   const response = await authedRouteRequest("/api/admin/live-stream", {
@@ -1287,8 +1299,8 @@ export async function updateLiveStream(
 
   const result = await parseJsonPayload<{
     error?: string;
-    stream?: LiveStreamConfig | null;
-    squore_post_url?: string | null;
+    court?: AdminLiveCourtState | null;
+    courts?: AdminLiveCourtState[];
   }>(response);
 
   if (!response.ok) {
@@ -1298,12 +1310,12 @@ export async function updateLiveStream(
   }
 
   return {
-    stream: result?.stream || null,
-    squore_post_url: result?.squore_post_url || null
+    court: result?.court || null,
+    courts: result?.courts || []
   };
 }
 
-export async function clearLiveStream(token: string) {
+export async function clearLiveStreamLegacy(token: string) {
   const response = await authedRouteRequest("/api/admin/live-stream", {
     method: "DELETE",
     token
@@ -1316,6 +1328,29 @@ export async function clearLiveStream(token: string) {
   if (!response.ok) {
     throw new Error(result?.error || "No se pudo limpiar la transmisión.");
   }
+}
+
+export async function clearLiveStream(token: string, courtId: LiveCourtId) {
+  const response = await authedRouteRequest(
+    `/api/admin/live-stream?court_id=${encodeURIComponent(courtId)}`,
+    {
+      method: "DELETE",
+      token
+    }
+  );
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    courts?: AdminLiveCourtState[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo limpiar la transmision.");
+  }
+
+  return {
+    courts: result?.courts || []
+  };
 }
 
 export async function fetchAdminExternalTournaments(token: string) {

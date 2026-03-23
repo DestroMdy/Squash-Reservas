@@ -1,6 +1,7 @@
 export type Role = "player" | "admin";
 export type BookingStatus = "confirmed" | "cancelled" | "completed";
 export type ExternalTournamentPlatform = "rankedin" | "tournamentsoftware" | "otro";
+export type LiveCourtId = "court-1" | "court-2";
 
 export interface LiveStreamConfig {
   title: string;
@@ -13,6 +14,10 @@ export interface LiveStreamConfig {
   starts_at: string | null;
   updated_at: string;
   updated_by: string | null;
+}
+
+export interface AdminLiveStreamConfig extends LiveStreamConfig {
+  tournament_software_post_url: string | null;
 }
 
 export interface LiveScoreboard {
@@ -33,6 +38,21 @@ export interface LiveScoreboard {
   played_on: string | null;
   played_time: string | null;
   updated_at: string;
+}
+
+export interface LiveCourtState {
+  id: LiveCourtId;
+  label: string;
+  stream: LiveStreamConfig | null;
+  scoreboard: LiveScoreboard | null;
+}
+
+export interface AdminLiveCourtState {
+  id: LiveCourtId;
+  label: string;
+  stream: AdminLiveStreamConfig | null;
+  scoreboard: LiveScoreboard | null;
+  squore_post_url: string | null;
 }
 
 export interface Profile {

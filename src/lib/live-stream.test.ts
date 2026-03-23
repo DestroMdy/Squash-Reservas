@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   buildYouTubeEmbedUrl,
   extractYouTubeVideoId,
+  getPrimaryLiveCourt,
+  normalizeAdminLiveStreamConfig,
   normalizeLiveStreamConfig
 } from "@/lib/live-stream";
 
@@ -31,5 +33,58 @@ describe("live-stream helpers", () => {
     expect(config?.youtube_video_id).toBe("dQw4w9WgXcQ");
     expect(config?.embed_url).toBe(buildYouTubeEmbedUrl("dQw4w9WgXcQ"));
     expect(config?.is_live).toBe(true);
+  });
+
+  it("keeps the optional Tournament Software URL on admin config", () => {
+    const config = normalizeAdminLiveStreamConfig({
+      title: "Cancha 1",
+      youtube_url: "https://www.youtube.com/live/dQw4w9WgXcQ",
+      tournament_software_post_url: "https://example.com/post-result"
+    });
+
+    expect(config?.tournament_software_post_url).toBe(
+      "https://example.com/post-result"
+    );
+  });
+
+  it("prefers the first active live court over scheduled courts", () => {
+    const primaryCourt = getPrimaryLiveCourt([
+      {
+        id: "court-1",
+        label: "Cancha 1",
+        stream: {
+          title: "Cancha 1",
+          description: null,
+          banner_url: null,
+          youtube_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          youtube_video_id: "dQw4w9WgXcQ",
+          embed_url: buildYouTubeEmbedUrl("dQw4w9WgXcQ"),
+          is_live: false,
+          starts_at: null,
+          updated_at: new Date().toISOString(),
+          updated_by: null
+        },
+        scoreboard: null
+      },
+      {
+        id: "court-2",
+        label: "Cancha 2",
+        stream: {
+          title: "Cancha 2",
+          description: null,
+          banner_url: null,
+          youtube_url: "https://www.youtube.com/watch?v=3JZ_D3ELwOQ",
+          youtube_video_id: "3JZ_D3ELwOQ",
+          embed_url: buildYouTubeEmbedUrl("3JZ_D3ELwOQ"),
+          is_live: true,
+          starts_at: null,
+          updated_at: new Date().toISOString(),
+          updated_by: null
+        },
+        scoreboard: null
+      }
+    ]);
+
+    expect(primaryCourt?.id).toBe("court-2");
   });
 });

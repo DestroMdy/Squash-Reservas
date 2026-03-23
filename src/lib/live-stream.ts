@@ -1,4 +1,14 @@
-import { LiveStreamConfig } from "@/types/db";
+import {
+  AdminLiveStreamConfig,
+  LiveCourtId,
+  LiveCourtState,
+  LiveStreamConfig
+} from "@/types/db";
+
+export const LIVE_COURTS = [
+  { id: "court-1", label: "Cancha 1" },
+  { id: "court-2", label: "Cancha 2" }
+] as const satisfies ReadonlyArray<{ id: LiveCourtId; label: string }>;
 
 type RawLiveStreamConfig = Partial<LiveStreamConfig> & {
   title?: string | null;
@@ -11,6 +21,18 @@ type RawLiveStreamConfig = Partial<LiveStreamConfig> & {
   updated_at?: string | null;
   updated_by?: string | null;
 };
+
+type RawAdminLiveStreamConfig = RawLiveStreamConfig & {
+  tournament_software_post_url?: string | null;
+};
+
+export function isLiveCourtId(value: string | null | undefined): value is LiveCourtId {
+  return LIVE_COURTS.some((court) => court.id === value);
+}
+
+export function getLiveCourtLabel(courtId: LiveCourtId) {
+  return LIVE_COURTS.find((court) => court.id === courtId)?.label || "Cancha";
+}
 
 export function extractYouTubeVideoId(url: string) {
   const value = url.trim();
@@ -96,4 +118,44 @@ export function normalizeLiveStreamConfig(
     updated_at: updatedAt,
     updated_by: raw.updated_by?.trim() || null
   } as LiveStreamConfig;
+}
+
+export function normalizeAdminLiveStreamConfig(
+  raw: RawAdminLiveStreamConfig | null | undefined
+) {
+  const normalized = normalizeLiveStreamConfig(raw);
+
+  if (!normalized) {
+    return null;
+  }
+
+  return {
+    ...normalized,
+    tournament_software_post_url: normalizeOptionalHttpUrl(
+      raw?.tournament_software_post_url
+    )
+  } as AdminLiveStreamConfig;
+}
+
+export function toPublicLiveStreamConfig(
+  stream: AdminLiveStreamConfig | LiveStreamConfig | null | undefined
+) {
+  if (!stream) {
+    return null;
+  }
+
+  const { tournament_software_post_url: _ignored, ...publicStream } =
+    stream as AdminLiveStreamConfig;
+
+  return publicStream as LiveStreamConfig;
+}
+
+export function getPrimaryLiveCourt<T extends Pick<LiveCourtState, "stream">>(
+  courts: T[]
+) {
+  return (
+    courts.find((court) => court.stream?.is_live) ||
+    courts.find((court) => court.stream) ||
+    null
+  );
 }

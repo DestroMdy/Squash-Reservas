@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
-import { fetchExternalTournaments, fetchLiveStream } from "@/lib/supabase";
+import { fetchExternalTournaments, fetchLiveCenterStatus } from "@/lib/supabase";
 import {
   ExternalTournament,
   ExternalTournamentPlatform,
-  LiveStreamConfig
+  LiveCourtState
 } from "@/types/db";
 
 type TournamentFilter =
@@ -384,7 +384,7 @@ function TournamentCard({
 
 export default function TournamentsPage() {
   const [tournaments, setTournaments] = useState<ExternalTournament[]>([]);
-  const [liveStream, setLiveStream] = useState<LiveStreamConfig | null>(null);
+  const [liveCourts, setLiveCourts] = useState<LiveCourtState[]>([]);
   const [filter, setFilter] = useState<TournamentFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -398,17 +398,17 @@ export default function TournamentsPage() {
       try {
         setLoading(true);
         setError(null);
-        const [data, currentLiveStream] = await Promise.all([
+        const [data, liveCenter] = await Promise.all([
           fetchExternalTournaments(),
-          fetchLiveStream().catch(() => null)
+          fetchLiveCenterStatus().catch(() => null)
         ]);
         setTournaments(data ?? []);
-        setLiveStream(currentLiveStream);
+        setLiveCourts(liveCenter?.courts || []);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "No se pudieron cargar los torneos."
         );
-        setLiveStream(null);
+        setLiveCourts([]);
       } finally {
         setLoading(false);
       }
@@ -502,6 +502,26 @@ export default function TournamentsPage() {
     [tournaments]
   );
 
+  const configuredLiveCourts = useMemo(
+    () => liveCourts.filter((court) => court.stream),
+    [liveCourts]
+  );
+
+  const activeLiveCount = useMemo(
+    () => liveCourts.filter((court) => court.stream?.is_live).length,
+    [liveCourts]
+  );
+
+  const featuredLiveCourt = useMemo(
+    () =>
+      configuredLiveCourts.find((court) => court.stream?.is_live) ||
+      configuredLiveCourts[0] ||
+      null,
+    [configuredLiveCourts]
+  );
+
+  const liveStream = featuredLiveCourt?.stream || null;
+
   return (
     <div className="space-y-6">
       <Link href="/" className="btn-secondary">
@@ -519,25 +539,25 @@ export default function TournamentsPage() {
       {!loading && !error ? (
         tournaments.length ? (
           <div className="space-y-6">
-            {liveStream ? (
+            {featuredLiveCourt?.stream ? (
               <section className="card overflow-hidden rounded-2xl border border-orange-200 p-5 shadow-[0_20px_40px_-28px_rgba(249,115,22,0.35)]">
                 <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex-1 space-y-3">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
-                        {liveStream.is_live ? "En vivo ahora" : "Próxima transmisión"}
+                        {liveStream?.is_live ? "En vivo ahora" : "Próxima transmisión"}
                       </span>
                       <span className="text-sm text-slate-500">
-                        {formatStreamStartsAt(liveStream.starts_at)}
+                        {formatStreamStartsAt(liveStream?.starts_at || null)}
                       </span>
                     </div>
                     <div className="space-y-2">
                       <h2 className="text-2xl font-bold text-slate-950">
-                        {liveStream.title}
+                        {liveStream?.title}
                       </h2>
-                      {liveStream.description ? (
+                      {liveStream?.description ? (
                         <p className="max-w-2xl text-sm leading-6 text-slate-600">
-                          {liveStream.description}
+                          {liveStream?.description}
                         </p>
                       ) : (
                         <p className="max-w-2xl text-sm leading-6 text-slate-600">
@@ -551,7 +571,7 @@ export default function TournamentsPage() {
                         Ver transmisión
                       </Link>
                       <a
-                        href={liveStream.youtube_url}
+                        href={liveStream?.youtube_url || "#"}
                         target="_blank"
                         rel="noreferrer"
                         className="btn-secondary"
@@ -561,11 +581,11 @@ export default function TournamentsPage() {
                     </div>
                   </div>
 
-                  {liveStream.banner_url ? (
+                  {liveStream?.banner_url ? (
                     <div
                       className="h-44 w-full rounded-2xl border border-orange-200 bg-slate-100 shadow-sm lg:h-52 lg:w-[320px]"
                       style={{
-                        backgroundImage: `url("${liveStream.banner_url}")`,
+                        backgroundImage: `url("${liveStream?.banner_url || ""}")`,
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
                         backgroundSize: "cover"

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getLiveCourtLabel, isLiveCourtId } from "@/lib/live-stream";
 import { normalizeSquoreScoreboard } from "@/lib/live-score";
 import {
-  getStoredLiveStream,
-  getStoredLiveSquoreToken,
+  getStoredLiveCourtSquoreToken,
+  getStoredLiveCourtStream,
   isLiveStreamStoreConfigured,
-  setStoredLiveScoreboard
+  setStoredLiveCourtScoreboard
 } from "@/lib/live-stream-store";
 
 function responseHeaders() {
@@ -44,6 +45,30 @@ async function readPayload(request: NextRequest) {
   }
 }
 
+async function forwardToTournamentSoftware(
+  destinationUrl: string,
+  request: NextRequest,
+  rawBody: ArrayBuffer
+) {
+  const headers = new Headers();
+  const contentType = request.headers.get("content-type");
+
+  if (contentType) {
+    headers.set("Content-Type", contentType);
+  }
+
+  const response = await fetch(destinationUrl, {
+    method: "POST",
+    headers,
+    body: rawBody,
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error(`Tournament Software respondio ${response.status}`);
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (!isLiveStreamStoreConfigured()) {
     return NextResponse.json(
@@ -53,28 +78,41 @@ export async function POST(request: NextRequest) {
   }
 
   const url = new URL(request.url);
+  const courtId = url.searchParams.get("courtId");
+
+  if (!isLiveCourtId(courtId)) {
+    return NextResponse.json(
+      { error: "La cancha del vivo no es valida." },
+      { status: 400, headers: responseHeaders() }
+    );
+  }
+
   const providedToken =
     url.searchParams.get("token") ||
     request.headers.get("x-squore-token") ||
     "";
 
-  const expectedToken = await getStoredLiveSquoreToken();
+  const expectedToken = await getStoredLiveCourtSquoreToken(courtId);
 
   if (!expectedToken || providedToken !== expectedToken) {
     return NextResponse.json(
-      { error: "Token de Squore inválido." },
+      { error: "Token de Squore invalido." },
       { status: 401, headers: responseHeaders() }
     );
   }
 
-  const stream = await getStoredLiveStream();
+  const stream = await getStoredLiveCourtStream(courtId);
 
   if (!stream) {
     return NextResponse.json(
-      { error: "No hay transmisión configurada para vincular el marcador." },
+      {
+        error: `No hay transmision configurada para ${getLiveCourtLabel(courtId)}.`
+      },
       { status: 409, headers: responseHeaders() }
     );
   }
+
+  const rawBody = await request.clone().arrayBuffer();
 
   try {
     const payload = await readPayload(request);
@@ -87,10 +125,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await setStoredLiveScoreboard(scoreboard);
+    await setStoredLiveCourtScoreboard(courtId, scoreboard);
+
+    let forwardedToTournamentSoftware = false;
+
+    if (stream.tournament_software_post_url) {
+      try {
+        await forwardToTournamentSoftware(
+          stream.tournament_software_post_url,
+          request,
+          rawBody
+        );
+        forwardedToTournamentSoftware = true;
+      } catch (error) {
+        console.error(
+          `No se pudo reenviar el score de ${courtId} a Tournament Software`,
+          error
+        );
+      }
+    }
 
     return NextResponse.json(
-      { ok: true, scoreboard },
+      {
+        ok: true,
+        court_id: courtId,
+        scoreboard,
+        forwarded_to_tournament_software: forwardedToTournamentSoftware
+      },
       { headers: responseHeaders() }
     );
   } catch {

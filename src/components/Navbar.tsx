@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
-  fetchLiveStream,
+  fetchLiveCenterStatus,
   fetchUnreadPrivateMessagesCount,
   fetchProfileRole,
   getSession,
@@ -47,8 +47,10 @@ export function Navbar() {
     let intervalId: number | null = null;
 
     async function updateAuth() {
-      const liveStream = await fetchLiveStream().catch(() => null);
-      setHasActiveLiveStream(Boolean(liveStream?.is_live));
+      const liveCenter = await fetchLiveCenterStatus().catch(() => null);
+      setHasActiveLiveStream(
+        Boolean(liveCenter?.courts?.some((court) => court.stream?.is_live))
+      );
 
       const session = getSession();
       setIsLogged(Boolean(session?.access_token));

@@ -5,12 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import {
   fetchExternalTournaments,
-  fetchLiveStream,
+  fetchLiveCenterStatus,
   fetchMyBookings,
   fetchProfile,
   getSession
 } from "@/lib/supabase";
-import { LiveStreamConfig } from "@/types/db";
+import { LiveCourtState } from "@/types/db";
 
 type NextBooking = {
   id: string;
@@ -83,8 +83,9 @@ export default function HomePage() {
   const [nextBooking, setNextBooking] = useState<NextBooking | null>(null);
   const [featuredTournament, setFeaturedTournament] =
     useState<HomeTournament | null>(null);
-  const [featuredLiveStream, setFeaturedLiveStream] =
-    useState<LiveStreamConfig | null>(null);
+  const [featuredLiveCourt, setFeaturedLiveCourt] =
+    useState<LiveCourtState | null>(null);
+  const [configuredLiveCourtCount, setConfiguredLiveCourtCount] = useState(0);
 
   useEffect(() => {
     async function updateAuthState() {
@@ -127,9 +128,9 @@ export default function HomePage() {
       }
 
       try {
-        const [tournaments, liveStream] = await Promise.all([
+        const [tournaments, liveCenter] = await Promise.all([
           fetchExternalTournaments() as Promise<HomeTournament[]>,
-          fetchLiveStream()
+          fetchLiveCenterStatus()
         ]);
         const today = new Date();
         const todayMarker = new Date(
@@ -156,11 +157,21 @@ export default function HomePage() {
               return aMarker - bMarker;
             })[0] ?? null;
 
+        const configuredCourts = (liveCenter.courts || []).filter(
+          (court) => court.stream
+        );
+        const primaryCourt =
+          configuredCourts.find((court) => court.stream?.is_live) ||
+          configuredCourts[0] ||
+          null;
+
         setFeaturedTournament(nextTournament);
-        setFeaturedLiveStream(liveStream);
+        setFeaturedLiveCourt(primaryCourt);
+        setConfiguredLiveCourtCount(configuredCourts.length);
       } catch {
         setFeaturedTournament(null);
-        setFeaturedLiveStream(null);
+        setFeaturedLiveCourt(null);
+        setConfiguredLiveCourtCount(0);
       }
     }
 
@@ -221,7 +232,7 @@ export default function HomePage() {
               </Link>
             ) : null}
             <Link href="/schedule" className="btn-accent text-center">
-              Reserva aquí
+              Reserva aqui
             </Link>
             <Link href="/my-bookings" className="btn-secondary text-center">
               Mis reservas
@@ -240,7 +251,7 @@ export default function HomePage() {
         <div className="grid gap-4 lg:grid-cols-[1.2fr,0.8fr]">
           <article className="card animate-fade-up p-6" style={{ animationDelay: "80ms" }}>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Tu próximo turno
+              Tu proximo turno
             </p>
             {isLogged ? (
               nextBooking ? (
@@ -264,7 +275,7 @@ export default function HomePage() {
                       {nextBooking.time_slots?.end_time?.slice(0, 5)}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">
-                      Tu próximo turno aparece acá para que entres directo a gestionarlo.
+                      Tu proximo turno aparece aca para que entres directo a gestionarlo.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-3">
@@ -279,10 +290,10 @@ export default function HomePage() {
               ) : (
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5">
                   <p className="text-base font-medium text-slate-900">
-                    Todavía no tenés una próxima reserva.
+                    Todavia no tenes una proxima reserva.
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    Si ves un horario libre, podés reservarlo en unos segundos.
+                    Si ves un horario libre, podes reservarlo en unos segundos.
                   </p>
                   <div className="mt-4">
                     <Link href="/schedule" className="btn-accent text-center">
@@ -294,10 +305,10 @@ export default function HomePage() {
             ) : (
               <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5">
                 <p className="text-base font-medium text-slate-900">
-                  Iniciá sesión para ver tu próxima reserva.
+                  Inicia sesion para ver tu proxima reserva.
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Vas a tener tu próximo turno, mensajes y accesos rápidos en un solo lugar.
+                  Vas a tener tu proximo turno, mensajes y accesos rapidos en un solo lugar.
                 </p>
                 <div className="mt-4">
                   <Link href="/login" className="btn-primary text-center">
@@ -309,28 +320,34 @@ export default function HomePage() {
           </article>
 
           <div className="space-y-4">
-            {featuredLiveStream ? (
+            {featuredLiveCourt?.stream ? (
               <article
                 className="card animate-fade-up p-6"
                 style={{ animationDelay: "120ms" }}
               >
                 <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                  {featuredLiveStream.is_live
-                    ? "En vivo ahora"
-                    : "Próxima transmisión"}
+                  {featuredLiveCourt.stream.is_live
+                    ? configuredLiveCourtCount > 1
+                      ? "Centro en vivo"
+                      : "En vivo ahora"
+                    : "Proxima transmision"}
                 </p>
                 <div className="mt-4 space-y-3">
                   <div className="rounded-2xl bg-black px-4 py-4 text-white shadow-sm">
                     <p className="font-dodger text-xs text-orange-300">La Martineta</p>
                     <h2 className="mt-3 text-2xl font-bold leading-tight">
-                      {featuredLiveStream.title}
+                      {configuredLiveCourtCount > 1
+                        ? `Centro en vivo · ${featuredLiveCourt.label}`
+                        : featuredLiveCourt.stream.title}
                     </h2>
                     <p className="mt-3 text-sm text-slate-300">
-                      {formatStreamDateTime(featuredLiveStream.starts_at)}
+                      {formatStreamDateTime(featuredLiveCourt.stream.starts_at)}
                     </p>
                     <p className="mt-1 text-sm text-orange-300">
-                      {featuredLiveStream.is_live
-                        ? "YouTube en vivo"
+                      {featuredLiveCourt.stream.is_live
+                        ? configuredLiveCourtCount > 1
+                          ? `${configuredLiveCourtCount} canchas listas`
+                          : "YouTube en vivo"
                         : "Programado en YouTube"}
                     </p>
                   </div>
@@ -339,10 +356,10 @@ export default function HomePage() {
                       href="/live"
                       className="btn-accent block w-full text-center sm:w-auto"
                     >
-                      Ver transmisión
+                      Ver centro en vivo
                     </Link>
                     <a
-                      href={featuredLiveStream.youtube_url}
+                      href={featuredLiveCourt.stream.youtube_url}
                       target="_blank"
                       rel="noreferrer"
                       className="btn-secondary block w-full text-center sm:w-auto"
@@ -356,7 +373,7 @@ export default function HomePage() {
 
             <article className="card animate-fade-up p-6" style={{ animationDelay: "140ms" }}>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                Próximo torneo
+                Proximo torneo
               </p>
               {featuredTournament ? (
                 <div className="mt-4 space-y-3">
@@ -382,10 +399,10 @@ export default function HomePage() {
               ) : (
                 <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5">
                   <p className="text-base font-medium text-slate-900">
-                    No hay torneos próximos cargados.
+                    No hay torneos proximos cargados.
                   </p>
                   <p className="mt-1 text-sm text-slate-500">
-                    Cuando haya uno nuevo, va a quedar destacado acá.
+                    Cuando haya uno nuevo, va a quedar destacado aca.
                   </p>
                 </div>
               )}

@@ -2,25 +2,30 @@ import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
 import {
   extractYouTubeVideoId,
+  getLiveCourtLabel,
+  isLiveCourtId,
   normalizeOptionalHttpUrl
 } from "@/lib/live-stream";
 import {
-  clearStoredLiveStream,
-  clearStoredLiveScoreboard,
-  ensureStoredLiveSquoreToken,
-  getStoredLiveStream,
+  clearStoredLiveCourtScoreboard,
+  clearStoredLiveCourtStream,
+  ensureStoredLiveCourtSquoreToken,
+  getStoredLiveCenterConfigMap,
+  getStoredLiveCenterCourts,
   isLiveStreamStoreConfigured,
-  setStoredLiveStream
+  setStoredLiveCourtStream
 } from "@/lib/live-stream-store";
 import { requireAdminRequest } from "@/lib/server-auth";
 
 type LiveStreamBody = {
+  court_id?: string;
   title?: string;
   description?: string | null;
   banner_url?: string | null;
   youtube_url?: string;
   starts_at?: string | null;
   is_live?: boolean;
+  tournament_software_post_url?: string | null;
 };
 
 function responseHeaders() {
@@ -31,9 +36,39 @@ function responseHeaders() {
   };
 }
 
-function buildSquorePostUrl(request: NextRequest, token: string) {
+function buildSquorePostUrl(request: NextRequest, courtId: string, token: string) {
   const origin = new URL(request.url).origin;
-  return `${origin}/api/live-stream/squore?token=${token}`;
+  return `${origin}/api/live-stream/squore?courtId=${courtId}&token=${token}`;
+}
+
+function getRequestedCourtId(request: NextRequest) {
+  const courtId = new URL(request.url).searchParams.get("court_id");
+
+  if (!isLiveCourtId(courtId)) {
+    return null;
+  }
+
+  return courtId;
+}
+
+async function buildAdminCourtsResponse(request: NextRequest) {
+  const [courts, configMap] = await Promise.all([
+    getStoredLiveCenterCourts(),
+    getStoredLiveCenterConfigMap()
+  ]);
+
+  return Promise.all(
+    courts.map(async (court) => {
+      const token = await ensureStoredLiveCourtSquoreToken(court.id);
+      return {
+        id: court.id,
+        label: court.label,
+        stream: configMap[court.id],
+        scoreboard: court.scoreboard,
+        squore_post_url: buildSquorePostUrl(request, court.id, token)
+      };
+    })
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -51,21 +86,17 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const stream = await getStoredLiveStream();
-    const squoreToken = await ensureStoredLiveSquoreToken();
+    const courts = await buildAdminCourtsResponse(request);
 
     return NextResponse.json(
-      {
-        stream,
-        squore_post_url: buildSquorePostUrl(request, squoreToken)
-      },
+      { courts },
       {
         headers: responseHeaders()
       }
     );
   } catch {
     return NextResponse.json(
-      { error: "No se pudo cargar la transmision en vivo." },
+      { error: "No se pudo cargar la configuracion del centro en vivo." },
       {
         status: 400,
         headers: responseHeaders()
@@ -89,6 +120,13 @@ export async function PATCH(request: NextRequest) {
   }
 
   const body = (await request.json()) as LiveStreamBody;
+
+  if (!isLiveCourtId(body.court_id)) {
+    return NextResponse.json(
+      { error: "La cancha del vivo no es valida." },
+      { status: 400, headers: responseHeaders() }
+    );
+  }
 
   if (!body.title?.trim() || !body.youtube_url?.trim()) {
     return NextResponse.json(
@@ -118,8 +156,23 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  const normalizedTournamentSoftwareUrl =
+    body.tournament_software_post_url === undefined
+      ? null
+      : normalizeOptionalHttpUrl(body.tournament_software_post_url);
+
+  if (
+    body.tournament_software_post_url?.trim() &&
+    !normalizedTournamentSoftwareUrl
+  ) {
+    return NextResponse.json(
+      { error: "La URL de Tournament Software no es valida." },
+      { status: 400, headers: responseHeaders() }
+    );
+  }
+
   try {
-    const stream = await setStoredLiveStream({
+    const stream = await setStoredLiveCourtStream(body.court_id, {
       title: body.title.trim(),
       description: body.description?.trim() || null,
       banner_url: normalizedBannerUrl,
@@ -128,19 +181,23 @@ export async function PATCH(request: NextRequest) {
       is_live: Boolean(body.is_live),
       starts_at: body.starts_at?.trim() || null,
       updated_at: new Date().toISOString(),
-      updated_by: auth.user.id
+      updated_by: auth.user.id,
+      tournament_software_post_url: normalizedTournamentSoftwareUrl
     });
-    const squoreToken = await ensureStoredLiveSquoreToken();
+
+    const courts = await buildAdminCourtsResponse(request);
 
     await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
       actorId: auth.user.id,
       action: "live_stream.updated",
       targetType: "live_stream",
-      targetId: "current",
+      targetId: body.court_id,
       details: {
+        court_label: getLiveCourtLabel(body.court_id),
         title: stream.title,
         banner_url: stream.banner_url,
         youtube_url: stream.youtube_url,
+        tournament_software_post_url: stream.tournament_software_post_url,
         is_live: stream.is_live,
         starts_at: stream.starts_at
       }
@@ -149,8 +206,8 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       {
         ok: true,
-        stream,
-        squore_post_url: buildSquorePostUrl(request, squoreToken)
+        court: courts.find((court) => court.id === body.court_id) || null,
+        courts
       },
       {
         headers: responseHeaders()
@@ -158,7 +215,7 @@ export async function PATCH(request: NextRequest) {
     );
   } catch {
     return NextResponse.json(
-      { error: "No se pudo guardar la transmision en vivo." },
+      { error: "No se pudo guardar la configuracion de la cancha." },
       {
         status: 400,
         headers: responseHeaders()
@@ -181,27 +238,42 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
+  const courtId = getRequestedCourtId(request);
+
+  if (!courtId) {
+    return NextResponse.json(
+      { error: "Debes indicar la cancha a limpiar." },
+      { status: 400, headers: responseHeaders() }
+    );
+  }
+
   try {
-    await clearStoredLiveStream();
-    await clearStoredLiveScoreboard();
+    await Promise.all([
+      clearStoredLiveCourtStream(courtId),
+      clearStoredLiveCourtScoreboard(courtId)
+    ]);
+
+    const courts = await buildAdminCourtsResponse(request);
 
     await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
       actorId: auth.user.id,
       action: "live_stream.deleted",
       targetType: "live_stream",
-      targetId: "current",
-      details: null
+      targetId: courtId,
+      details: {
+        court_label: getLiveCourtLabel(courtId)
+      }
     }).catch(() => null);
 
     return NextResponse.json(
-      { ok: true },
+      { ok: true, courts },
       {
         headers: responseHeaders()
       }
     );
   } catch {
     return NextResponse.json(
-      { error: "No se pudo limpiar la transmision en vivo." },
+      { error: "No se pudo limpiar la cancha del centro en vivo." },
       {
         status: 400,
         headers: responseHeaders()

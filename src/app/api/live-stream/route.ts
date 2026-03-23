@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  getStoredLiveScoreboard,
-  getStoredLiveStream,
+  getStoredLiveCenterCourts,
   isLiveStreamStoreConfigured
 } from "@/lib/live-stream-store";
+import { getPrimaryLiveCourt, toPublicLiveStreamConfig } from "@/lib/live-stream";
 
 function responseHeaders() {
   return {
@@ -15,7 +15,7 @@ function responseHeaders() {
 export async function GET() {
   if (!isLiveStreamStoreConfigured()) {
     return NextResponse.json(
-      { stream: null, unavailable: true },
+      { courts: [], stream: null, scoreboard: null, unavailable: true },
       {
         status: 200,
         headers: responseHeaders()
@@ -24,15 +24,17 @@ export async function GET() {
   }
 
   try {
-    const [stream, scoreboard] = await Promise.all([
-      getStoredLiveStream(),
-      getStoredLiveScoreboard()
-    ]);
+    const courts = (await getStoredLiveCenterCourts()).map((court) => ({
+      ...court,
+      stream: toPublicLiveStreamConfig(court.stream)
+    }));
+    const primaryCourt = getPrimaryLiveCourt(courts);
 
     return NextResponse.json(
       {
-        stream,
-        scoreboard,
+        courts,
+        stream: primaryCourt?.stream || null,
+        scoreboard: primaryCourt?.scoreboard || null,
         unavailable: false
       },
       {
@@ -41,7 +43,7 @@ export async function GET() {
     );
   } catch {
     return NextResponse.json(
-      { stream: null, unavailable: true },
+      { courts: [], stream: null, scoreboard: null, unavailable: true },
       {
         status: 200,
         headers: responseHeaders()

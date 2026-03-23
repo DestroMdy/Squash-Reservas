@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AdminLiveCenterSection } from "@/components/AdminLiveCenterSection";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
-  clearLiveStream,
   createExternalTournament,
-  fetchAdminLiveStream,
   deleteProfileAsAdmin,
   deleteExternalTournament,
   fetchAdminAuditLogs,
@@ -18,7 +17,6 @@ import {
   getSession,
   getUser,
   promoteProfileToAdmin,
-  updateLiveStream,
   updateExternalTournament,
   updateBookingAsAdmin
 } from "@/lib/supabase";
@@ -244,14 +242,12 @@ export default function AdminPage() {
       allBookings,
       allPlayers,
       externalTournaments,
-      currentLiveStreamData,
       auditData
     ] = await Promise.all([
       fetchBookingStats(token),
       fetchAllBookings(token),
       fetchPlayers(token),
       fetchAdminExternalTournaments(token),
-      fetchAdminLiveStream(token),
       fetchAdminAuditLogs(token)
     ]);
 
@@ -259,20 +255,6 @@ export default function AdminPage() {
     setBookings(allBookings ?? []);
     setPlayers(allPlayers ?? []);
     setTournaments(externalTournaments ?? []);
-    setLiveStream(currentLiveStreamData.stream ?? null);
-    setSquorePostUrl(currentLiveStreamData.squore_post_url ?? null);
-    setLiveStreamForm(
-      currentLiveStreamData.stream
-        ? {
-            title: currentLiveStreamData.stream.title,
-            description: currentLiveStreamData.stream.description || "",
-            banner_url: currentLiveStreamData.stream.banner_url || "",
-            youtube_url: currentLiveStreamData.stream.youtube_url,
-            starts_at: formatDateTimeLocalValue(currentLiveStreamData.stream.starts_at),
-            is_live: currentLiveStreamData.stream.is_live
-          }
-        : getEmptyLiveStreamForm()
-    );
     setAuditLogs(auditData.logs ?? []);
     setAuditEnabled(auditData.enabled !== false);
     setError(null);
@@ -585,7 +567,15 @@ export default function AdminPage() {
     }
   }
 
-  async function handleSaveLiveStream() {
+  function handleSaveLiveStream() {
+    return;
+  }
+
+  function handleClearLiveStream() {
+    return;
+  }
+
+  /* async function handleSaveLiveStream() {
     try {
       const token = getSession()?.access_token;
       if (!token) {
@@ -669,6 +659,8 @@ export default function AdminPage() {
     }
   }
 
+  } */
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -700,9 +692,21 @@ export default function AdminPage() {
 
       {!error && role === "admin" ? (
         <AdminAccordionSection
+          title="Transmision en vivo"
+          description="Configura el centro en vivo de Cancha 1 y Cancha 2 con YouTube, Squore y reenvio a Tournament Software."
+          count="2 canchas"
+          open={openSections.live}
+          onToggle={() => toggleSection("live")}
+        >
+          <AdminLiveCenterSection />
+        </AdminAccordionSection>
+      ) : null}
+
+      {false ? (
+        <AdminAccordionSection
           title="Transmisión en vivo"
           description="Carga el link de YouTube del vivo o de la próxima transmisión."
-          count={liveStream ? (liveStream.is_live ? "ON" : "Programada") : "Off"}
+          count={liveStream?.is_live ? "ON" : liveStream ? "Programada" : "Off"}
           open={openSections.live}
           onToggle={() => toggleSection("live")}
         >
@@ -718,7 +722,7 @@ export default function AdminPage() {
               </a>
               {liveStream?.youtube_url ? (
                 <a
-                  href={liveStream.youtube_url}
+                  href={liveStream?.youtube_url || "#"}
                   target="_blank"
                   rel="noreferrer"
                   className="btn-secondary whitespace-nowrap"
@@ -750,36 +754,36 @@ export default function AdminPage() {
                 <div className="flex flex-wrap items-center gap-3">
                   <span
                     className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                      liveStream.is_live
+                      liveStream?.is_live
                         ? "bg-red-100 text-red-700"
                         : "bg-orange-100 text-orange-700"
                     }`}
                   >
-                    {liveStream.is_live ? "En vivo ahora" : "Próxima transmisión"}
+                    {liveStream?.is_live ? "En vivo ahora" : "Próxima transmisión"}
                   </span>
                   <span className="text-sm text-slate-500">
-                    Actualizado: {new Date(liveStream.updated_at).toLocaleString("es-AR")}
+                    Actualizado: {new Date(liveStream?.updated_at || "").toLocaleString("es-AR")}
                   </span>
                 </div>
                 <h3 className="mt-3 text-lg font-semibold text-slate-900">
-                  {liveStream.title}
+                  {liveStream?.title}
                 </h3>
-                {liveStream.description ? (
+                {liveStream?.description ? (
                   <p className="mt-1 text-sm text-slate-600">
-                    {liveStream.description}
+                    {liveStream?.description}
                   </p>
                 ) : null}
-                {liveStream.banner_url ? (
+                {liveStream?.banner_url ? (
                   <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-slate-100">
                     <div
                       className="h-32 w-full bg-cover bg-center bg-no-repeat"
-                      style={{ backgroundImage: `url("${liveStream.banner_url}")` }}
+                      style={{ backgroundImage: `url("${liveStream?.banner_url || ""}")` }}
                     />
                   </div>
                 ) : null}
                 <p className="mt-2 text-sm text-slate-500">
-                  {liveStream.starts_at
-                    ? `Inicio: ${new Date(liveStream.starts_at).toLocaleString("es-AR")}`
+                  {liveStream?.starts_at
+                    ? `Inicio: ${new Date(liveStream!.starts_at!).toLocaleString("es-AR")}`
                     : "Sin horario programado"}
                 </p>
               </article>
