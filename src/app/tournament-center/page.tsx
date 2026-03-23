@@ -4,7 +4,26 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
 import { fetchExternalTournaments, fetchLiveCenterStatus } from "@/lib/supabase";
-import { ExternalTournament, LiveCourtState } from "@/types/db";
+import {
+  ExternalTournament,
+  ExternalTournamentPlatform,
+  LiveCourtState
+} from "@/types/db";
+
+const GENERIC_TOURNAMENT_URLS = new Set([
+  "https://rankedin.com/",
+  "https://www.rankedin.com/",
+  "https://www.tournamentsoftware.com/",
+  "https://tournamentsoftware.com/"
+]);
+
+const OFFICIAL_PLATFORM_HOSTS: Record<
+  Extract<ExternalTournamentPlatform, "rankedin" | "tournamentsoftware">,
+  string[]
+> = {
+  rankedin: ["rankedin.com"],
+  tournamentsoftware: ["tournamentsoftware.com"]
+};
 
 function formatTournamentDate(date: string | null | undefined) {
   if (!date) return "Fecha a confirmar";
@@ -33,6 +52,33 @@ function getTournamentMarker(tournament: ExternalTournament) {
   }
 
   return new Date(`${tournament.event_date}T12:00:00`).getTime();
+}
+
+function hasRealTournamentLink(tournament: ExternalTournament) {
+  return Boolean(tournament.url?.trim()) && !GENERIC_TOURNAMENT_URLS.has(tournament.url.trim());
+}
+
+function hasFeaturedTournamentLink(tournament: ExternalTournament) {
+  if (!hasRealTournamentLink(tournament)) {
+    return false;
+  }
+
+  if (
+    tournament.platform !== "rankedin" &&
+    tournament.platform !== "tournamentsoftware"
+  ) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(tournament.url.trim()).hostname.toLowerCase();
+    return OFFICIAL_PLATFORM_HOSTS[tournament.platform].some(
+      (allowedHost) =>
+        hostname === allowedHost || hostname.endsWith(`.${allowedHost}`)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export default function TournamentCenterPage() {
@@ -167,14 +213,16 @@ export default function TournamentCenterPage() {
                   <Link href="/tournaments" className="btn-secondary">
                     Ver todos los torneos
                   </Link>
-                  <a
-                    href={highlightedTournament.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="btn-accent"
-                  >
-                    Ver enlace oficial
-                  </a>
+                  {hasFeaturedTournamentLink(highlightedTournament) ? (
+                    <a
+                      href={highlightedTournament.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-accent"
+                    >
+                      Ver enlace oficial
+                    </a>
+                  ) : null}
                 </div>
               </div>
             </section>
