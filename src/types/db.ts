@@ -2,6 +2,18 @@ export type Role = "player" | "admin";
 export type BookingStatus = "confirmed" | "cancelled" | "completed";
 export type ExternalTournamentPlatform = "rankedin" | "tournamentsoftware" | "otro";
 
+export interface LiveStreamConfig {
+  title: string;
+  description: string | null;
+  youtube_url: string;
+  youtube_video_id: string;
+  embed_url: string;
+  is_live: boolean;
+  starts_at: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
 export interface Profile {
   id: string;
   full_name: string | null;

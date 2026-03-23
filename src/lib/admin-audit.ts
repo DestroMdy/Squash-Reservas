@@ -4,7 +4,9 @@ export type AdminAuditAction =
   | "profile.promoted"
   | "external_tournament.created"
   | "external_tournament.updated"
-  | "external_tournament.deleted";
+  | "external_tournament.deleted"
+  | "live_stream.updated"
+  | "live_stream.deleted";
 
 export type AdminAuditLogPayload = {
   actorId: string;

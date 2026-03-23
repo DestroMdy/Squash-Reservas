@@ -3,6 +3,7 @@ import {
   encodeUserCookie,
   USER_COOKIE_NAME
 } from "@/lib/session-cookies";
+import { LiveStreamConfig } from "@/types/db";
 
 export interface SessionData {
   access_token: string;
@@ -1211,6 +1212,91 @@ export async function fetchExternalTournaments() {
   return rest<any[]>(
     "external_tournaments?select=id,title,platform,event_date,location,url,notes,is_active,created_at&is_active=eq.true&order=event_date.asc.nullslast,created_at.desc"
   );
+}
+
+export async function fetchLiveStream() {
+  const response = await fetch("/api/live-stream", {
+    method: "GET",
+    cache: "no-store"
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    stream?: LiveStreamConfig | null;
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar la transmisión.");
+  }
+
+  return payload?.stream || null;
+}
+
+export async function fetchAdminLiveStream(token: string) {
+  const response = await authedRouteRequest("/api/admin/live-stream", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    stream?: LiveStreamConfig | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudo cargar la configuración del vivo."
+    );
+  }
+
+  return payload?.stream || null;
+}
+
+export async function updateLiveStream(
+  token: string,
+  payload: {
+    title: string;
+    description?: string | null;
+    youtube_url: string;
+    starts_at?: string | null;
+    is_live: boolean;
+  }
+) {
+  const response = await authedRouteRequest("/api/admin/live-stream", {
+    method: "PATCH",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify(payload)
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    stream?: LiveStreamConfig | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error || "No se pudo guardar la transmisión en vivo."
+    );
+  }
+
+  return result?.stream || null;
+}
+
+export async function clearLiveStream(token: string) {
+  const response = await authedRouteRequest("/api/admin/live-stream", {
+    method: "DELETE",
+    token
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo limpiar la transmisión.");
+  }
 }
 
 export async function fetchAdminExternalTournaments(token: string) {

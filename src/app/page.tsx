@@ -5,10 +5,12 @@ import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import {
   fetchExternalTournaments,
+  fetchLiveStream,
   fetchMyBookings,
   fetchProfile,
   getSession
 } from "@/lib/supabase";
+import { LiveStreamConfig } from "@/types/db";
 
 type NextBooking = {
   id: string;
@@ -63,6 +65,17 @@ function formatTournamentDate(date: string | null | undefined) {
   }).format(new Date(`${date}T12:00:00`));
 }
 
+function formatStreamDateTime(value: string | null | undefined) {
+  if (!value) return "Horario a confirmar";
+
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 export default function HomePage() {
   const [isLogged, setIsLogged] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -70,6 +83,8 @@ export default function HomePage() {
   const [nextBooking, setNextBooking] = useState<NextBooking | null>(null);
   const [featuredTournament, setFeaturedTournament] =
     useState<HomeTournament | null>(null);
+  const [featuredLiveStream, setFeaturedLiveStream] =
+    useState<LiveStreamConfig | null>(null);
 
   useEffect(() => {
     async function updateAuthState() {
@@ -112,7 +127,10 @@ export default function HomePage() {
       }
 
       try {
-        const tournaments = (await fetchExternalTournaments()) as HomeTournament[];
+        const [tournaments, liveStream] = await Promise.all([
+          fetchExternalTournaments() as Promise<HomeTournament[]>,
+          fetchLiveStream()
+        ]);
         const today = new Date();
         const todayMarker = new Date(
           today.getFullYear(),
@@ -139,8 +157,10 @@ export default function HomePage() {
             })[0] ?? null;
 
         setFeaturedTournament(nextTournament);
+        setFeaturedLiveStream(liveStream);
       } catch {
         setFeaturedTournament(null);
+        setFeaturedLiveStream(null);
       }
     }
 
@@ -288,42 +308,89 @@ export default function HomePage() {
             )}
           </article>
 
-          <article className="card animate-fade-up p-6" style={{ animationDelay: "140ms" }}>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              Próximo torneo
-            </p>
-            {featuredTournament ? (
-              <div className="mt-4 space-y-3">
-                <div className="rounded-2xl bg-black px-4 py-4 text-white shadow-sm">
-                  <p className="font-dodger text-xs text-orange-300">La Martineta</p>
-                  <h2 className="mt-3 text-2xl font-bold leading-tight">
-                    {featuredTournament.title}
-                  </h2>
-                  <p className="mt-3 text-sm text-slate-300">
-                    {formatTournamentDate(featuredTournament.event_date)}
+          <div className="space-y-4">
+            {featuredLiveStream ? (
+              <article
+                className="card animate-fade-up p-6"
+                style={{ animationDelay: "120ms" }}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                  {featuredLiveStream.is_live
+                    ? "En vivo ahora"
+                    : "Próxima transmisión"}
+                </p>
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl bg-black px-4 py-4 text-white shadow-sm">
+                    <p className="font-dodger text-xs text-orange-300">La Martineta</p>
+                    <h2 className="mt-3 text-2xl font-bold leading-tight">
+                      {featuredLiveStream.title}
+                    </h2>
+                    <p className="mt-3 text-sm text-slate-300">
+                      {formatStreamDateTime(featuredLiveStream.starts_at)}
+                    </p>
+                    <p className="mt-1 text-sm text-orange-300">
+                      {featuredLiveStream.is_live
+                        ? "YouTube en vivo"
+                        : "Programado en YouTube"}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <Link
+                      href="/live"
+                      className="btn-accent block w-full text-center sm:w-auto"
+                    >
+                      Ver transmisión
+                    </Link>
+                    <a
+                      href={featuredLiveStream.youtube_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn-secondary block w-full text-center sm:w-auto"
+                    >
+                      Abrir YouTube
+                    </a>
+                  </div>
+                </div>
+              </article>
+            ) : null}
+
+            <article className="card animate-fade-up p-6" style={{ animationDelay: "140ms" }}>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Próximo torneo
+              </p>
+              {featuredTournament ? (
+                <div className="mt-4 space-y-3">
+                  <div className="rounded-2xl bg-black px-4 py-4 text-white shadow-sm">
+                    <p className="font-dodger text-xs text-orange-300">La Martineta</p>
+                    <h2 className="mt-3 text-2xl font-bold leading-tight">
+                      {featuredTournament.title}
+                    </h2>
+                    <p className="mt-3 text-sm text-slate-300">
+                      {formatTournamentDate(featuredTournament.event_date)}
+                    </p>
+                    <p className="mt-1 text-sm text-orange-300">
+                      {featuredTournament.location || "Sede a confirmar"}
+                    </p>
+                  </div>
+                  <Link
+                    href="/tournaments"
+                    className="btn-secondary block w-full text-center sm:w-auto"
+                  >
+                    Ver calendario de torneos
+                  </Link>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5">
+                  <p className="text-base font-medium text-slate-900">
+                    No hay torneos próximos cargados.
                   </p>
-                  <p className="mt-1 text-sm text-orange-300">
-                    {featuredTournament.location || "Sede a confirmar"}
+                  <p className="mt-1 text-sm text-slate-500">
+                    Cuando haya uno nuevo, va a quedar destacado acá.
                   </p>
                 </div>
-                <Link
-                  href="/tournaments"
-                  className="btn-secondary block w-full text-center sm:w-auto"
-                >
-                  Ver calendario de torneos
-                </Link>
-              </div>
-            ) : (
-              <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-5">
-                <p className="text-base font-medium text-slate-900">
-                  No hay torneos próximos cargados.
-                </p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Cuando haya uno nuevo, va a quedar destacado acá.
-                </p>
-              </div>
-            )}
-          </article>
+              )}
+            </article>
+          </div>
         </div>
       </section>
     </div>

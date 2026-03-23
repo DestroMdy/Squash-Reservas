@@ -4,7 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
+  clearLiveStream,
   createExternalTournament,
+  fetchAdminLiveStream,
   deleteProfileAsAdmin,
   deleteExternalTournament,
   fetchAdminAuditLogs,
@@ -16,6 +18,7 @@ import {
   getSession,
   getUser,
   promoteProfileToAdmin,
+  updateLiveStream,
   updateExternalTournament,
   updateBookingAsAdmin
 } from "@/lib/supabase";
@@ -25,6 +28,7 @@ import {
   BookingStatus,
   ExternalTournament,
   ExternalTournamentPlatform,
+  LiveStreamConfig,
   Profile
 } from "@/types/db";
 
@@ -46,6 +50,14 @@ type TournamentFormState = {
   url: string;
   notes: string;
   is_active: boolean;
+};
+
+type LiveStreamFormState = {
+  title: string;
+  description: string;
+  youtube_url: string;
+  starts_at: string;
+  is_live: boolean;
 };
 
 const statusOptions: BookingStatus[] = ["confirmed", "cancelled", "completed"];
@@ -73,8 +85,34 @@ function getEmptyTournamentForm(): TournamentFormState {
   };
 }
 
+function getEmptyLiveStreamForm(): LiveStreamFormState {
+  return {
+    title: "",
+    description: "",
+    youtube_url: "",
+    starts_at: "",
+    is_live: false
+  };
+}
+
+function formatDateTimeLocalValue(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 type AdminSectionKey =
   | "report"
+  | "live"
   | "tournaments"
   | "audit"
   | "players"
@@ -136,6 +174,7 @@ export default function AdminPage() {
   const [bookings, setBookings] = useState<BookingWithRelations[]>([]);
   const [players, setPlayers] = useState<Profile[]>([]);
   const [tournaments, setTournaments] = useState<ExternalTournament[]>([]);
+  const [liveStream, setLiveStream] = useState<LiveStreamConfig | null>(null);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditEnabled, setAuditEnabled] = useState(true);
   const [filter, setFilter] = useState("");
@@ -143,19 +182,25 @@ export default function AdminPage() {
   const [tournamentForm, setTournamentForm] = useState<TournamentFormState>(
     getEmptyTournamentForm()
   );
+  const [liveStreamForm, setLiveStreamForm] = useState<LiveStreamFormState>(
+    getEmptyLiveStreamForm()
+  );
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingTournament, setSavingTournament] = useState(false);
+  const [savingLiveStream, setSavingLiveStream] = useState(false);
   const [deletingTournamentId, setDeletingTournamentId] = useState<string | null>(null);
+  const [clearingLiveStream, setClearingLiveStream] = useState(false);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<AdminSectionKey, boolean>>({
     report: true,
+    live: false,
     tournaments: false,
     audit: false,
     players: false,
@@ -196,12 +241,14 @@ export default function AdminPage() {
       allBookings,
       allPlayers,
       externalTournaments,
+      currentLiveStream,
       auditData
     ] = await Promise.all([
       fetchBookingStats(token),
       fetchAllBookings(token),
       fetchPlayers(token),
       fetchAdminExternalTournaments(token),
+      fetchAdminLiveStream(token),
       fetchAdminAuditLogs(token)
     ]);
 
@@ -209,6 +256,18 @@ export default function AdminPage() {
     setBookings(allBookings ?? []);
     setPlayers(allPlayers ?? []);
     setTournaments(externalTournaments ?? []);
+    setLiveStream(currentLiveStream ?? null);
+    setLiveStreamForm(
+      currentLiveStream
+        ? {
+            title: currentLiveStream.title,
+            description: currentLiveStream.description || "",
+            youtube_url: currentLiveStream.youtube_url,
+            starts_at: formatDateTimeLocalValue(currentLiveStream.starts_at),
+            is_live: currentLiveStream.is_live
+          }
+        : getEmptyLiveStreamForm()
+    );
     setAuditLogs(auditData.logs ?? []);
     setAuditEnabled(auditData.enabled !== false);
     setError(null);
@@ -521,6 +580,85 @@ export default function AdminPage() {
     }
   }
 
+  async function handleSaveLiveStream() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setSavingLiveStream(true);
+      setMessage(null);
+      setError(null);
+
+      const stream = await updateLiveStream(token, {
+        title: liveStreamForm.title,
+        description: liveStreamForm.description || null,
+        youtube_url: liveStreamForm.youtube_url,
+        starts_at: liveStreamForm.starts_at
+          ? new Date(liveStreamForm.starts_at).toISOString()
+          : null,
+        is_live: liveStreamForm.is_live
+      });
+
+      setLiveStream(stream);
+      setLiveStreamForm(
+        stream
+          ? {
+              title: stream.title,
+              description: stream.description || "",
+              youtube_url: stream.youtube_url,
+              starts_at: formatDateTimeLocalValue(stream.starts_at),
+              is_live: stream.is_live
+            }
+          : getEmptyLiveStreamForm()
+      );
+      setMessage("Transmisión en vivo guardada.");
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar la transmisión en vivo"
+      );
+    } finally {
+      setSavingLiveStream(false);
+    }
+  }
+
+  async function handleClearLiveStream() {
+    const confirmed = window.confirm(
+      "Vas a limpiar la transmisión actual. Los usuarios dejarán de verla en la app."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setClearingLiveStream(true);
+      setMessage(null);
+      setError(null);
+
+      await clearLiveStream(token);
+      setLiveStream(null);
+      setLiveStreamForm(getEmptyLiveStreamForm());
+      setMessage("Transmisión en vivo limpiada.");
+    } catch (err) {
+      setMessage(
+        err instanceof Error
+          ? err.message
+          : "No se pudo limpiar la transmisión en vivo"
+      );
+    } finally {
+      setClearingLiveStream(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -548,6 +686,194 @@ export default function AdminPage() {
             <p className="mt-2 text-3xl font-bold">{stats.cancelled}</p>
           </article>
         </div>
+      ) : null}
+
+      {!error && role === "admin" ? (
+        <AdminAccordionSection
+          title="Transmisión en vivo"
+          description="Carga el link de YouTube del vivo o de la próxima transmisión."
+          count={liveStream ? (liveStream.is_live ? "ON" : "Programada") : "Off"}
+          open={openSections.live}
+          onToggle={() => toggleSection("live")}
+        >
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-3">
+              <a
+                href="/live"
+                target="_blank"
+                rel="noreferrer"
+                className="btn-secondary whitespace-nowrap"
+              >
+                Ver página pública
+              </a>
+              {liveStream?.youtube_url ? (
+                <a
+                  href={liveStream.youtube_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn-secondary whitespace-nowrap"
+                >
+                  Abrir YouTube
+                </a>
+              ) : null}
+            </div>
+
+            {liveStream ? (
+              <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                      liveStream.is_live
+                        ? "bg-red-100 text-red-700"
+                        : "bg-orange-100 text-orange-700"
+                    }`}
+                  >
+                    {liveStream.is_live ? "En vivo ahora" : "Próxima transmisión"}
+                  </span>
+                  <span className="text-sm text-slate-500">
+                    Actualizado: {new Date(liveStream.updated_at).toLocaleString("es-AR")}
+                  </span>
+                </div>
+                <h3 className="mt-3 text-lg font-semibold text-slate-900">
+                  {liveStream.title}
+                </h3>
+                {liveStream.description ? (
+                  <p className="mt-1 text-sm text-slate-600">
+                    {liveStream.description}
+                  </p>
+                ) : null}
+                <p className="mt-2 text-sm text-slate-500">
+                  {liveStream.starts_at
+                    ? `Inicio: ${new Date(liveStream.starts_at).toLocaleString("es-AR")}`
+                    : "Sin horario programado"}
+                </p>
+              </article>
+            ) : (
+              <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                Todavía no hay transmisión configurada.
+              </p>
+            )}
+
+            <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                  Configuración del vivo
+                </p>
+                <p className="mt-1 text-sm text-slate-600">
+                  Pegá el link de YouTube y decidí si ya está en vivo o queda programado.
+                </p>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Título
+                </label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  value={liveStreamForm.title}
+                  onChange={(event) =>
+                    setLiveStreamForm({ ...liveStreamForm, title: event.target.value })
+                  }
+                  placeholder="Ej: Fecha del Patagónico - Puerto Madryn"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Inicio programado
+                </label>
+                <input
+                  type="datetime-local"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  value={liveStreamForm.starts_at}
+                  onChange={(event) =>
+                    setLiveStreamForm({
+                      ...liveStreamForm,
+                      starts_at: event.target.value
+                    })
+                  }
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Link de YouTube
+                </label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  value={liveStreamForm.youtube_url}
+                  onChange={(event) =>
+                    setLiveStreamForm({
+                      ...liveStreamForm,
+                      youtube_url: event.target.value
+                    })
+                  }
+                  placeholder="https://www.youtube.com/watch?v=..."
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Descripción
+                </label>
+                <textarea
+                  className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  value={liveStreamForm.description}
+                  onChange={(event) =>
+                    setLiveStreamForm({
+                      ...liveStreamForm,
+                      description: event.target.value
+                    })
+                  }
+                  placeholder="Opcional"
+                />
+              </div>
+
+              <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={liveStreamForm.is_live}
+                  onChange={(event) =>
+                    setLiveStreamForm({
+                      ...liveStreamForm,
+                      is_live: event.target.checked
+                    })
+                  }
+                />
+                Marcar como en vivo ahora
+              </label>
+
+              <div className="md:col-span-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleSaveLiveStream}
+                  disabled={savingLiveStream || clearingLiveStream}
+                >
+                  {savingLiveStream ? "Guardando..." : "Guardar transmisión"}
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setLiveStreamForm(getEmptyLiveStreamForm())}
+                  disabled={savingLiveStream || clearingLiveStream}
+                >
+                  Limpiar formulario
+                </button>
+                {liveStream ? (
+                  <button
+                    type="button"
+                    className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={handleClearLiveStream}
+                    disabled={savingLiveStream || clearingLiveStream}
+                  >
+                    {clearingLiveStream ? "Limpiando..." : "Desactivar y borrar"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </AdminAccordionSection>
       ) : null}
 
       {!error && role === "admin" ? (
