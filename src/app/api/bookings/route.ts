@@ -4,6 +4,7 @@ import {
   requireAdminRequest,
   requireAuthenticatedRequest
 } from "@/lib/server-auth";
+import { getBeginnerRulesStatus } from "@/lib/beginner-rules";
 import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import {
@@ -500,6 +501,24 @@ export async function POST(request: NextRequest) {
 
   if (!body.slotId) {
     return NextResponse.json({ error: "slotId es requerido" }, { status: 400 });
+  }
+
+  if (serviceRoleKey) {
+    const beginnerRulesStatus = await getBeginnerRulesStatus(
+      auth.supabaseUrl,
+      serviceRoleKey,
+      auth.user.id
+    );
+
+    if (beginnerRulesStatus.required) {
+      return NextResponse.json(
+        {
+          error:
+            "Si tu categoria es Principiante, primero debes leer y confirmar las reglas practicas del squash."
+        },
+        { status: 403 }
+      );
+    }
   }
 
   const ip = getRequestIp(request);

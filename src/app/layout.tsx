@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AdminBookingNotifier } from "@/components/AdminBookingNotifier";
+import { BeginnerRulesGate } from "@/components/BeginnerRulesGate";
 import { MessageNotifier } from "@/components/MessageNotifier";
 import { Navbar } from "@/components/Navbar";
 import { SessionGate } from "@/components/SessionGate";
@@ -48,6 +49,7 @@ export default function RootLayout({
       <body className="bg-slate-50 text-slate-900">
         <SessionGate>
           <AdminBookingNotifier />
+          <BeginnerRulesGate />
           <MessageNotifier />
           <Navbar />
           <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>

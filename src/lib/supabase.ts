@@ -944,6 +944,68 @@ export async function updateProfile(
   if (result?.profile?.id && result.profile.id !== userId) {
     throw new Error("El perfil actualizado no coincide con el usuario actual.");
   }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-profile-updated"));
+  }
+}
+
+export async function fetchBeginnerRulesStatus(token: string) {
+  const response = await authedRouteRequest("/api/beginner-rules", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    required?: boolean;
+    category?: string | null;
+    acknowledged_at?: string | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudo cargar el estado del reglamento."
+    );
+  }
+
+  return {
+    required: payload?.required === true,
+    category: payload?.category ?? null,
+    acknowledged_at: payload?.acknowledged_at ?? null
+  };
+}
+
+export async function acknowledgeBeginnerRules(token: string) {
+  const response = await authedRouteRequest("/api/beginner-rules", {
+    method: "POST",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify({})
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    required?: boolean;
+    category?: string | null;
+    acknowledged_at?: string | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudo confirmar la lectura del reglamento."
+    );
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("sr-profile-updated"));
+  }
+
+  return {
+    required: payload?.required === true,
+    category: payload?.category ?? null,
+    acknowledged_at: payload?.acknowledged_at ?? null
+  };
 }
 
 export async function isProfileComplete(userId: string, token: string) {
