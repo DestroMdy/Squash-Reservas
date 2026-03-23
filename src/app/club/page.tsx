@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { SectionTitle } from "@/components/SectionTitle";
-import { clubHighlights, clubRules } from "@/lib/club-content";
+import { clubHighlights, clubRules, squashRules } from "@/lib/club-content";
 
 export default function ClubPage() {
   return (
@@ -50,6 +50,28 @@ export default function ClubPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           {clubRules.map((rule) => (
+            <article key={rule.title} className="card rounded-2xl p-5">
+              <h3 className="text-lg font-semibold text-slate-950">{rule.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {rule.description}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Reglamento practico del squash
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Guia rapida del deporte para que cualquier jugador entienda lo esencial sin leer el reglamento completo.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {squashRules.map((rule) => (
             <article key={rule.title} className="card rounded-2xl p-5">
               <h3 className="text-lg font-semibold text-slate-950">{rule.title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">

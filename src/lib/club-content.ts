@@ -21,6 +21,39 @@ export const clubRules = [
   }
 ];
 
+export const squashRules = [
+  {
+    title: "Como se gana un partido",
+    description:
+      "En general se juega al mejor de 5 games. Cada game se juega a 11 puntos y, si llegan 10 iguales, hay que sacar 2 de diferencia."
+  },
+  {
+    title: "Cada rally vale un punto",
+    description:
+      "Siempre que termina un intercambio alguien suma. No importa quien haya sacado: el ganador del rally se lleva el punto y saca el siguiente."
+  },
+  {
+    title: "Servicio y saque",
+    description:
+      "El saque debe salir desde un cuadro de servicio, pegar primero en la pared frontal entre las lineas correctas y caer en el cuarto opuesto."
+  },
+  {
+    title: "Pelota en juego",
+    description:
+      "La pelota tiene que pegar primero en la pared frontal. Despues puede tocar paredes laterales o de fondo, pero el rival debe devolverla antes del segundo pique."
+  },
+  {
+    title: "Seguridad y lets",
+    description:
+      "Si hay riesgo de golpear al rival o se estorban en la jugada, se frena el punto y se pide let. La seguridad siempre vale mas que intentar seguir."
+  },
+  {
+    title: "Cuando un punto no vale",
+    description:
+      "Se pierde el rally si la pelota va afuera, pega abajo de la chapa, da dos piques o no llega primero a la pared frontal."
+  }
+];
+
 export const clubHighlights = [
   {
     title: "Centro en vivo",
