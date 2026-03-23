@@ -547,6 +547,75 @@ export async function fetchSlotsByDate(date: string, token?: string) {
   return payload?.slots || [];
 }
 
+export async function fetchWaitlistSnapshot(
+  slotIds: string[],
+  token: string
+) {
+  if (!slotIds.length) {
+    return {};
+  }
+
+  const response = await authedRouteRequest(
+    `/api/waitlist?slot_ids=${encodeURIComponent(slotIds.join(","))}`,
+    {
+      method: "GET",
+      token
+    }
+  );
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    slots?: Record<string, { count: number; joined: boolean }>;
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar la lista de espera.");
+  }
+
+  return payload?.slots || {};
+}
+
+export async function joinBookingWaitlist(slotId: string, token: string) {
+  const response = await authedRouteRequest("/api/waitlist", {
+    method: "POST",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify({ slotId })
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    slot?: { count: number; joined: boolean };
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo entrar a la lista de espera.");
+  }
+
+  return payload?.slot || { count: 1, joined: true };
+}
+
+export async function leaveBookingWaitlist(slotId: string, token: string) {
+  const response = await authedRouteRequest("/api/waitlist", {
+    method: "DELETE",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify({ slotId })
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    slot?: { count: number; joined: boolean };
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo salir de la lista de espera.");
+  }
+
+  return payload?.slot || { count: 0, joined: false };
+}
+
 export async function fetchMyBookings(userId: string, token: string) {
   const response = await authedRouteRequest("/api/bookings?scope=my", {
     method: "GET",
@@ -1506,6 +1575,24 @@ export async function fetchCasualMatches(token: string) {
   };
 }
 
+export async function fetchAllCasualMatches(token: string) {
+  const response = await authedRouteRequest("/api/casual-matches?scope=all", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    matches?: any[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudieron cargar los partidos.");
+  }
+
+  return payload?.matches || [];
+}
+
 export async function createCasualMatch(
   token: string,
   payload: {
@@ -1580,6 +1667,36 @@ export async function deleteCasualMatch(matchId: string, token: string) {
   if (!response.ok) {
     throw new Error(data.error || "No se pudo borrar el partido.");
   }
+}
+
+export async function confirmCasualMatch(
+  matchId: string,
+  token: string,
+  payload: {
+    action: "confirm" | "review";
+    note?: string | null;
+  }
+) {
+  const response = await authedRouteRequest(
+    `/api/casual-matches/${matchId}/confirm`,
+    {
+      method: "POST",
+      token,
+      requireJsonContentType: true,
+      body: JSON.stringify(payload)
+    }
+  );
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    confirmation?: any;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo actualizar la confirmacion.");
+  }
+
+  return result?.confirmation || null;
 }
 
 export async function fetchMatchAvailability(token: string) {

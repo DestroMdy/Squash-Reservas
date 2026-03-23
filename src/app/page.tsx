@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
+import { clubHighlights } from "@/lib/club-content";
 import {
   fetchExternalTournaments,
   fetchLiveCenterStatus,
@@ -409,6 +410,58 @@ export default function HomePage() {
             </article>
           </div>
         </div>
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Link
+            href="/tournament-center"
+            className="card animate-fade-up rounded-2xl p-5 transition hover:border-orange-300"
+            style={{ animationDelay: "160ms" }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+              Dashboard torneo
+            </p>
+            <h2 className="mt-3 text-xl font-bold text-slate-950">
+              Todo el evento en un solo lugar
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Centro en vivo, torneo destacado y accesos rápidos del día.
+            </p>
+          </Link>
+
+          <Link
+            href="/club"
+            className="card animate-fade-up rounded-2xl p-5 transition hover:border-orange-300"
+            style={{ animationDelay: "180ms" }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+              El club
+            </p>
+            <h2 className="mt-3 text-xl font-bold text-slate-950">
+              Reglas y experiencia
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Todo lo importante de La Martineta para jugadores y visitantes.
+            </p>
+          </Link>
+
+          {clubHighlights.map((highlight, index) => (
+            <article
+              key={highlight.title}
+              className="card animate-fade-up rounded-2xl p-5"
+              style={{ animationDelay: `${200 + index * 20}ms` }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Destacado
+              </p>
+              <h2 className="mt-3 text-xl font-bold text-slate-950">
+                {highlight.title}
+              </h2>
+              <p className="mt-2 text-sm text-slate-600">
+                {highlight.description}
+              </p>
+            </article>
+          )).slice(0, 2)}
+        </section>
       </section>
     </div>
   );

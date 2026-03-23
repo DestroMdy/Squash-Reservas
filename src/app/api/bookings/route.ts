@@ -12,6 +12,10 @@ import {
   findAlternativeOpenSlot,
   hasConfirmedBooking
 } from "@/lib/supabase";
+import {
+  isBookingWaitlistStoreConfigured,
+  removeUserFromWaitlist
+} from "@/lib/booking-waitlist-store";
 
 function normalizeBookingError(error: unknown) {
   if (
@@ -579,6 +583,16 @@ export async function POST(request: NextRequest) {
       auth.user.id,
       auth.accessToken
     );
+
+    if (isBookingWaitlistStoreConfigured()) {
+      const slotsToCleanup = Array.from(
+        new Set([body.slotId, selectedSlot.id].filter(Boolean))
+      );
+
+      await Promise.all(
+        slotsToCleanup.map((slotId) => removeUserFromWaitlist(slotId, auth.user.id))
+      ).catch(() => null);
+    }
 
     if (serviceRoleKey && resendApiKey) {
       try {

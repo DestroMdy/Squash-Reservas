@@ -533,6 +533,27 @@ export default function TournamentsPage() {
         subtitle="Consulta próximos torneos, muestra la distancia desde tu ubicación cuando está disponible y habilita los links solo cuando el torneo ya tiene enlace real cargado."
       />
 
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Link
+          href="/tournament-center"
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-orange-300 hover:text-slate-950"
+        >
+          Ir al centro de torneo
+        </Link>
+        <Link
+          href="/live"
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-orange-300 hover:text-slate-950"
+        >
+          Ver transmisiones
+        </Link>
+        <Link
+          href="/club"
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-700 transition hover:border-orange-300 hover:text-slate-950"
+        >
+          Reglas y sede
+        </Link>
+      </div>
+
       {loading ? <p>Cargando torneos...</p> : null}
       {error ? <p className="text-red-600">{error}</p> : null}
 

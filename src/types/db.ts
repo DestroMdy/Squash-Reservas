@@ -40,6 +40,13 @@ export interface LiveScoreboard {
   updated_at: string;
 }
 
+export interface LiveIngestStatus {
+  last_score_received_at: string | null;
+  last_forwarded_at: string | null;
+  last_forward_error: string | null;
+  latest_payload_summary: string | null;
+}
+
 export interface LiveCourtState {
   id: LiveCourtId;
   label: string;
@@ -53,6 +60,8 @@ export interface AdminLiveCourtState {
   stream: AdminLiveStreamConfig | null;
   scoreboard: LiveScoreboard | null;
   squore_post_url: string | null;
+  overlay_url?: string | null;
+  ingest_status?: LiveIngestStatus | null;
 }
 
 export interface Profile {
@@ -112,6 +121,11 @@ export interface CasualMatch {
   updated_at: string;
   player_one?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
   player_two?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
+  confirmation_status?: "pending" | "confirmed" | "revision_requested";
+  confirmation_updated_at?: string | null;
+  confirmation_note?: string | null;
+  confirmation_updated_by?: string | null;
+  needs_confirmation?: boolean;
 }
 
 export interface MatchAvailabilityRequest {
@@ -121,6 +135,20 @@ export interface MatchAvailabilityRequest {
   notes: string | null;
   created_at: string;
   updated_at: string;
+  profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
+}
+
+export interface CasualMatchConfirmationState {
+  status: "pending" | "confirmed" | "revision_requested";
+  updated_at: string;
+  updated_by: string | null;
+  note: string | null;
+}
+
+export interface BookingWaitlistEntry {
+  time_slot_id: string;
+  user_id: string;
+  created_at: string;
   profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
 }
 

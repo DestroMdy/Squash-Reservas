@@ -8,8 +8,11 @@ import { AppNoticeModal } from "../components/AppNoticeModal";
 import {
   cancelBooking,
   fetchProfileRole,
+  fetchWaitlistSnapshot,
   getSession,
-  isProfileComplete
+  isProfileComplete,
+  joinBookingWaitlist,
+  leaveBookingWaitlist
 } from "../lib/supabase";
 import {
   canBookSlot,
@@ -41,7 +44,15 @@ export function ScheduleGrid({
   const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
   const [profileComplete, setProfileComplete] = useState<boolean | null>(null);
   const [noticeMessage, setNoticeMessage] = useState("");
-  const [confirmingSlot, setConfirmingSlot] = useState<SlotWithRelations | null>(null);
+  const [confirmingSlot, setConfirmingSlot] = useState<SlotWithRelations | null>(
+    null
+  );
+  const [waitlistSnapshot, setWaitlistSnapshot] = useState<
+    Record<string, { count: number; joined: boolean }>
+  >({});
+  const [waitlistPendingSlotId, setWaitlistPendingSlotId] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     async function loadSessionData() {
@@ -52,8 +63,10 @@ export function ScheduleGrid({
       setCurrentUserId(userId);
 
       if (userId && token) {
-        const complete = await isProfileComplete(userId, token);
-        const role = await fetchProfileRole(userId, token);
+        const [complete, role] = await Promise.all([
+          isProfileComplete(userId, token),
+          fetchProfileRole(userId, token)
+        ]);
         setProfileComplete(complete);
         setCurrentUserRole(role ?? null);
       } else {
@@ -62,8 +75,55 @@ export function ScheduleGrid({
       }
     }
 
-    loadSessionData();
+    void loadSessionData();
   }, []);
+
+  useEffect(() => {
+    async function loadWaitlist() {
+      const token = getSession()?.access_token;
+
+      if (!token || !currentUserId) {
+        setWaitlistSnapshot({});
+        return;
+      }
+
+      const occupiedSlotIds = slots
+        .filter((slot) => {
+          const bookings = Array.isArray(slot.bookings)
+            ? slot.bookings
+            : slot.bookings
+              ? [slot.bookings]
+              : [];
+
+          return bookings.some((booking) => booking.status === "confirmed");
+        })
+        .map((slot) => slot.id);
+
+      if (!occupiedSlotIds.length) {
+        setWaitlistSnapshot({});
+        return;
+      }
+
+      try {
+        const snapshot = await fetchWaitlistSnapshot(occupiedSlotIds, token);
+        setWaitlistSnapshot(snapshot);
+      } catch {
+        setWaitlistSnapshot({});
+      }
+    }
+
+    void loadWaitlist();
+  }, [currentUserId, slots]);
+
+  function formatReservationDate(slotDate: string) {
+    const formatted = new Intl.DateTimeFormat("es-AR", {
+      weekday: "long",
+      day: "2-digit",
+      month: "2-digit"
+    }).format(new Date(`${slotDate}T12:00:00`));
+
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+  }
 
   async function reserve(slotId: string) {
     try {
@@ -117,16 +177,6 @@ export function ScheduleGrid({
     setConfirmingSlot(slot);
   }
 
-  function formatReservationDate(slotDate: string) {
-    const formatted = new Intl.DateTimeFormat("es-AR", {
-      weekday: "long",
-      day: "2-digit",
-      month: "2-digit"
-    }).format(new Date(`${slotDate}T12:00:00`));
-
-    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
-  }
-
   async function cancel(bookingId: string) {
     try {
       setPendingCancelId(bookingId);
@@ -147,6 +197,39 @@ export function ScheduleGrid({
     }
   }
 
+  async function toggleWaitlist(slotId: string, joined: boolean) {
+    try {
+      const token = getSession()?.access_token;
+
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setWaitlistPendingSlotId(slotId);
+      const nextState = joined
+        ? await leaveBookingWaitlist(slotId, token)
+        : await joinBookingWaitlist(slotId, token);
+
+      setWaitlistSnapshot((current) => ({
+        ...current,
+        [slotId]: nextState
+      }));
+      setNoticeMessage(
+        joined
+          ? "Saliste de la lista de espera de ese turno."
+          : "Listo. Te avisaremos si se libera ese horario."
+      );
+    } catch (error) {
+      setNoticeMessage(
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar la lista de espera."
+      );
+    } finally {
+      setWaitlistPendingSlotId(null);
+    }
+  }
+
   return (
     <>
       <div className="space-y-4">
@@ -156,7 +239,7 @@ export function ScheduleGrid({
               Debes completar tu perfil antes de reservar.
             </p>
             <p className="mt-1 text-sm text-amber-800">
-              Completá nombre, teléfono y categoría.
+              Completa nombre, teléfono y categoría.
             </p>
             <div className="mt-3">
               <Link href="/profile" className="btn-secondary">
@@ -223,6 +306,12 @@ export function ScheduleGrid({
                 : "Disponible";
 
           const isCancelling = pendingCancelId === confirmedBooking?.id;
+          const waitlistState = waitlistSnapshot[slot.id] || {
+            count: 0,
+            joined: false
+          };
+          const canJoinWaitlist =
+            Boolean(currentUserId) && !isMine && isReserved && !isExpired;
           const playerName =
             confirmedBooking?.profiles?.full_name?.trim() || "Sin nombre";
           const playerCategory =
@@ -299,9 +388,29 @@ export function ScheduleGrid({
                       Solo puedes cancelar con más de 1 hora de anticipación.
                     </p>
                   ) : null}
+
+                  {canJoinWaitlist ? (
+                    <div className="rounded-xl bg-white/70 px-3 py-3 text-sm text-slate-700">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-slate-800">
+                          {waitlistState.joined
+                            ? "Estás en la lista de espera"
+                            : "¿Quieres aviso si se libera?"}
+                        </p>
+                        {waitlistState.count ? (
+                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                            {waitlistState.count} en espera
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Si este turno se libera, te mandamos un aviso para que intentes reservarlo.
+                      </p>
+                    </div>
+                  ) : null}
                 </div>
 
-                <div className="sm:min-w-[160px]">
+                <div className="sm:min-w-[190px]">
                   {isMine && confirmedBooking ? (
                     <button
                       disabled={isCancelling || !canCancelThisBooking}
@@ -329,6 +438,21 @@ export function ScheduleGrid({
                             : "Reservar"}
                     </button>
                   )}
+
+                  {canJoinWaitlist ? (
+                    <button
+                      type="button"
+                      className="btn-secondary mt-2 w-full border-orange-200 text-orange-700 hover:bg-orange-50"
+                      onClick={() => toggleWaitlist(slot.id, waitlistState.joined)}
+                      disabled={waitlistPendingSlotId === slot.id}
+                    >
+                      {waitlistPendingSlotId === slot.id
+                        ? "Actualizando..."
+                        : waitlistState.joined
+                          ? "Ya no quiero aviso"
+                          : "Avisarme si se libera"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </article>

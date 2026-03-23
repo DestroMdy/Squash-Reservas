@@ -93,6 +93,19 @@ function buildForms(courts: AdminLiveCourtState[]) {
   });
 }
 
+function formatStatusTime(value: string | null | undefined) {
+  if (!value) {
+    return "Sin registro";
+  }
+
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 export function AdminLiveCenterSection() {
   const [courts, setCourts] = useState<AdminLiveCourtState[]>(
     normalizeCourts()
@@ -301,6 +314,75 @@ export function AdminLiveCenterSection() {
                   <p className="mt-2 text-xs text-slate-500">
                     Si completas Tournament Software abajo, este mismo payload se reenvia automaticamente.
                   </p>
+                </div>
+
+                <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Estado técnico
+                    </p>
+                    <div className="space-y-2 text-sm text-slate-700">
+                      <p>
+                        YouTube:{" "}
+                        <span className="font-medium">
+                          {court.stream?.youtube_url ? "Configurado" : "Pendiente"}
+                        </span>
+                      </p>
+                      <p>
+                        Último score:{" "}
+                        <span className="font-medium">
+                          {formatStatusTime(
+                            court.ingest_status?.last_score_received_at || null
+                          )}
+                        </span>
+                      </p>
+                      <p>
+                        Último reenvío:{" "}
+                        <span className="font-medium">
+                          {court.stream?.tournament_software_post_url
+                            ? formatStatusTime(
+                                court.ingest_status?.last_forwarded_at || null
+                              )
+                            : "No configurado"}
+                        </span>
+                      </p>
+                      <p>
+                        Match actual:{" "}
+                        <span className="font-medium">
+                          {court.ingest_status?.latest_payload_summary || "Sin datos"}
+                        </span>
+                      </p>
+                    </div>
+                    {court.ingest_status?.last_forward_error ? (
+                      <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                        Error de reenvío: {court.ingest_status.last_forward_error}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Overlay para streaming
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      Usa esta URL como Browser Source en OBS si quieres superponer solo el marcador.
+                    </p>
+                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3">
+                      <p className="break-all font-mono text-xs text-slate-700">
+                        {court.overlay_url || "Disponible al guardar la cancha"}
+                      </p>
+                    </div>
+                    {court.overlay_url ? (
+                      <a
+                        href={court.overlay_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary inline-flex"
+                      >
+                        Abrir overlay
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
 
                 {court.scoreboard ? (

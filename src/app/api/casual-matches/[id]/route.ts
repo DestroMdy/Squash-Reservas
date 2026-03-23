@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import {
+  clearCasualMatchConfirmationState,
+  initializeCasualMatchConfirmationState
+} from "@/lib/casual-match-state-store";
 
 type MatchRow = {
   id: string;
@@ -172,6 +176,10 @@ export async function PATCH(
     );
   }
 
+  if (role !== "admin") {
+    await initializeCasualMatchConfirmationState(params.id, auth.user.id);
+  }
+
   return NextResponse.json({ ok: true, match: rows[0] });
 }
 
@@ -230,6 +238,8 @@ export async function DELETE(
       { status: 400 }
     );
   }
+
+  await clearCasualMatchConfirmationState(params.id);
 
   return NextResponse.json({ ok: true });
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLiveCourtLabel, isLiveCourtId } from "@/lib/live-stream";
 import { normalizeSquoreScoreboard } from "@/lib/live-score";
+import { updateLiveIngestStatus } from "@/lib/live-ingest-status-store";
 import {
   getStoredLiveCourtSquoreToken,
   getStoredLiveCourtStream,
@@ -126,6 +127,11 @@ export async function POST(request: NextRequest) {
     }
 
     await setStoredLiveCourtScoreboard(courtId, scoreboard);
+    await updateLiveIngestStatus(courtId, {
+      last_score_received_at: new Date().toISOString(),
+      latest_payload_summary: `${scoreboard.player_one_name} vs ${scoreboard.player_two_name}`,
+      last_forward_error: null
+    }).catch(() => null);
 
     let forwardedToTournamentSoftware = false;
 
@@ -137,7 +143,16 @@ export async function POST(request: NextRequest) {
           rawBody
         );
         forwardedToTournamentSoftware = true;
+        await updateLiveIngestStatus(courtId, {
+          last_forwarded_at: new Date().toISOString(),
+          last_forward_error: null
+        }).catch(() => null);
       } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "No se pudo reenviar a Tournament Software";
+        await updateLiveIngestStatus(courtId, {
+          last_forward_error: message
+        }).catch(() => null);
         console.error(
           `No se pudo reenviar el score de ${courtId} a Tournament Software`,
           error

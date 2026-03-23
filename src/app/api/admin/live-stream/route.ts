@@ -7,6 +7,10 @@ import {
   normalizeOptionalHttpUrl
 } from "@/lib/live-stream";
 import {
+  clearLiveIngestStatus,
+  getLiveIngestStatuses
+} from "@/lib/live-ingest-status-store";
+import {
   clearStoredLiveCourtScoreboard,
   clearStoredLiveCourtStream,
   ensureStoredLiveCourtSquoreToken,
@@ -52,10 +56,12 @@ function getRequestedCourtId(request: NextRequest) {
 }
 
 async function buildAdminCourtsResponse(request: NextRequest) {
-  const [courts, configMap] = await Promise.all([
+  const [courts, configMap, ingestStatuses] = await Promise.all([
     getStoredLiveCenterCourts(),
-    getStoredLiveCenterConfigMap()
+    getStoredLiveCenterConfigMap(),
+    getLiveIngestStatuses()
   ]);
+  const origin = new URL(request.url).origin;
 
   return Promise.all(
     courts.map(async (court) => {
@@ -65,7 +71,9 @@ async function buildAdminCourtsResponse(request: NextRequest) {
         label: court.label,
         stream: configMap[court.id],
         scoreboard: court.scoreboard,
-        squore_post_url: buildSquorePostUrl(request, court.id, token)
+        squore_post_url: buildSquorePostUrl(request, court.id, token),
+        overlay_url: `${origin}/live/overlay/${court.id}`,
+        ingest_status: ingestStatuses[court.id] || null
       };
     })
   );
@@ -250,7 +258,8 @@ export async function DELETE(request: NextRequest) {
   try {
     await Promise.all([
       clearStoredLiveCourtStream(courtId),
-      clearStoredLiveCourtScoreboard(courtId)
+      clearStoredLiveCourtScoreboard(courtId),
+      clearLiveIngestStatus(courtId)
     ]);
 
     const courts = await buildAdminCourtsResponse(request);

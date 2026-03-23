@@ -5,6 +5,7 @@ import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
   activateMatchAvailability,
+  confirmCasualMatch,
   createCasualMatch,
   deactivateMatchAvailability,
   deleteCasualMatch,
@@ -80,6 +81,27 @@ function getOpponent(match: CasualMatch, currentUserId: string | null) {
   return match.player_one_id === currentUserId ? match.player_two : match.player_one;
 }
 
+function getConfirmationMeta(match: CasualMatch) {
+  if (match.confirmation_status === "pending") {
+    return {
+      label: "Pendiente rival",
+      className: "bg-amber-100 text-amber-800"
+    };
+  }
+
+  if (match.confirmation_status === "revision_requested") {
+    return {
+      label: "En revisión",
+      className: "bg-orange-100 text-orange-800"
+    };
+  }
+
+  return {
+    label: "Confirmado",
+    className: "bg-emerald-100 text-emerald-800"
+  };
+}
+
 export default function MatchesPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [players, setPlayers] = useState<Profile[]>([]);
@@ -143,12 +165,20 @@ export default function MatchesPage() {
     });
   }, []);
 
+  const confirmedMatches = useMemo(
+    () =>
+      matches.filter(
+        (match) => (match.confirmation_status || "confirmed") === "confirmed"
+      ),
+    [matches]
+  );
+
   const summary = useMemo(() => {
     if (!currentUserId) {
       return { total: 0, wins: 0, losses: 0 };
     }
 
-    return matches.reduce(
+    return confirmedMatches.reduce(
       (acc, match) => {
         acc.total += 1;
         const isPlayerOne = match.player_one_id === currentUserId;
@@ -167,7 +197,7 @@ export default function MatchesPage() {
       },
       { total: 0, wins: 0, losses: 0 }
     );
-  }, [currentUserId, matches]);
+  }, [confirmedMatches, currentUserId]);
 
   const recentOpponents = useMemo(() => {
     const seen = new Set<string>();
@@ -197,7 +227,7 @@ export default function MatchesPage() {
       }
     >();
 
-    for (const match of matches) {
+    for (const match of confirmedMatches) {
       const opponent = getOpponent(match, currentUserId);
       if (!opponent) continue;
 
@@ -239,7 +269,7 @@ export default function MatchesPage() {
         if (b.winRate !== a.winRate) return b.winRate - a.winRate;
         return b.played - a.played;
       });
-  }, [currentUserId, matches]);
+  }, [confirmedMatches, currentUserId]);
 
   const sortedAvailabilityRequests = useMemo(
     () =>
@@ -329,6 +359,37 @@ export default function MatchesPage() {
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo borrar el partido");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleMatchConfirmation(
+    matchId: string,
+    action: "confirm" | "review"
+  ) {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesión");
+      }
+
+      setSaving(true);
+      setMessage(null);
+      setError(null);
+      await confirmCasualMatch(matchId, token, { action });
+      setMessage(
+        action === "confirm"
+          ? "Resultado confirmado."
+          : "Se marcó el partido para revisión."
+      );
+      await loadData();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo actualizar la confirmación"
+      );
     } finally {
       setSaving(false);
     }
@@ -539,7 +600,7 @@ export default function MatchesPage() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Ranking casual</h2>
               <p className="text-sm text-slate-500">
-                Tu resumen de resultados contra cada rival.
+                Tu resumen de resultados confirmados contra cada rival.
               </p>
             </div>
 
@@ -602,7 +663,7 @@ export default function MatchesPage() {
                   {editingMatchId ? "Editar partido" : "Cargar nuevo partido"}
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Guarda el resultado para tener historial entre jugadores.
+                  Guarda el resultado para tener historial entre jugadores. El rival lo confirma antes de que impacte en el ranking.
                 </p>
               </div>
 
@@ -741,7 +802,9 @@ export default function MatchesPage() {
                 {matches.map((match) => {
                   const opponent = getOpponent(match, currentUserId);
                   const result = getMatchResult(match, currentUserId);
+                  const confirmation = getConfirmationMeta(match);
                   const isCreator = match.created_by === currentUserId;
+                  const needsConfirmation = Boolean(match.needs_confirmation);
                   const myScore =
                     match.player_one_id === currentUserId
                       ? match.score_player_one
@@ -773,6 +836,11 @@ export default function MatchesPage() {
                             >
                               {result.label}
                             </span>
+                            <span
+                              className={`rounded-full px-3 py-1 text-xs font-semibold ${confirmation.className}`}
+                            >
+                              {confirmation.label}
+                            </span>
                           </div>
                           <p className="text-sm text-slate-500">
                             {opponent?.category || "Sin categoría"}
@@ -782,6 +850,11 @@ export default function MatchesPage() {
                           </p>
                           {match.notes ? (
                             <p className="mt-1 text-sm text-slate-500">{match.notes}</p>
+                          ) : null}
+                          {match.confirmation_note ? (
+                            <p className="mt-1 text-sm text-orange-700">
+                              Revisión: {match.confirmation_note}
+                            </p>
                           ) : null}
                         </div>
                       </div>
@@ -795,8 +868,27 @@ export default function MatchesPage() {
                             {myScore} - {opponentScore}
                           </p>
                         </div>
-                        {isCreator ? (
-                          <div className="flex gap-2">
+                        {needsConfirmation ? (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              onClick={() => handleMatchConfirmation(match.id, "confirm")}
+                              disabled={saving}
+                            >
+                              Confirmar resultado
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={() => handleMatchConfirmation(match.id, "review")}
+                              disabled={saving}
+                            >
+                              No coincide
+                            </button>
+                          </div>
+                        ) : isCreator ? (
+                          <div className="flex flex-wrap gap-2">
                             <button
                               type="button"
                               className="btn-secondary"
@@ -813,9 +905,16 @@ export default function MatchesPage() {
                             </button>
                           </div>
                         ) : (
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
-                            Cargado por el rival
-                          </span>
+                          <div className="flex flex-wrap gap-2">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+                              Cargado por el rival
+                            </span>
+                            {match.confirmation_status === "revision_requested" ? (
+                              <span className="rounded-full bg-orange-100 px-3 py-1 text-xs text-orange-700">
+                                Pendiente de corrección
+                              </span>
+                            ) : null}
+                          </div>
                         )}
                       </div>
                     </article>

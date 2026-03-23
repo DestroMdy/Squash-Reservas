@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   adminHeaders,
+  requireAdminRequest,
   requireAuthenticatedRequest
 } from "@/lib/server-auth";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import {
+  getCasualMatchConfirmationStates,
+  initializeCasualMatchConfirmationState
+} from "@/lib/casual-match-state-store";
+import { CasualMatchConfirmationState } from "@/types/db";
 
 type MatchRow = {
   id: string;
@@ -96,12 +102,21 @@ function formatMatches(
       category?: string | null;
       avatar_url?: string | null;
     }
-  >
+  >,
+  confirmationStates: Record<string, CasualMatchConfirmationState | null>,
+  currentUserId: string
 ) {
   return rows.map((match) => ({
     ...match,
     player_one: profilesMap[match.player_one_id] ?? null,
-    player_two: profilesMap[match.player_two_id] ?? null
+    player_two: profilesMap[match.player_two_id] ?? null,
+    confirmation_status: confirmationStates[match.id]?.status || "confirmed",
+    confirmation_updated_at: confirmationStates[match.id]?.updated_at || null,
+    confirmation_note: confirmationStates[match.id]?.note || null,
+    confirmation_updated_by: confirmationStates[match.id]?.updated_by || null,
+    needs_confirmation:
+      match.player_two_id === currentUserId &&
+      (confirmationStates[match.id]?.status || "confirmed") !== "confirmed"
   }));
 }
 
@@ -130,6 +145,56 @@ function validateScores(
 }
 
 export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const scope = url.searchParams.get("scope");
+
+  if (scope === "all") {
+    const admin = await requireAdminRequest(request);
+
+    if ("error" in admin) {
+      return NextResponse.json({ error: admin.error }, { status: admin.status });
+    }
+
+    try {
+      const response = await fetch(
+        `${admin.supabaseUrl}/rest/v1/casual_matches?select=id,created_by,player_one_id,player_two_id,played_on,location,score_player_one,score_player_two,notes,created_at,updated_at&order=played_on.desc,created_at.desc`,
+        {
+          method: "GET",
+          headers: adminHeaders(admin.serviceRoleKey),
+          cache: "no-store"
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("No se pudieron cargar todos los partidos.");
+      }
+
+      const rows = (await response.json()) as MatchRow[];
+      const profilesMap = await fetchProfilesMap(
+        admin.supabaseUrl,
+        admin.serviceRoleKey,
+        rows.flatMap((match) => [match.player_one_id, match.player_two_id])
+      );
+      const confirmationStates = await getCasualMatchConfirmationStates(
+        rows.map((match) => match.id)
+      );
+
+      return NextResponse.json({
+        matches: formatMatches(rows, profilesMap, confirmationStates, admin.user.id)
+      });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error
+              ? error.message
+              : "No se pudieron cargar todos los partidos."
+        },
+        { status: 400 }
+      );
+    }
+  }
+
   const auth = await requireAuthenticatedRequest(request, {
     requireServiceRole: true
   });
@@ -154,6 +219,9 @@ export async function GET(request: NextRequest) {
       match.player_one_id,
       match.player_two_id
     ]);
+    const confirmationStates = await getCasualMatchConfirmationStates(
+      result.rows.map((match) => match.id)
+    );
     const profilesMap = await fetchProfilesMap(
       auth.supabaseUrl,
       serviceRoleKey,
@@ -161,7 +229,12 @@ export async function GET(request: NextRequest) {
     );
 
     return NextResponse.json({
-      matches: formatMatches(result.rows, profilesMap)
+      matches: formatMatches(
+        result.rows,
+        profilesMap,
+        confirmationStates,
+        auth.user.id
+      )
     });
   } catch (error) {
     return NextResponse.json(
@@ -260,9 +333,18 @@ export async function POST(request: NextRequest) {
     rows[0].player_one_id,
     rows[0].player_two_id
   ]);
+  const confirmationState = await initializeCasualMatchConfirmationState(
+    rows[0].id,
+    auth.user.id
+  );
 
   return NextResponse.json({
     ok: true,
-    match: formatMatches(rows, profilesMap)[0]
+    match: formatMatches(
+      rows,
+      profilesMap,
+      { [rows[0].id]: confirmationState },
+      auth.user.id
+    )[0]
   });
 }

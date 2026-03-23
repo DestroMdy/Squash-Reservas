@@ -1,32 +1,34 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AdminLiveCenterSection } from "@/components/AdminLiveCenterSection";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
+import { buildCsv } from "@/lib/csv";
 import {
   createExternalTournament,
-  deleteProfileAsAdmin,
   deleteExternalTournament,
+  deleteProfileAsAdmin,
   fetchAdminAuditLogs,
   fetchAdminExternalTournaments,
   fetchAllBookings,
+  fetchAllCasualMatches,
   fetchBookingStats,
   fetchPlayers,
   fetchProfileRole,
   getSession,
   getUser,
   promoteProfileToAdmin,
-  updateExternalTournament,
-  updateBookingAsAdmin
+  updateBookingAsAdmin,
+  updateExternalTournament
 } from "@/lib/supabase";
-import {
-  Booking,
+import type {
   AdminAuditLog,
+  Booking,
   BookingStatus,
+  CasualMatch,
   ExternalTournament,
   ExternalTournamentPlatform,
-  LiveStreamConfig,
   Profile
 } from "@/types/db";
 
@@ -50,14 +52,13 @@ type TournamentFormState = {
   is_active: boolean;
 };
 
-type LiveStreamFormState = {
-  title: string;
-  description: string;
-  banner_url: string;
-  youtube_url: string;
-  starts_at: string;
-  is_live: boolean;
-};
+type AdminSectionKey =
+  | "report"
+  | "live"
+  | "tournaments"
+  | "audit"
+  | "players"
+  | "bookings";
 
 const statusOptions: BookingStatus[] = ["confirmed", "cancelled", "completed"];
 const tournamentPlatforms: ExternalTournamentPlatform[] = [
@@ -68,8 +69,7 @@ const tournamentPlatforms: ExternalTournamentPlatform[] = [
 
 function getCurrentMonthKey() {
   const now = new Date();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  return `${now.getFullYear()}-${month}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function getEmptyTournamentForm(): TournamentFormState {
@@ -84,40 +84,6 @@ function getEmptyTournamentForm(): TournamentFormState {
   };
 }
 
-function getEmptyLiveStreamForm(): LiveStreamFormState {
-  return {
-    title: "",
-    description: "",
-    banner_url: "",
-    youtube_url: "",
-    starts_at: "",
-    is_live: false
-  };
-}
-
-function formatDateTimeLocalValue(value: string | null | undefined) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
-
-  return `${year}-${month}-${day}T${hours}:${minutes}`;
-}
-
-type AdminSectionKey =
-  | "report"
-  | "live"
-  | "tournaments"
-  | "audit"
-  | "players"
-  | "bookings";
-
 function AdminAccordionSection({
   title,
   description,
@@ -131,7 +97,7 @@ function AdminAccordionSection({
   count?: number | string;
   open: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="card overflow-hidden">
@@ -145,19 +111,15 @@ function AdminAccordionSection({
           <p className="text-lg font-semibold text-slate-900">{title}</p>
           <p className="mt-1 text-sm text-slate-500">{description}</p>
         </div>
-
         <div className="flex shrink-0 items-center gap-3">
           {typeof count !== "undefined" ? (
             <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
               {count}
             </span>
           ) : null}
-          <span className="text-xl leading-none text-slate-400">
-            {open ? "−" : "+"}
-          </span>
+          <span className="text-xl leading-none text-slate-400">{open ? "−" : "+"}</span>
         </div>
       </button>
-
       {open ? <div className="border-t border-slate-200 p-5">{children}</div> : null}
     </section>
   );
@@ -166,37 +128,28 @@ function AdminAccordionSection({
 export default function AdminPage() {
   const tournamentEditorRef = useRef<HTMLDivElement | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [stats, setStats] = useState<{
-    total: number;
-    confirmed: number;
-    cancelled: number;
-  } | null>(null);
+  const [stats, setStats] = useState<{ total: number; confirmed: number; cancelled: number } | null>(null);
   const [bookings, setBookings] = useState<BookingWithRelations[]>([]);
   const [players, setPlayers] = useState<Profile[]>([]);
   const [tournaments, setTournaments] = useState<ExternalTournament[]>([]);
-  const [liveStream, setLiveStream] = useState<LiveStreamConfig | null>(null);
-  const [squorePostUrl, setSquorePostUrl] = useState<string | null>(null);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditEnabled, setAuditEnabled] = useState(true);
-  const [filter, setFilter] = useState("");
+  const [bookingFilter, setBookingFilter] = useState("");
+  const [auditTextFilter, setAuditTextFilter] = useState("");
+  const [auditActionFilter, setAuditActionFilter] = useState("all");
+  const [auditTargetFilter, setAuditTargetFilter] = useState("all");
   const [reportMonth, setReportMonth] = useState(getCurrentMonthKey());
-  const [tournamentForm, setTournamentForm] = useState<TournamentFormState>(
-    getEmptyTournamentForm()
-  );
-  const [liveStreamForm, setLiveStreamForm] = useState<LiveStreamFormState>(
-    getEmptyLiveStreamForm()
-  );
+  const [tournamentForm, setTournamentForm] = useState<TournamentFormState>(getEmptyTournamentForm());
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingTournament, setSavingTournament] = useState(false);
-  const [savingLiveStream, setSavingLiveStream] = useState(false);
   const [deletingTournamentId, setDeletingTournamentId] = useState<string | null>(null);
-  const [clearingLiveStream, setClearingLiveStream] = useState(false);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<AdminSectionKey, boolean>>({
@@ -207,49 +160,42 @@ export default function AdminPage() {
     players: false,
     bookings: false
   });
-  function redirectToLogin() {
-    if (typeof window === "undefined") {
-      return;
-    }
 
-    window.location.replace("/login?next=/admin");
-  }
+  const redirectToLogin = useCallback(() => {
+    if (typeof window !== "undefined") {
+      window.location.replace("/login?next=/admin");
+    }
+  }, []);
+
+  const getAdminToken = useCallback(() => {
+    const token = getSession()?.access_token;
+    if (!token) throw new Error("Debes iniciar sesión.");
+    return token;
+  }, []);
 
   const loadAdminData = useCallback(async () => {
     const token = getSession()?.access_token;
-    if (!token) {
-      redirectToLogin();
-      return;
-    }
+    if (!token) return redirectToLogin();
 
     const user = await getUser(token);
-    if (!user) {
-      redirectToLogin();
-      return;
-    }
+    if (!user) return redirectToLogin();
 
     const currentRole = await fetchProfileRole(user.id, token);
     setRole(currentRole ?? null);
-
     if (currentRole !== "admin") {
-      setError("No tienes permisos de administrador");
+      setError("No tienes permisos de administrador.");
       setLoading(false);
       return;
     }
 
-    const [
-      bookingStats,
-      allBookings,
-      allPlayers,
-      externalTournaments,
-      auditData
-    ] = await Promise.all([
-      fetchBookingStats(token),
-      fetchAllBookings(token),
-      fetchPlayers(token),
-      fetchAdminExternalTournaments(token),
-      fetchAdminAuditLogs(token)
-    ]);
+    const [bookingStats, allBookings, allPlayers, externalTournaments, auditData] =
+      await Promise.all([
+        fetchBookingStats(token),
+        fetchAllBookings(token),
+        fetchPlayers(token),
+        fetchAdminExternalTournaments(token),
+        fetchAdminAuditLogs(token)
+      ]);
 
     setStats(bookingStats);
     setBookings(allBookings ?? []);
@@ -259,7 +205,7 @@ export default function AdminPage() {
     setAuditEnabled(auditData.enabled !== false);
     setError(null);
     setLoading(false);
-  }, []);
+  }, [redirectToLogin]);
 
   useEffect(() => {
     async function init() {
@@ -267,20 +213,17 @@ export default function AdminPage() {
         setLoading(true);
         await loadAdminData();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "No se pudo cargar el panel");
+        setError(err instanceof Error ? err.message : "No se pudo cargar el panel.");
         setLoading(false);
       }
     }
 
-    init();
+    void init();
   }, [loadAdminData]);
 
   const filteredBookings = useMemo(() => {
-    const normalizedFilter = filter.trim().toLowerCase();
-
-    if (!normalizedFilter) {
-      return bookings;
-    }
+    const normalized = bookingFilter.trim().toLowerCase();
+    if (!normalized) return bookings;
 
     return bookings.filter((booking) => {
       const playerName = booking.profiles?.full_name || "";
@@ -300,37 +243,34 @@ export default function AdminPage() {
       ]
         .join(" ")
         .toLowerCase()
-        .includes(normalizedFilter);
+        .includes(normalized);
     });
-  }, [bookings, filter]);
+  }, [bookingFilter, bookings]);
 
   const monthlyReport = useMemo(() => {
     const monthlyBookings = bookings.filter((booking) =>
       booking.time_slots?.slot_date?.startsWith(reportMonth)
     );
-
-    const activeBookings = monthlyBookings.filter(
-      (booking) => booking.status !== "cancelled"
-    );
+    const activeBookings = monthlyBookings.filter((booking) => booking.status !== "cancelled");
 
     const byCourt = activeBookings.reduce<Record<string, number>>((acc, booking) => {
       const courtName =
-        booking.time_slots?.courts?.name || booking.courts?.name || "Cancha sin nombre";
+        booking.time_slots?.courts?.name || booking.courts?.name || "Cancha";
       acc[courtName] = (acc[courtName] || 0) + 1;
       return acc;
     }, {});
 
     const byHour = activeBookings.reduce<Record<string, number>>((acc, booking) => {
-      const startTime = booking.time_slots?.start_time?.slice(0, 5) || "--:--";
-      const endTime = booking.time_slots?.end_time?.slice(0, 5) || "--:--";
-      const key = `${startTime} - ${endTime}`;
+      const start = booking.time_slots?.start_time?.slice(0, 5) || "--:--";
+      const end = booking.time_slots?.end_time?.slice(0, 5) || "--:--";
+      const key = `${start} - ${end}`;
       acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
 
     const byDay = activeBookings.reduce<Record<string, number>>((acc, booking) => {
-      const dayKey = booking.time_slots?.slot_date || "Sin fecha";
-      acc[dayKey] = (acc[dayKey] || 0) + 1;
+      const key = booking.time_slots?.slot_date || "Sin fecha";
+      acc[key] = (acc[key] || 0) + 1;
       return acc;
     }, {});
 
@@ -348,18 +288,80 @@ export default function AdminPage() {
 
   const reportMonthLabel = useMemo(() => {
     const [year, month] = reportMonth.split("-");
-    const date = new Date(Number(year), Number(month) - 1, 1);
     return new Intl.DateTimeFormat("es-AR", {
       month: "long",
       year: "numeric"
-    }).format(date);
+    }).format(new Date(Number(year), Number(month) - 1, 1));
   }, [reportMonth]);
 
+  const auditActionOptions = useMemo(
+    () => Array.from(new Set(auditLogs.map((log) => log.action))).sort(),
+    [auditLogs]
+  );
+
+  const auditTargetOptions = useMemo(
+    () => Array.from(new Set(auditLogs.map((log) => log.target_type))).sort(),
+    [auditLogs]
+  );
+
+  const filteredAuditLogs = useMemo(() => {
+    const normalized = auditTextFilter.trim().toLowerCase();
+
+    return auditLogs.filter((log) => {
+      if (auditActionFilter !== "all" && log.action !== auditActionFilter) return false;
+      if (auditTargetFilter !== "all" && log.target_type !== auditTargetFilter) return false;
+      if (!normalized) return true;
+
+      return [
+        log.profiles?.full_name || "",
+        log.action,
+        log.target_type,
+        log.target_id,
+        JSON.stringify(log.details || {})
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized);
+    });
+  }, [auditActionFilter, auditLogs, auditTargetFilter, auditTextFilter]);
+
+  const downloadCsv = useCallback((filename: string, rows: Array<Record<string, unknown>>) => {
+    const csv = buildCsv(rows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }, []);
+
   function toggleSection(section: AdminSectionKey) {
-    setOpenSections((current) => ({
-      ...current,
-      [section]: !current[section]
-    }));
+    setOpenSections((current) => ({ ...current, [section]: !current[section] }));
+  }
+
+  function resetTournamentForm() {
+    setEditingTournamentId(null);
+    setTournamentForm(getEmptyTournamentForm());
+  }
+
+  function startTournamentEdit(tournament: ExternalTournament) {
+    setEditingTournamentId(tournament.id);
+    setTournamentForm({
+      title: tournament.title,
+      platform: tournament.platform,
+      event_date: tournament.event_date || "",
+      location: tournament.location || "",
+      url: tournament.url,
+      notes: tournament.notes || "",
+      is_active: tournament.is_active
+    });
+    setMessage(`Editando torneo: ${tournament.title}`);
+    setTimeout(() => {
+      tournamentEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
   }
 
   function startEditing(booking: BookingWithRelations) {
@@ -379,17 +381,12 @@ export default function AdminPage() {
 
   async function handleSave(bookingId: string) {
     try {
-      const token = getSession()?.access_token;
-      if (!token) {
-        throw new Error("Debes iniciar sesión");
-      }
-
-      if (!editState?.userId) {
-        throw new Error("Debes seleccionar un jugador");
-      }
+      const token = getAdminToken();
+      if (!editState?.userId) throw new Error("Debes seleccionar un jugador.");
 
       setSaving(true);
       setMessage(null);
+      setError(null);
 
       await updateBookingAsAdmin(bookingId, token, {
         user_id: editState.userId,
@@ -401,110 +398,63 @@ export default function AdminPage() {
       setMessage("Reserva actualizada correctamente.");
       stopEditing();
     } catch (err) {
-      setMessage(
-        err instanceof Error ? err.message : "No se pudo actualizar la reserva"
-      );
+      setError(err instanceof Error ? err.message : "No se pudo actualizar la reserva.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDeleteProfile(player: Profile) {
-    const confirmed = window.confirm(
-      `Vas a borrar el perfil de ${player.full_name || "este usuario"}. Esta acción no se puede deshacer.`
-    );
-
-    if (!confirmed) {
+    if (
+      !window.confirm(
+        `Vas a borrar el perfil de ${player.full_name || "este usuario"}. Esta acción no se puede deshacer.`
+      )
+    ) {
       return;
     }
 
     try {
-      const token = getSession()?.access_token;
-      if (!token) {
-        throw new Error("Debes iniciar sesión");
-      }
-
       setDeletingProfileId(player.id);
       setMessage(null);
       setError(null);
-
-      await deleteProfileAsAdmin(player, token);
+      await deleteProfileAsAdmin(player, getAdminToken());
       await loadAdminData();
       setMessage("Perfil eliminado correctamente.");
     } catch (err) {
-      setMessage(
-        err instanceof Error ? err.message : "No se pudo eliminar el perfil"
-      );
+      setError(err instanceof Error ? err.message : "No se pudo eliminar el perfil.");
     } finally {
       setDeletingProfileId(null);
     }
   }
 
   async function handlePromoteProfile(player: Profile) {
-    const confirmed = window.confirm(
-      `Vas a convertir a ${player.full_name || "este usuario"} en administrador.`
-    );
-
-    if (!confirmed) {
+    if (
+      !window.confirm(
+        `Vas a convertir a ${player.full_name || "este usuario"} en administrador.`
+      )
+    ) {
       return;
     }
 
     try {
-      const token = getSession()?.access_token;
-      if (!token) {
-        throw new Error("Debes iniciar sesión");
-      }
-
       setPromotingProfileId(player.id);
       setMessage(null);
       setError(null);
-
-      await promoteProfileToAdmin(player.id, token);
+      await promoteProfileToAdmin(player.id, getAdminToken());
       await loadAdminData();
       setMessage("Usuario promovido a administrador.");
     } catch (err) {
-      setMessage(
-        err instanceof Error ? err.message : "No se pudo actualizar el rol"
-      );
+      setError(err instanceof Error ? err.message : "No se pudo actualizar el rol.");
     } finally {
       setPromotingProfileId(null);
     }
   }
 
-  function startTournamentEdit(tournament: ExternalTournament) {
-    setEditingTournamentId(tournament.id);
-    setTournamentForm({
-      title: tournament.title,
-      platform: tournament.platform,
-      event_date: tournament.event_date || "",
-      location: tournament.location || "",
-      url: tournament.url,
-      notes: tournament.notes || "",
-      is_active: tournament.is_active
-    });
-    setMessage(`Editando torneo: ${tournament.title}`);
-    setTimeout(() => {
-      tournamentEditorRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start"
-      });
-    }, 50);
-  }
-
-  function resetTournamentForm() {
-    setEditingTournamentId(null);
-    setTournamentForm(getEmptyTournamentForm());
-  }
-
   async function handleTournamentSubmit() {
     try {
-      const token = getSession()?.access_token;
-      if (!token) {
-        throw new Error("Debes iniciar sesión");
-      }
-
       setSavingTournament(true);
       setMessage(null);
+      setError(null);
 
       const payload = {
         title: tournamentForm.title,
@@ -517,18 +467,18 @@ export default function AdminPage() {
       };
 
       if (editingTournamentId) {
-        await updateExternalTournament(editingTournamentId, token, payload);
+        await updateExternalTournament(editingTournamentId, getAdminToken(), payload);
         setMessage("Torneo externo actualizado.");
       } else {
-        await createExternalTournament(token, payload);
+        await createExternalTournament(getAdminToken(), payload);
         setMessage("Torneo externo creado.");
       }
 
       await loadAdminData();
       resetTournamentForm();
     } catch (err) {
-      setMessage(
-        err instanceof Error ? err.message : "No se pudo guardar el torneo externo"
+      setError(
+        err instanceof Error ? err.message : "No se pudo guardar el torneo externo."
       );
     } finally {
       setSavingTournament(false);
@@ -536,130 +486,127 @@ export default function AdminPage() {
   }
 
   async function handleDeleteTournament(tournament: ExternalTournament) {
-    const confirmed = window.confirm(
-      `Vas a borrar el torneo "${tournament.title}".`
-    );
-
-    if (!confirmed) {
+    if (!window.confirm(`Vas a borrar el torneo "${tournament.title}".`)) {
       return;
     }
 
     try {
-      const token = getSession()?.access_token;
-      if (!token) {
-        throw new Error("Debes iniciar sesión");
-      }
-
       setDeletingTournamentId(tournament.id);
       setMessage(null);
-      await deleteExternalTournament(tournament.id, token);
+      setError(null);
+      await deleteExternalTournament(tournament.id, getAdminToken());
       await loadAdminData();
       setMessage("Torneo externo borrado.");
-      if (editingTournamentId === tournament.id) {
-        resetTournamentForm();
-      }
+      if (editingTournamentId === tournament.id) resetTournamentForm();
     } catch (err) {
-      setMessage(
-        err instanceof Error ? err.message : "No se pudo borrar el torneo externo"
+      setError(
+        err instanceof Error ? err.message : "No se pudo borrar el torneo externo."
       );
     } finally {
       setDeletingTournamentId(null);
     }
   }
 
-  function handleSaveLiveStream() {
-    return;
-  }
-
-  function handleClearLiveStream() {
-    return;
-  }
-
-  /* async function handleSaveLiveStream() {
+  async function handleExportBookings() {
     try {
-      const token = getSession()?.access_token;
-      if (!token) {
-        throw new Error("Debes iniciar sesión");
-      }
-
-      setSavingLiveStream(true);
-      setMessage(null);
-      setError(null);
-
-      const result = await updateLiveStream(token, {
-        title: liveStreamForm.title,
-        description: liveStreamForm.description || null,
-        banner_url: liveStreamForm.banner_url || null,
-        youtube_url: liveStreamForm.youtube_url,
-        starts_at: liveStreamForm.starts_at
-          ? new Date(liveStreamForm.starts_at).toISOString()
-          : null,
-        is_live: liveStreamForm.is_live
-      });
-
-      const stream = result.stream;
-      setLiveStream(stream);
-      setSquorePostUrl(result.squore_post_url ?? null);
-      setLiveStreamForm(
-        stream
-          ? {
-              title: stream.title,
-              description: stream.description || "",
-              banner_url: stream.banner_url || "",
-              youtube_url: stream.youtube_url,
-              starts_at: formatDateTimeLocalValue(stream.starts_at),
-              is_live: stream.is_live
-            }
-          : getEmptyLiveStreamForm()
+      setExportingKey("bookings");
+      const monthlyBookings = bookings.filter((booking) =>
+        booking.time_slots?.slot_date?.startsWith(reportMonth)
       );
-      setMessage("Transmisión en vivo guardada.");
+      downloadCsv(
+        `reservas-${reportMonth}.csv`,
+        monthlyBookings.map((booking) => ({
+          id: booking.id,
+          fecha: booking.time_slots?.slot_date || "",
+          hora_inicio: booking.time_slots?.start_time?.slice(0, 5) || "",
+          hora_fin: booking.time_slots?.end_time?.slice(0, 5) || "",
+          cancha: booking.time_slots?.courts?.name || booking.courts?.name || "",
+          jugador: booking.profiles?.full_name || "",
+          categoria: booking.profiles?.category || "",
+          estado: booking.status,
+          nota: booking.notes || ""
+        }))
+      );
+      setMessage("CSV de reservas descargado.");
     } catch (err) {
-      setMessage(
-        err instanceof Error
-          ? err.message
-          : "No se pudo guardar la transmisión en vivo"
+      setError(err instanceof Error ? err.message : "No se pudo exportar reservas.");
+    } finally {
+      setExportingKey(null);
+    }
+  }
+
+  async function handleExportPlayers() {
+    try {
+      setExportingKey("players");
+      downloadCsv(
+        "jugadores.csv",
+        players.map((player) => ({
+          id: player.id,
+          nombre: player.full_name || "",
+          categoria: player.category || "",
+          telefono: player.phone || "",
+          rol: player.role
+        }))
+      );
+      setMessage("CSV de jugadores descargado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo exportar jugadores.");
+    } finally {
+      setExportingKey(null);
+    }
+  }
+
+  async function handleExportAudit() {
+    try {
+      setExportingKey("audit");
+      downloadCsv(
+        "auditoria-admin.csv",
+        filteredAuditLogs.map((log) => ({
+          id: log.id,
+          fecha: new Date(log.created_at).toISOString(),
+          admin: log.profiles?.full_name || "Admin",
+          accion: log.action,
+          recurso: log.target_type,
+          recurso_id: log.target_id,
+          detalle: JSON.stringify(log.details || {})
+        }))
+      );
+      setMessage("CSV de auditoría descargado.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo exportar auditoría.");
+    } finally {
+      setExportingKey(null);
+    }
+  }
+
+  async function handleExportCasualMatches() {
+    try {
+      setExportingKey("matches");
+      const matches = (await fetchAllCasualMatches(getAdminToken())) as CasualMatch[];
+      downloadCsv(
+        "partidos-casuales.csv",
+        matches.map((match) => ({
+          id: match.id,
+          fecha: match.played_on,
+          jugador_uno: match.player_one?.full_name || "",
+          jugador_dos: match.player_two?.full_name || "",
+          score_uno: match.score_player_one,
+          score_dos: match.score_player_two,
+          confirmacion: match.confirmation_status || "confirmed",
+          actualizo: match.confirmation_updated_by || "",
+          nota_confirmacion: match.confirmation_note || "",
+          nota_partido: match.notes || ""
+        }))
+      );
+      setMessage("CSV de partidos casuales descargado.");
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "No se pudo exportar partidos casuales."
       );
     } finally {
-      setSavingLiveStream(false);
+      setExportingKey(null);
     }
   }
-
-  async function handleClearLiveStream() {
-    const confirmed = window.confirm(
-      "Vas a limpiar la transmisión actual. Los usuarios dejarán de verla en la app."
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const token = getSession()?.access_token;
-      if (!token) {
-        throw new Error("Debes iniciar sesión");
-      }
-
-      setClearingLiveStream(true);
-      setMessage(null);
-      setError(null);
-
-      await clearLiveStream(token);
-      setLiveStream(null);
-      setSquorePostUrl(null);
-      setLiveStreamForm(getEmptyLiveStreamForm());
-      setMessage("Transmisión en vivo limpiada.");
-    } catch (err) {
-      setMessage(
-        err instanceof Error
-          ? err.message
-          : "No se pudo limpiar la transmisión en vivo"
-      );
-    } finally {
-      setClearingLiveStream(false);
-    }
-  }
-
-  } */
 
   return (
     <div className="space-y-6">
@@ -669,20 +616,19 @@ export default function AdminPage() {
       />
 
       {message ? <p className="text-sm text-slate-600">{message}</p> : null}
-      {error ? <p className="text-red-600">{error}</p> : null}
+      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Cargando panel...</p> : null}
 
-      {!error && role === "admin" && stats ? (
+      {!loading && !error && role === "admin" && stats ? (
         <div className="grid gap-4 md:grid-cols-3">
           <article className="card p-4">
             <p className="text-sm text-slate-500">Reservas totales</p>
             <p className="mt-2 text-3xl font-bold">{stats.total}</p>
           </article>
-
           <article className="card p-4">
             <p className="text-sm text-slate-500">Confirmadas</p>
             <p className="mt-2 text-3xl font-bold">{stats.confirmed}</p>
           </article>
-
           <article className="card p-4">
             <p className="text-sm text-slate-500">Canceladas</p>
             <p className="mt-2 text-3xl font-bold">{stats.cancelled}</p>
@@ -690,819 +636,445 @@ export default function AdminPage() {
         </div>
       ) : null}
 
-      {!error && role === "admin" ? (
-        <AdminAccordionSection
-          title="Transmision en vivo"
-          description="Configura el centro en vivo de Cancha 1 y Cancha 2 con YouTube, Squore y reenvio a Tournament Software."
-          count="2 canchas"
-          open={openSections.live}
-          onToggle={() => toggleSection("live")}
-        >
-          <AdminLiveCenterSection />
-        </AdminAccordionSection>
-      ) : null}
-
-      {false ? (
-        <AdminAccordionSection
-          title="Transmisión en vivo"
-          description="Carga el link de YouTube del vivo o de la próxima transmisión."
-          count={liveStream?.is_live ? "ON" : liveStream ? "Programada" : "Off"}
-          open={openSections.live}
-          onToggle={() => toggleSection("live")}
-        >
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <a
-                href="/live"
-                target="_blank"
-                rel="noreferrer"
-                className="btn-secondary whitespace-nowrap"
-              >
-                Ver página pública
-              </a>
-              {liveStream?.youtube_url ? (
-                <a
-                  href={liveStream?.youtube_url || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="btn-secondary whitespace-nowrap"
-                >
-                  Abrir YouTube
-                </a>
-                ) : null}
-            </div>
-
-            <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4">
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-700">
-                Integración Squore
-              </p>
-              <p className="mt-1 text-sm text-slate-700">
-                En Squore, pegá este endpoint en <strong>PostResult</strong> para que el marcador se actualice solo dentro del vivo.
-              </p>
-              <div className="mt-3 rounded-xl border border-orange-200 bg-white px-3 py-3">
-                <p className="break-all font-mono text-xs text-slate-700">
-                  {squorePostUrl || "Guardá una transmisión para generar el endpoint."}
-                </p>
-              </div>
-              <p className="mt-2 text-xs text-slate-500">
-                Recomendado: usar &quot;most relevant data&quot; o &quot;most relevant data + json&quot;.
-              </p>
-            </div>
-
-            {liveStream ? (
-              <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                      liveStream?.is_live
-                        ? "bg-red-100 text-red-700"
-                        : "bg-orange-100 text-orange-700"
-                    }`}
-                  >
-                    {liveStream?.is_live ? "En vivo ahora" : "Próxima transmisión"}
-                  </span>
-                  <span className="text-sm text-slate-500">
-                    Actualizado: {new Date(liveStream?.updated_at || "").toLocaleString("es-AR")}
-                  </span>
-                </div>
-                <h3 className="mt-3 text-lg font-semibold text-slate-900">
-                  {liveStream?.title}
-                </h3>
-                {liveStream?.description ? (
-                  <p className="mt-1 text-sm text-slate-600">
-                    {liveStream?.description}
-                  </p>
-                ) : null}
-                {liveStream?.banner_url ? (
-                  <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-slate-100">
-                    <div
-                      className="h-32 w-full bg-cover bg-center bg-no-repeat"
-                      style={{ backgroundImage: `url("${liveStream?.banner_url || ""}")` }}
-                    />
-                  </div>
-                ) : null}
-                <p className="mt-2 text-sm text-slate-500">
-                  {liveStream?.starts_at
-                    ? `Inicio: ${new Date(liveStream!.starts_at!).toLocaleString("es-AR")}`
-                    : "Sin horario programado"}
-                </p>
-              </article>
-            ) : (
-              <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                Todavía no hay transmisión configurada.
-              </p>
-            )}
-
-            <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  Configuración del vivo
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Pegá el link de YouTube y decidí si ya está en vivo o queda programado.
-                </p>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Título
-                </label>
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                  value={liveStreamForm.title}
-                  onChange={(event) =>
-                    setLiveStreamForm({ ...liveStreamForm, title: event.target.value })
-                  }
-                  placeholder="Ej: Fecha del Patagónico - Puerto Madryn"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Inicio programado
-                </label>
-                <input
-                  type="datetime-local"
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                  value={liveStreamForm.starts_at}
-                  onChange={(event) =>
-                    setLiveStreamForm({
-                      ...liveStreamForm,
-                      starts_at: event.target.value
-                    })
-                  }
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Link de YouTube
-                </label>
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                  value={liveStreamForm.youtube_url}
-                  onChange={(event) =>
-                    setLiveStreamForm({
-                      ...liveStreamForm,
-                      youtube_url: event.target.value
-                    })
-                  }
-                  placeholder="https://www.youtube.com/watch?v=..."
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Banner / afiche
-                </label>
-                <input
-                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                  value={liveStreamForm.banner_url}
-                  onChange={(event) =>
-                    setLiveStreamForm({
-                      ...liveStreamForm,
-                      banner_url: event.target.value
-                    })
-                  }
-                  placeholder="https://.../afiche.jpg"
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  Opcional. Se muestra arriba del player y en la promo del vivo.
-                </p>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="mb-1 block text-sm font-medium text-slate-700">
-                  Descripción
-                </label>
-                <textarea
-                  className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                  value={liveStreamForm.description}
-                  onChange={(event) =>
-                    setLiveStreamForm({
-                      ...liveStreamForm,
-                      description: event.target.value
-                    })
-                  }
-                  placeholder="Opcional"
-                />
-              </div>
-
-              <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={liveStreamForm.is_live}
-                  onChange={(event) =>
-                    setLiveStreamForm({
-                      ...liveStreamForm,
-                      is_live: event.target.checked
-                    })
-                  }
-                />
-                Marcar como en vivo ahora
-              </label>
-
-              <div className="md:col-span-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleSaveLiveStream}
-                  disabled={savingLiveStream || clearingLiveStream}
-                >
-                  {savingLiveStream ? "Guardando..." : "Guardar transmisión"}
-                </button>
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={() => setLiveStreamForm(getEmptyLiveStreamForm())}
-                  disabled={savingLiveStream || clearingLiveStream}
-                >
-                  Limpiar formulario
-                </button>
-                {liveStream ? (
-                  <button
-                    type="button"
-                    className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={handleClearLiveStream}
-                    disabled={savingLiveStream || clearingLiveStream}
-                  >
-                    {clearingLiveStream ? "Limpiando..." : "Desactivar y borrar"}
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        </AdminAccordionSection>
-      ) : null}
-
-      {!error && role === "admin" ? (
-        <AdminAccordionSection
-          title="Historial mensual de reservas"
-          description="Resumen para cierre mensual y detección de horarios más usados."
-          count={monthlyReport.total}
-          open={openSections.report}
-          onToggle={() => toggleSection("report")}
-        >
-          <div className="space-y-5">
-            <div className="w-full md:w-56">
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Mes del reporte
-              </label>
-              <input
-                type="month"
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={reportMonth}
-                onChange={(event) => setReportMonth(event.target.value)}
-              />
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-4">
-            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Reservas del mes</p>
-              <p className="mt-2 text-3xl font-bold text-slate-900">
-                {monthlyReport.total}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">{reportMonthLabel}</p>
-            </article>
-
-            <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-sm text-emerald-700">Activas</p>
-              <p className="mt-2 text-3xl font-bold text-emerald-900">
-                {monthlyReport.active}
-              </p>
-              <p className="mt-1 text-xs text-emerald-700">
-                Confirmadas + completadas
-              </p>
-            </article>
-
-            <article className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
-              <p className="text-sm text-sky-700">Completadas</p>
-              <p className="mt-2 text-3xl font-bold text-sky-900">
-                {monthlyReport.completed}
-              </p>
-              <p className="mt-1 text-xs text-sky-700">
-                Turnos ya jugados
-              </p>
-            </article>
-
-            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm text-slate-500">Canceladas</p>
-              <p className="mt-2 text-3xl font-bold text-slate-900">
-                {monthlyReport.cancelled}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Confirmadas actuales: {monthlyReport.confirmed}
-              </p>
-            </article>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-3">
-            <article className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Horarios más usados
-              </h3>
-              <p className="mb-3 text-sm text-slate-500">
-                Ranking del mes según reservas activas.
-              </p>
-
-              {monthlyReport.byHour.length ? (
-                <div className="space-y-3">
-                  {monthlyReport.byHour.slice(0, 5).map(([label, count]) => (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
-                    >
-                      <span className="font-medium text-slate-800">{label}</span>
-                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
-                        {count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  No hay reservas para ese mes.
-                </p>
-              )}
-            </article>
-
-            <article className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Canchas más usadas
-              </h3>
-              <p className="mb-3 text-sm text-slate-500">
-                Ranking por cantidad de reservas activas.
-              </p>
-
-              {monthlyReport.byCourt.length ? (
-                <div className="space-y-3">
-                  {monthlyReport.byCourt.slice(0, 5).map(([label, count]) => (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
-                    >
-                      <span className="font-medium text-slate-800">{label}</span>
-                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
-                        {count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  No hay reservas para ese mes.
-                </p>
-              )}
-            </article>
-
-            <article className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-base font-semibold text-slate-900">
-                Días con más movimiento
-              </h3>
-              <p className="mb-3 text-sm text-slate-500">
-                Fechas con mayor cantidad de reservas activas.
-              </p>
-
-              {monthlyReport.byDay.length ? (
-                <div className="space-y-3">
-                  {monthlyReport.byDay.slice(0, 5).map(([label, count]) => (
-                    <div
-                      key={label}
-                      className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2"
-                    >
-                      <span className="font-medium text-slate-800">{label}</span>
-                      <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">
-                        {count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  No hay reservas para ese mes.
-                </p>
-              )}
-            </article>
-            </div>
-          </div>
-        </AdminAccordionSection>
-      ) : null}
-
-      {!error && role === "admin" ? (
-        <AdminAccordionSection
-          title="Torneos externos"
-          description="Carga y edita links manuales a torneos externos."
-          count={tournaments.length}
-          open={openSections.tournaments}
-          onToggle={() => toggleSection("tournaments")}
-        >
-          <div className="flex justify-start">
-            <a
-              href="/tournaments"
-              target="_blank"
-              rel="noreferrer"
-              className="btn-secondary whitespace-nowrap"
-            >
-              Ver página pública
-            </a>
-          </div>
-
-          <div
-            ref={tournamentEditorRef}
-            className={`grid gap-4 rounded-2xl p-4 md:grid-cols-2 ${
-              editingTournamentId
-                ? "border-2 border-orange-300 bg-orange-50/60"
-                : "border border-slate-200 bg-slate-50"
-            }`}
-          >
-            <div className="md:col-span-2 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-                  {editingTournamentId ? "Editando torneo" : "Nuevo torneo"}
-                </p>
-                <p className="text-sm text-slate-600">
-                  {editingTournamentId
-                    ? "Modifica los datos y guarda los cambios."
-                    : "Carga un torneo nuevo para mostrarlo en la app."}
-                </p>
-              </div>
-              {editingTournamentId ? (
-                <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
-                  Modo edición
-                </span>
-              ) : null}
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Nombre del torneo
-              </label>
-              <input
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={tournamentForm.title}
-                onChange={(event) =>
-                  setTournamentForm({ ...tournamentForm, title: event.target.value })
-                }
-                placeholder="Ej: Torneo Apertura"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Plataforma
-              </label>
-              <select
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={tournamentForm.platform}
-                onChange={(event) =>
-                  setTournamentForm({
-                    ...tournamentForm,
-                    platform: event.target.value as ExternalTournamentPlatform
-                  })
-                }
-              >
-                {tournamentPlatforms.map((platform) => (
-                  <option key={platform} value={platform}>
-                    {platform === "rankedin"
-                      ? "Rankedin"
-                      : platform === "tournamentsoftware"
-                        ? "Tournament Software"
-                        : "Otro"}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Fecha
-              </label>
-              <input
-                type="date"
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={tournamentForm.event_date}
-                onChange={(event) =>
-                  setTournamentForm({
-                    ...tournamentForm,
-                    event_date: event.target.value
-                  })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Lugar
-              </label>
-              <input
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={tournamentForm.location}
-                onChange={(event) =>
-                  setTournamentForm({
-                    ...tournamentForm,
-                    location: event.target.value
-                  })
-                }
-                placeholder="Club / ciudad"
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Link del torneo
-              </label>
-              <input
-                className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={tournamentForm.url}
-                onChange={(event) =>
-                  setTournamentForm({ ...tournamentForm, url: event.target.value })
-                }
-                placeholder="https://..."
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="mb-1 block text-sm font-medium text-slate-700">
-                Notas
-              </label>
-              <textarea
-                className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                value={tournamentForm.notes}
-                onChange={(event) =>
-                  setTournamentForm({ ...tournamentForm, notes: event.target.value })
-                }
-                placeholder="Opcional"
-              />
-            </div>
-
-            <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-700">
-              <input
-                type="checkbox"
-                checked={tournamentForm.is_active}
-                onChange={(event) =>
-                  setTournamentForm({
-                    ...tournamentForm,
-                    is_active: event.target.checked
-                  })
-                }
-              />
-              Mostrar en la página pública de torneos
-            </label>
-
-            <div className="md:col-span-2 flex flex-wrap gap-2">
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={handleTournamentSubmit}
-                disabled={savingTournament}
-              >
-                {savingTournament
-                  ? "Guardando..."
-                  : editingTournamentId
-                    ? "Guardar torneo"
-                    : "Crear torneo"}
-              </button>
-              {editingTournamentId ? (
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  onClick={resetTournamentForm}
-                  disabled={savingTournament}
-                >
-                  Cancelar edición
-                </button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {tournaments.length ? (
-              tournaments.map((tournament) => (
-                <article
-                  key={tournament.id}
-                  className={`flex flex-col gap-3 rounded-2xl p-4 md:flex-row md:items-center md:justify-between ${
-                    editingTournamentId === tournament.id
-                      ? "border-2 border-orange-300 bg-orange-50/40"
-                      : "border border-slate-200 bg-white"
-                  }`}
-                >
-                  <div>
-                    <p className="font-medium text-slate-900">{tournament.title}</p>
-                    <p className="text-sm text-slate-600">
-                      {(tournament.platform === "rankedin"
-                        ? "Rankedin"
-                        : tournament.platform === "tournamentsoftware"
-                          ? "Tournament Software"
-                          : "Otro")}
-                      {tournament.event_date ? ` · ${tournament.event_date}` : ""}
-                      {tournament.location ? ` · ${tournament.location}` : ""}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {tournament.is_active ? "Visible en público" : "Oculto"}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <a
-                      href={tournament.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn-secondary"
-                    >
-                      Abrir link
-                    </a>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => startTournamentEdit(tournament)}
-                    >
-                      Editar
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                      onClick={() => handleDeleteTournament(tournament)}
-                      disabled={deletingTournamentId === tournament.id}
-                    >
-                      {deletingTournamentId === tournament.id
-                        ? "Borrando..."
-                        : "Borrar"}
-                    </button>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <p className="text-sm text-slate-500">
-                Todavía no hay torneos externos cargados.
-              </p>
-            )}
-          </div>
-        </AdminAccordionSection>
-      ) : null}
-
-      {!error && role === "admin" ? (
-        <AdminAccordionSection
-          title="Auditoría admin"
-          description="Historial reciente de acciones sensibles realizadas por administradores."
-          count={auditLogs.length}
-          open={openSections.audit}
-          onToggle={() => toggleSection("audit")}
-        >
-          <div>
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">
-                Auditoría admin
-              </h2>
-              <p className="text-sm text-slate-500">
-                Historial reciente de acciones sensibles realizadas por administradores.
-              </p>
-            </div>
-            <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-              {auditLogs.length}
-            </span>
-          </div>
-
-          {!auditEnabled ? (
-            <p className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-              La auditoría todavía no está habilitada en la base. Falta correr la migración `admin_audit_logs`.
-            </p>
-          ) : auditLogs.length ? (
-            <div className="space-y-3">
-              {auditLogs.map((log) => (
-                <article
-                  key={log.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-4"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <p className="font-medium text-slate-900">
-                        {log.profiles?.full_name || "Admin"} · {log.action}
-                      </p>
-                      <p className="text-sm text-slate-500">
-                        {new Date(log.created_at).toLocaleString("es-AR")}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-wide text-slate-600">
-                      {log.target_type} · {log.target_id}
-                    </span>
-                  </div>
-
-                  {log.details ? (
-                    <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-3 text-xs text-slate-100">
-                      {JSON.stringify(log.details, null, 2)}
-                    </pre>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-500">
-              Todavía no hay acciones auditadas para mostrar.
-            </p>
-          )}
-        </AdminAccordionSection>
-      ) : null}
-
-      {!error && role === "admin" ? (
-        <section className="card p-4">
-          <label className="mb-2 block text-sm font-medium text-slate-700">
-            Buscar reservas
-          </label>
-          <input
-            type="text"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-            placeholder="Jugador, categoría, cancha, fecha o estado"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-          />
-        </section>
-      ) : null}
-
-      {loading ? <p className="text-sm text-slate-600">Cargando panel...</p> : null}
-
       {!loading && !error && role === "admin" ? (
         <div className="space-y-4">
           <AdminAccordionSection
+            title="Historial mensual de reservas"
+            description="Resumen para cierre mensual y detección de horarios más usados."
+            count={monthlyReport.total}
+            open={openSections.report}
+            onToggle={() => toggleSection("report")}
+          >
+            <div className="space-y-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div className="w-full md:w-56">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Mes del reporte
+                  </label>
+                  <input
+                    type="month"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={reportMonth}
+                    onChange={(event) => setReportMonth(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleExportBookings}
+                    disabled={exportingKey === "bookings"}
+                  >
+                    {exportingKey === "bookings" ? "Exportando reservas..." : "Exportar reservas CSV"}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={handleExportCasualMatches}
+                    disabled={exportingKey === "matches"}
+                  >
+                    {exportingKey === "matches" ? "Exportando partidos..." : "Exportar partidos casuales"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-4">
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Reservas del mes</p>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">{monthlyReport.total}</p>
+                  <p className="mt-1 text-xs text-slate-500">{reportMonthLabel}</p>
+                </article>
+                <article className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <p className="text-sm text-emerald-700">Activas</p>
+                  <p className="mt-2 text-3xl font-bold text-emerald-900">{monthlyReport.active}</p>
+                  <p className="mt-1 text-xs text-emerald-700">Confirmadas + completadas</p>
+                </article>
+                <article className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
+                  <p className="text-sm text-sky-700">Completadas</p>
+                  <p className="mt-2 text-3xl font-bold text-sky-900">{monthlyReport.completed}</p>
+                  <p className="mt-1 text-xs text-sky-700">Turnos ya jugados</p>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-sm text-slate-500">Canceladas</p>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">{monthlyReport.cancelled}</p>
+                  <p className="mt-1 text-xs text-slate-500">Confirmadas actuales: {monthlyReport.confirmed}</p>
+                </article>
+              </div>
+
+              <div className="grid gap-4 xl:grid-cols-3">
+                {[
+                  { title: "Horarios más usados", description: "Ranking del mes según reservas activas.", data: monthlyReport.byHour },
+                  { title: "Canchas más usadas", description: "Ranking por cantidad de reservas activas.", data: monthlyReport.byCourt },
+                  { title: "Días con más movimiento", description: "Fechas con mayor cantidad de reservas activas.", data: monthlyReport.byDay }
+                ].map((card) => (
+                  <article key={card.title} className="rounded-2xl border border-slate-200 bg-white p-4">
+                    <h3 className="text-base font-semibold text-slate-900">{card.title}</h3>
+                    <p className="mb-3 text-sm text-slate-500">{card.description}</p>
+                    {card.data.length ? (
+                      <div className="space-y-3">
+                        {card.data.slice(0, 5).map(([label, count]) => (
+                          <div key={label} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                            <span className="font-medium text-slate-800">{label}</span>
+                            <span className="rounded-full bg-slate-900 px-2.5 py-1 text-xs font-semibold text-white">{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">No hay reservas para ese mes.</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </div>
+          </AdminAccordionSection>
+
+          <AdminAccordionSection
+            title="Transmisión en vivo"
+            description="Configura el centro en vivo de Cancha 1 y Cancha 2 con YouTube, Squore y reenvío a Tournament Software."
+            count="2 canchas"
+            open={openSections.live}
+            onToggle={() => toggleSection("live")}
+          >
+            <AdminLiveCenterSection />
+          </AdminAccordionSection>
+
+          <AdminAccordionSection
+            title="Torneos externos"
+            description="Carga y edita links manuales a torneos externos."
+            count={tournaments.length}
+            open={openSections.tournaments}
+            onToggle={() => toggleSection("tournaments")}
+          >
+            <div className="space-y-4">
+              <div className="flex justify-start">
+                <a href="/tournaments" target="_blank" rel="noreferrer" className="btn-secondary whitespace-nowrap">
+                  Ver página pública
+                </a>
+              </div>
+
+              <div
+                ref={tournamentEditorRef}
+                className={`grid gap-4 rounded-2xl p-4 md:grid-cols-2 ${
+                  editingTournamentId ? "border-2 border-orange-300 bg-orange-50/60" : "border border-slate-200 bg-slate-50"
+                }`}
+              >
+                <div className="md:col-span-2 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      {editingTournamentId ? "Editando torneo" : "Nuevo torneo"}
+                    </p>
+                    <p className="text-sm text-slate-600">
+                      {editingTournamentId ? "Modifica los datos y guarda los cambios." : "Carga un torneo nuevo para mostrarlo en la app."}
+                    </p>
+                  </div>
+                  {editingTournamentId ? (
+                    <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
+                      Modo edición
+                    </span>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Nombre del torneo</label>
+                  <input
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={tournamentForm.title}
+                    onChange={(event) => setTournamentForm({ ...tournamentForm, title: event.target.value })}
+                    placeholder="Ej: Torneo Apertura"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Plataforma</label>
+                  <select
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={tournamentForm.platform}
+                    onChange={(event) => setTournamentForm({ ...tournamentForm, platform: event.target.value as ExternalTournamentPlatform })}
+                  >
+                    {tournamentPlatforms.map((platform) => (
+                      <option key={platform} value={platform}>
+                        {platform === "rankedin" ? "Rankedin" : platform === "tournamentsoftware" ? "Tournament Software" : "Otro"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Fecha</label>
+                  <input
+                    type="date"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={tournamentForm.event_date}
+                    onChange={(event) => setTournamentForm({ ...tournamentForm, event_date: event.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Lugar</label>
+                  <input
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={tournamentForm.location}
+                    onChange={(event) => setTournamentForm({ ...tournamentForm, location: event.target.value })}
+                    placeholder="Club / ciudad"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Link del torneo</label>
+                  <input
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={tournamentForm.url}
+                    onChange={(event) => setTournamentForm({ ...tournamentForm, url: event.target.value })}
+                    placeholder="https://..."
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Notas</label>
+                  <textarea
+                    className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={tournamentForm.notes}
+                    onChange={(event) => setTournamentForm({ ...tournamentForm, notes: event.target.value })}
+                    placeholder="Opcional"
+                  />
+                </div>
+
+                <label className="md:col-span-2 flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={tournamentForm.is_active}
+                    onChange={(event) => setTournamentForm({ ...tournamentForm, is_active: event.target.checked })}
+                  />
+                  Mostrar en la página pública de torneos
+                </label>
+
+                <div className="md:col-span-2 flex flex-wrap gap-2">
+                  <button type="button" className="btn-primary" onClick={handleTournamentSubmit} disabled={savingTournament}>
+                    {savingTournament ? "Guardando..." : editingTournamentId ? "Guardar torneo" : "Crear torneo"}
+                  </button>
+                  {editingTournamentId ? (
+                    <button type="button" className="btn-secondary" onClick={resetTournamentForm} disabled={savingTournament}>
+                      Cancelar edición
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {tournaments.length ? (
+                  tournaments.map((tournament) => (
+                    <article
+                      key={tournament.id}
+                      className={`flex flex-col gap-3 rounded-2xl p-4 md:flex-row md:items-center md:justify-between ${
+                        editingTournamentId === tournament.id ? "border-2 border-orange-300 bg-orange-50/40" : "border border-slate-200 bg-white"
+                      }`}
+                    >
+                      <div>
+                        <p className="font-medium text-slate-900">{tournament.title}</p>
+                        <p className="text-sm text-slate-600">
+                          {tournament.platform === "rankedin" ? "Rankedin" : tournament.platform === "tournamentsoftware" ? "Tournament Software" : "Otro"}
+                          {tournament.event_date ? ` · ${tournament.event_date}` : ""}
+                          {tournament.location ? ` · ${tournament.location}` : ""}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {tournament.is_active ? "Visible en público" : "Oculto"}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <a href={tournament.url} target="_blank" rel="noreferrer" className="btn-secondary">
+                          Abrir link
+                        </a>
+                        <button type="button" className="btn-secondary" onClick={() => startTournamentEdit(tournament)}>
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          onClick={() => handleDeleteTournament(tournament)}
+                          disabled={deletingTournamentId === tournament.id}
+                        >
+                          {deletingTournamentId === tournament.id ? "Borrando..." : "Borrar"}
+                        </button>
+                      </div>
+                    </article>
+                  ))
+                ) : (
+                  <p className="text-sm text-slate-500">Todavía no hay torneos externos cargados.</p>
+                )}
+              </div>
+            </div>
+          </AdminAccordionSection>
+
+          <AdminAccordionSection
+            title="Auditoría admin"
+            description="Historial reciente de acciones sensibles realizadas por administradores."
+            count={filteredAuditLogs.length}
+            open={openSections.audit}
+            onToggle={() => toggleSection("audit")}
+          >
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Auditoría admin</h2>
+                  <p className="text-sm text-slate-500">
+                    Filtra por acción, recurso o texto libre y exporta el resultado.
+                  </p>
+                </div>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+                  {filteredAuditLogs.length} visibles
+                </span>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px_auto]">
+                <input
+                  type="text"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  placeholder="Buscar por admin, acción, recurso o detalle"
+                  value={auditTextFilter}
+                  onChange={(event) => setAuditTextFilter(event.target.value)}
+                />
+                <select
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  value={auditActionFilter}
+                  onChange={(event) => setAuditActionFilter(event.target.value)}
+                >
+                  <option value="all">Todas las acciones</option>
+                  {auditActionOptions.map((action) => (
+                    <option key={action} value={action}>
+                      {action}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  value={auditTargetFilter}
+                  onChange={(event) => setAuditTargetFilter(event.target.value)}
+                >
+                  <option value="all">Todos los recursos</option>
+                  {auditTargetOptions.map((target) => (
+                    <option key={target} value={target}>
+                      {target}
+                    </option>
+                  ))}
+                </select>
+                <button type="button" className="btn-secondary" onClick={handleExportAudit} disabled={exportingKey === "audit"}>
+                  {exportingKey === "audit" ? "Exportando..." : "Exportar CSV"}
+                </button>
+              </div>
+
+              {!auditEnabled ? (
+                <p className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  La auditoría todavía no está habilitada en la base. Falta correr la migración `admin_audit_logs`.
+                </p>
+              ) : filteredAuditLogs.length ? (
+                <div className="space-y-3">
+                  {filteredAuditLogs.map((log) => (
+                    <article key={log.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                      <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {log.profiles?.full_name || "Admin"} · {log.action}
+                          </p>
+                          <p className="text-sm text-slate-500">
+                            {new Date(log.created_at).toLocaleString("es-AR")}
+                          </p>
+                        </div>
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs uppercase tracking-wide text-slate-600">
+                          {log.target_type} · {log.target_id}
+                        </span>
+                      </div>
+                      {log.details ? (
+                        <pre className="mt-3 overflow-x-auto rounded-2xl bg-slate-950 p-3 text-xs text-slate-100">
+                          {JSON.stringify(log.details, null, 2)}
+                        </pre>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No hay acciones auditadas para mostrar con esos filtros.</p>
+              )}
+            </div>
+          </AdminAccordionSection>
+
+          <AdminAccordionSection
             title="Gestión de jugadores"
-            description="Administra perfiles y permisos sin mezclarlo con el resto del panel."
+            description="Administra perfiles, permisos y exportes."
             count={players.length}
             open={openSections.players}
             onToggle={() => toggleSection("players")}
           >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900">
-                  Gestión de jugadores
-                </h2>
-                <p className="text-sm text-slate-500">
-                  Como admin puedes borrar perfiles de usuarios.
-                </p>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Gestión de jugadores</h2>
+                  <p className="text-sm text-slate-500">
+                    Como admin puedes borrar perfiles de usuarios o promoverlos.
+                  </p>
+                </div>
+                <button type="button" className="btn-secondary" onClick={handleExportPlayers} disabled={exportingKey === "players"}>
+                  {exportingKey === "players" ? "Exportando..." : "Exportar jugadores"}
+                </button>
               </div>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
-                {players.length}
-              </span>
-            </div>
 
-            <div className="space-y-3">
-              {players.map((player) => {
-                const isCurrentAdmin = player.role === "admin";
-                const isDeleting = deletingProfileId === player.id;
-                const isPromoting = promotingProfileId === player.id;
+              <div className="space-y-3">
+                {players.map((player) => {
+                  const isCurrentAdmin = player.role === "admin";
+                  const isDeleting = deletingProfileId === player.id;
+                  const isPromoting = promotingProfileId === player.id;
 
-                return (
-                  <article
-                    key={player.id}
-                    className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="flex items-center gap-3">
-                      <AvatarImage
-                        src={player.avatar_url}
-                        alt={player.full_name || "Jugador"}
-                        size={56}
-                        className="h-14 w-14 rounded-full border border-slate-200 object-cover"
-                      />
-                      <div>
-                        <p className="font-medium text-slate-900">
-                          {player.full_name || "Sin nombre"}
-                        </p>
-                        <p className="text-sm text-slate-600">
-                          {player.category || "Sin categoría"} · {player.phone || "Sin teléfono"}
-                        </p>
-                        <p className="text-xs uppercase tracking-wide text-slate-400">
-                          {player.role}
-                        </p>
+                  return (
+                    <article
+                      key={player.id}
+                      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <AvatarImage
+                          src={player.avatar_url}
+                          alt={player.full_name || "Jugador"}
+                          size={56}
+                          className="h-14 w-14 rounded-full border border-slate-200 object-cover"
+                        />
+                        <div>
+                          <p className="font-medium text-slate-900">{player.full_name || "Sin nombre"}</p>
+                          <p className="text-sm text-slate-600">
+                            {player.category || "Sin categoría"} · {player.phone || "Sin teléfono"}
+                          </p>
+                          <p className="text-xs uppercase tracking-wide text-slate-400">{player.role}</p>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex flex-wrap gap-2">
-                      {isCurrentAdmin ? (
-                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
-                          Admin protegido
-                        </span>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="rounded-xl border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            onClick={() => handlePromoteProfile(player)}
-                            disabled={Boolean(promotingProfileId) || Boolean(deletingProfileId)}
-                          >
-                            {isPromoting ? "Promoviendo..." : "Hacer admin"}
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                            onClick={() => handleDeleteProfile(player)}
-                            disabled={Boolean(deletingProfileId) || Boolean(promotingProfileId)}
-                          >
-                            {isDeleting ? "Eliminando..." : "Borrar perfil"}
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
+                      <div className="flex flex-wrap gap-2">
+                        {isCurrentAdmin ? (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
+                            Admin protegido
+                          </span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="rounded-xl border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              onClick={() => handlePromoteProfile(player)}
+                              disabled={Boolean(promotingProfileId) || Boolean(deletingProfileId)}
+                            >
+                              {isPromoting ? "Promoviendo..." : "Hacer admin"}
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                              onClick={() => handleDeleteProfile(player)}
+                              disabled={Boolean(deletingProfileId) || Boolean(promotingProfileId)}
+                            >
+                              {isDeleting ? "Eliminando..." : "Borrar perfil"}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
             </div>
           </AdminAccordionSection>
 
@@ -1513,159 +1085,118 @@ export default function AdminPage() {
             open={openSections.bookings}
             onToggle={() => toggleSection("bookings")}
           >
-          {filteredBookings.map((booking) => {
-            const playerName = booking.profiles?.full_name || "Sin nombre";
-            const playerCategory =
-              booking.profiles?.category || "Sin categoría";
-            const courtName =
-              booking.time_slots?.courts?.name || booking.courts?.name || "Cancha";
-            const slotDate = booking.time_slots?.slot_date || "Sin fecha";
-            const startTime = booking.time_slots?.start_time?.slice(0, 5) || "--:--";
-            const endTime = booking.time_slots?.end_time?.slice(0, 5) || "--:--";
-            const isEditing = editingId === booking.id && editState;
+            <div className="space-y-4">
+              <div className="max-w-xl">
+                <label className="mb-2 block text-sm font-medium text-slate-700">Buscar reservas</label>
+                <input
+                  type="text"
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  placeholder="Jugador, categoría, cancha, fecha o estado"
+                  value={bookingFilter}
+                  onChange={(event) => setBookingFilter(event.target.value)}
+                />
+              </div>
 
-            return (
-              <article key={booking.id} className="card p-5">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
-                    <p className="text-lg font-semibold text-slate-900">
-                      {courtName}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {slotDate} · {startTime} - {endTime}
-                    </p>
-                    <p className="text-sm text-slate-700">
-                      Jugador: <span className="font-medium">{playerName}</span>
-                    </p>
-                    <p className="text-sm text-slate-700">
-                      Categoría:{" "}
-                      <span className="font-medium">{playerCategory}</span>
-                    </p>
-                    <p className="text-sm text-slate-500">
-                      Estado: {booking.status}
-                    </p>
-                    {booking.notes ? (
-                      <p className="text-sm text-slate-500">
-                        Nota: {booking.notes}
-                      </p>
-                    ) : null}
-                  </div>
+              {filteredBookings.length ? (
+                filteredBookings.map((booking) => {
+                  const playerName = booking.profiles?.full_name || "Sin nombre";
+                  const playerCategory = booking.profiles?.category || "Sin categoría";
+                  const courtName = booking.time_slots?.courts?.name || booking.courts?.name || "Cancha";
+                  const slotDate = booking.time_slots?.slot_date || "Sin fecha";
+                  const startTime = booking.time_slots?.start_time?.slice(0, 5) || "--:--";
+                  const endTime = booking.time_slots?.end_time?.slice(0, 5) || "--:--";
+                  const isEditing = editingId === booking.id && editState;
 
-                  <div className="flex gap-2">
-                    {!isEditing ? (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={() => startEditing(booking)}
-                      >
-                        Editar reserva
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={stopEditing}
-                        disabled={saving}
-                      >
-                        Cerrar editor
-                      </button>
-                    )}
-                  </div>
-                </div>
+                  return (
+                    <article key={booking.id} className="card p-5">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="space-y-2">
+                          <p className="text-lg font-semibold text-slate-900">{courtName}</p>
+                          <p className="text-sm text-slate-600">
+                            {slotDate} · {startTime} - {endTime}
+                          </p>
+                          <p className="text-sm text-slate-700">
+                            Jugador: <span className="font-medium">{playerName}</span>
+                          </p>
+                          <p className="text-sm text-slate-700">
+                            Categoría: <span className="font-medium">{playerCategory}</span>
+                          </p>
+                          <p className="text-sm text-slate-500">Estado: {booking.status}</p>
+                          {booking.notes ? <p className="text-sm text-slate-500">Nota: {booking.notes}</p> : null}
+                        </div>
 
-                {isEditing ? (
-                  <div className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        Jugador
-                      </label>
-                      <select
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                        value={editState.userId}
-                        onChange={(event) =>
-                          setEditState({
-                            ...editState,
-                            userId: event.target.value
-                          })
-                        }
-                      >
-                        {players.map((player) => (
-                          <option key={player.id} value={player.id}>
-                            {player.full_name || "Sin nombre"} ·{" "}
-                            {player.category || "Sin categoría"}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                        <div className="flex gap-2">
+                          {!isEditing ? (
+                            <button type="button" className="btn-secondary" onClick={() => startEditing(booking)}>
+                              Editar reserva
+                            </button>
+                          ) : (
+                            <button type="button" className="btn-secondary" onClick={stopEditing} disabled={saving}>
+                              Cerrar editor
+                            </button>
+                          )}
+                        </div>
+                      </div>
 
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        Estado
-                      </label>
-                      <select
-                        className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                        value={editState.status}
-                        onChange={(event) =>
-                          setEditState({
-                            ...editState,
-                            status: event.target.value as BookingStatus
-                          })
-                        }
-                      >
-                        {statusOptions.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                      {isEditing ? (
+                        <div className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">Jugador</label>
+                            <select
+                              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                              value={editState.userId}
+                              onChange={(event) => setEditState({ ...editState, userId: event.target.value })}
+                            >
+                              {players.map((player) => (
+                                <option key={player.id} value={player.id}>
+                                  {player.full_name || "Sin nombre"} · {player.category || "Sin categoría"}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                    <div className="md:col-span-2">
-                      <label className="mb-1 block text-sm font-medium text-slate-700">
-                        Nota interna
-                      </label>
-                      <textarea
-                        className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-                        value={editState.notes}
-                        onChange={(event) =>
-                          setEditState({
-                            ...editState,
-                            notes: event.target.value
-                          })
-                        }
-                        placeholder="Opcional"
-                      />
-                    </div>
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">Estado</label>
+                            <select
+                              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                              value={editState.status}
+                              onChange={(event) => setEditState({ ...editState, status: event.target.value as BookingStatus })}
+                            >
+                              {statusOptions.map((status) => (
+                                <option key={status} value={status}>
+                                  {status}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
 
-                    <div className="md:col-span-2 flex gap-2">
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        onClick={() => handleSave(booking.id)}
-                        disabled={saving}
-                      >
-                        {saving ? "Guardando..." : "Guardar cambios"}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-secondary"
-                        onClick={stopEditing}
-                        disabled={saving}
-                      >
-                        Cancelar
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
+                          <div className="md:col-span-2">
+                            <label className="mb-1 block text-sm font-medium text-slate-700">Nota interna</label>
+                            <textarea
+                              className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                              value={editState.notes}
+                              onChange={(event) => setEditState({ ...editState, notes: event.target.value })}
+                              placeholder="Opcional"
+                            />
+                          </div>
 
-          {!filteredBookings.length ? (
-            <p className="text-sm text-slate-600">
-              No se encontraron reservas con ese filtro.
-            </p>
-          ) : null}
+                          <div className="md:col-span-2 flex gap-2">
+                            <button type="button" className="btn-primary" onClick={() => handleSave(booking.id)} disabled={saving}>
+                              {saving ? "Guardando..." : "Guardar cambios"}
+                            </button>
+                            <button type="button" className="btn-secondary" onClick={stopEditing} disabled={saving}>
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </article>
+                  );
+                })
+              ) : (
+                <p className="text-sm text-slate-600">No se encontraron reservas con ese filtro.</p>
+              )}
+            </div>
           </AdminAccordionSection>
         </div>
       ) : null}
