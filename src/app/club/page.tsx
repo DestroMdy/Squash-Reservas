@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { SectionTitle } from "@/components/SectionTitle";
-import { clubHighlights, clubRules, squashRules } from "@/lib/club-content";
+import {
+  clubHighlights,
+  clubRules,
+  squashRuleCuriosities,
+  squashRules
+} from "@/lib/club-content";
 
 export default function ClubPage() {
   return (
@@ -79,6 +84,57 @@ export default function ClubPage() {
               </p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Curiosidades y reglas poco conocidas
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Detalles del juego que suelen generar dudas cuando uno empieza a jugar o mirar partidos.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {squashRuleCuriosities.map((rule) => (
+            <article key={rule.title} className="card rounded-2xl p-5">
+              <h3 className="text-lg font-semibold text-slate-950">{rule.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {rule.description}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="card rounded-2xl border-orange-300 bg-gradient-to-br from-orange-50 via-white to-white p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-700">
+          Reglamento completo
+        </p>
+        <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">
+          Quien quiera verlo en detalle tambien lo tiene disponible
+        </h2>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+          Ademas del resumen practico, la app ahora incluye acceso directo al reglamento completo del deporte en PDF.
+        </p>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <a
+            href="/docs/reglamento-squash.pdf"
+            target="_blank"
+            rel="noreferrer"
+            className="btn-accent"
+          >
+            Abrir reglamento completo
+          </a>
+          <a
+            href="/docs/reglamento-squash.pdf"
+            download
+            className="btn-secondary"
+          >
+            Descargar PDF
+          </a>
         </div>
       </section>
 

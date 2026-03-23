@@ -54,6 +54,29 @@ export const squashRules = [
   }
 ];
 
+export const squashRuleCuriosities = [
+  {
+    title: "No toda interferencia es let",
+    description:
+      "Cuando los jugadores se estorban, la decision puede ser let, no let o stroke. Depende de si habia acceso real a la pelota, de la trayectoria y de la seguridad de la jugada."
+  },
+  {
+    title: "Girar alrededor de la pelota cambia la jugada",
+    description:
+      "Si un jugador hace turning, la prioridad pasa a ser la seguridad. En esas situaciones normalmente se frena el punto antes de arriesgar un golpe peligroso."
+  },
+  {
+    title: "El sacador puede elegir lado",
+    description:
+      "Despues de ganar el rally, quien saca puede elegir desde que cuadro de servicio hacer el proximo saque. No queda obligado a alternar automaticamente."
+  },
+  {
+    title: "Las paredes tambien son estrategia",
+    description:
+      "La pelota debe pegar primero en la pared frontal, pero despues puede usar laterales o fondo. En squash eso no es error: es parte normal del juego."
+  }
+];
+
 export const clubHighlights = [
   {
     title: "Centro en vivo",
