@@ -1,8 +1,11 @@
 import "server-only";
+import { randomUUID } from "crypto";
 import { normalizeLiveStreamConfig } from "@/lib/live-stream";
-import { LiveStreamConfig } from "@/types/db";
+import { LiveScoreboard, LiveStreamConfig } from "@/types/db";
 
 const LIVE_STREAM_KV_KEY = "sr:live-stream:config";
+const LIVE_STREAM_SCOREBOARD_KV_KEY = "sr:live-stream:scoreboard";
+const LIVE_STREAM_SQUORE_TOKEN_KV_KEY = "sr:live-stream:squore-token";
 
 function getKvConfig() {
   const url = process.env.KV_REST_API_URL;
@@ -78,4 +81,54 @@ export async function setStoredLiveStream(
 
 export async function clearStoredLiveStream() {
   await callKv(["del", LIVE_STREAM_KV_KEY]);
+}
+
+export async function getStoredLiveScoreboard() {
+  const result = await callKv(["get", LIVE_STREAM_SCOREBOARD_KV_KEY]);
+
+  if (typeof result !== "string" || !result.trim()) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(result) as LiveScoreboard;
+  } catch {
+    return null;
+  }
+}
+
+export async function setStoredLiveScoreboard(scoreboard: LiveScoreboard) {
+  await callKv([
+    "set",
+    LIVE_STREAM_SCOREBOARD_KV_KEY,
+    JSON.stringify(scoreboard)
+  ]);
+
+  return scoreboard;
+}
+
+export async function clearStoredLiveScoreboard() {
+  await callKv(["del", LIVE_STREAM_SCOREBOARD_KV_KEY]);
+}
+
+export async function getStoredLiveSquoreToken() {
+  const result = await callKv(["get", LIVE_STREAM_SQUORE_TOKEN_KV_KEY]);
+
+  if (typeof result !== "string" || !result.trim()) {
+    return null;
+  }
+
+  return result.trim();
+}
+
+export async function ensureStoredLiveSquoreToken() {
+  const existing = await getStoredLiveSquoreToken();
+
+  if (existing) {
+    return existing;
+  }
+
+  const nextToken = randomUUID().replaceAll("-", "");
+  await callKv(["set", LIVE_STREAM_SQUORE_TOKEN_KV_KEY, nextToken]);
+  return nextToken;
 }

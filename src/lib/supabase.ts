@@ -3,7 +3,7 @@ import {
   encodeUserCookie,
   USER_COOKIE_NAME
 } from "@/lib/session-cookies";
-import { LiveStreamConfig } from "@/types/db";
+import { LiveScoreboard, LiveStreamConfig } from "@/types/db";
 
 export interface SessionData {
   access_token: string;
@@ -1215,6 +1215,11 @@ export async function fetchExternalTournaments() {
 }
 
 export async function fetchLiveStream() {
+  const payload = await fetchLiveStreamStatus();
+  return payload.stream;
+}
+
+export async function fetchLiveStreamStatus() {
   const response = await fetch("/api/live-stream", {
     method: "GET",
     cache: "no-store"
@@ -1223,6 +1228,7 @@ export async function fetchLiveStream() {
   const payload = await parseJsonPayload<{
     error?: string;
     stream?: LiveStreamConfig | null;
+    scoreboard?: LiveScoreboard | null;
     unavailable?: boolean;
   }>(response);
 
@@ -1230,7 +1236,11 @@ export async function fetchLiveStream() {
     throw new Error(payload?.error || "No se pudo cargar la transmisión.");
   }
 
-  return payload?.stream || null;
+  return {
+    stream: payload?.stream || null,
+    scoreboard: payload?.scoreboard || null,
+    unavailable: payload?.unavailable === true
+  };
 }
 
 export async function fetchAdminLiveStream(token: string) {
@@ -1242,6 +1252,7 @@ export async function fetchAdminLiveStream(token: string) {
   const payload = await parseJsonPayload<{
     error?: string;
     stream?: LiveStreamConfig | null;
+    squore_post_url?: string | null;
   }>(response);
 
   if (!response.ok) {
@@ -1250,7 +1261,10 @@ export async function fetchAdminLiveStream(token: string) {
     );
   }
 
-  return payload?.stream || null;
+  return {
+    stream: payload?.stream || null,
+    squore_post_url: payload?.squore_post_url || null
+  };
 }
 
 export async function updateLiveStream(
@@ -1274,6 +1288,7 @@ export async function updateLiveStream(
   const result = await parseJsonPayload<{
     error?: string;
     stream?: LiveStreamConfig | null;
+    squore_post_url?: string | null;
   }>(response);
 
   if (!response.ok) {
@@ -1282,7 +1297,10 @@ export async function updateLiveStream(
     );
   }
 
-  return result?.stream || null;
+  return {
+    stream: result?.stream || null,
+    squore_post_url: result?.squore_post_url || null
+  };
 }
 
 export async function clearLiveStream(token: string) {

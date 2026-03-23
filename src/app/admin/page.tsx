@@ -177,6 +177,7 @@ export default function AdminPage() {
   const [players, setPlayers] = useState<Profile[]>([]);
   const [tournaments, setTournaments] = useState<ExternalTournament[]>([]);
   const [liveStream, setLiveStream] = useState<LiveStreamConfig | null>(null);
+  const [squorePostUrl, setSquorePostUrl] = useState<string | null>(null);
   const [auditLogs, setAuditLogs] = useState<AdminAuditLog[]>([]);
   const [auditEnabled, setAuditEnabled] = useState(true);
   const [filter, setFilter] = useState("");
@@ -243,7 +244,7 @@ export default function AdminPage() {
       allBookings,
       allPlayers,
       externalTournaments,
-      currentLiveStream,
+      currentLiveStreamData,
       auditData
     ] = await Promise.all([
       fetchBookingStats(token),
@@ -258,16 +259,17 @@ export default function AdminPage() {
     setBookings(allBookings ?? []);
     setPlayers(allPlayers ?? []);
     setTournaments(externalTournaments ?? []);
-    setLiveStream(currentLiveStream ?? null);
+    setLiveStream(currentLiveStreamData.stream ?? null);
+    setSquorePostUrl(currentLiveStreamData.squore_post_url ?? null);
     setLiveStreamForm(
-      currentLiveStream
+      currentLiveStreamData.stream
         ? {
-            title: currentLiveStream.title,
-            description: currentLiveStream.description || "",
-            banner_url: currentLiveStream.banner_url || "",
-            youtube_url: currentLiveStream.youtube_url,
-            starts_at: formatDateTimeLocalValue(currentLiveStream.starts_at),
-            is_live: currentLiveStream.is_live
+            title: currentLiveStreamData.stream.title,
+            description: currentLiveStreamData.stream.description || "",
+            banner_url: currentLiveStreamData.stream.banner_url || "",
+            youtube_url: currentLiveStreamData.stream.youtube_url,
+            starts_at: formatDateTimeLocalValue(currentLiveStreamData.stream.starts_at),
+            is_live: currentLiveStreamData.stream.is_live
           }
         : getEmptyLiveStreamForm()
     );
@@ -594,7 +596,7 @@ export default function AdminPage() {
       setMessage(null);
       setError(null);
 
-      const stream = await updateLiveStream(token, {
+      const result = await updateLiveStream(token, {
         title: liveStreamForm.title,
         description: liveStreamForm.description || null,
         banner_url: liveStreamForm.banner_url || null,
@@ -605,7 +607,9 @@ export default function AdminPage() {
         is_live: liveStreamForm.is_live
       });
 
+      const stream = result.stream;
       setLiveStream(stream);
+      setSquorePostUrl(result.squore_post_url ?? null);
       setLiveStreamForm(
         stream
           ? {
@@ -651,6 +655,7 @@ export default function AdminPage() {
 
       await clearLiveStream(token);
       setLiveStream(null);
+      setSquorePostUrl(null);
       setLiveStreamForm(getEmptyLiveStreamForm());
       setMessage("Transmisión en vivo limpiada.");
     } catch (err) {
@@ -720,7 +725,24 @@ export default function AdminPage() {
                 >
                   Abrir YouTube
                 </a>
-              ) : null}
+                ) : null}
+            </div>
+
+            <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-4">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-700">
+                Integración Squore
+              </p>
+              <p className="mt-1 text-sm text-slate-700">
+                En Squore, pegá este endpoint en <strong>PostResult</strong> para que el marcador se actualice solo dentro del vivo.
+              </p>
+              <div className="mt-3 rounded-xl border border-orange-200 bg-white px-3 py-3">
+                <p className="break-all font-mono text-xs text-slate-700">
+                  {squorePostUrl || "Guardá una transmisión para generar el endpoint."}
+                </p>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">
+                Recomendado: usar &quot;most relevant data&quot; o &quot;most relevant data + json&quot;.
+              </p>
             </div>
 
             {liveStream ? (

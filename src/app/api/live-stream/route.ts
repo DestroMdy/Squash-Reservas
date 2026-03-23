@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  getStoredLiveScoreboard,
   getStoredLiveStream,
   isLiveStreamStoreConfigured
 } from "@/lib/live-stream-store";
@@ -23,11 +24,15 @@ export async function GET() {
   }
 
   try {
-    const stream = await getStoredLiveStream();
+    const [stream, scoreboard] = await Promise.all([
+      getStoredLiveStream(),
+      getStoredLiveScoreboard()
+    ]);
 
     return NextResponse.json(
       {
         stream,
+        scoreboard,
         unavailable: false
       },
       {

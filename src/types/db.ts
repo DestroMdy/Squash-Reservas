@@ -15,6 +15,26 @@ export interface LiveStreamConfig {
   updated_by: string | null;
 }
 
+export interface LiveScoreboard {
+  source: "squore";
+  event_name: string | null;
+  division_name: string | null;
+  round_name: string | null;
+  location: string | null;
+  player_one_name: string;
+  player_two_name: string;
+  result: string | null;
+  game_scores: string | null;
+  winner_name: string | null;
+  winner_side: 1 | 2 | null;
+  duration_minutes: number | null;
+  total_points_player_one: number | null;
+  total_points_player_two: number | null;
+  played_on: string | null;
+  played_time: string | null;
+  updated_at: string;
+}
+
 export interface Profile {
   id: string;
   full_name: string | null;

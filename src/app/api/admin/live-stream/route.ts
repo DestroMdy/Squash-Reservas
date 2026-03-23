@@ -6,6 +6,8 @@ import {
 } from "@/lib/live-stream";
 import {
   clearStoredLiveStream,
+  clearStoredLiveScoreboard,
+  ensureStoredLiveSquoreToken,
   getStoredLiveStream,
   isLiveStreamStoreConfigured,
   setStoredLiveStream
@@ -29,6 +31,11 @@ function responseHeaders() {
   };
 }
 
+function buildSquorePostUrl(request: NextRequest, token: string) {
+  const origin = new URL(request.url).origin;
+  return `${origin}/api/live-stream/squore?token=${token}`;
+}
+
 export async function GET(request: NextRequest) {
   const auth = await requireAdminRequest(request);
 
@@ -45,9 +52,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const stream = await getStoredLiveStream();
+    const squoreToken = await ensureStoredLiveSquoreToken();
 
     return NextResponse.json(
-      { stream },
+      {
+        stream,
+        squore_post_url: buildSquorePostUrl(request, squoreToken)
+      },
       {
         headers: responseHeaders()
       }
@@ -119,6 +130,7 @@ export async function PATCH(request: NextRequest) {
       updated_at: new Date().toISOString(),
       updated_by: auth.user.id
     });
+    const squoreToken = await ensureStoredLiveSquoreToken();
 
     await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
       actorId: auth.user.id,
@@ -135,7 +147,11 @@ export async function PATCH(request: NextRequest) {
     }).catch(() => null);
 
     return NextResponse.json(
-      { ok: true, stream },
+      {
+        ok: true,
+        stream,
+        squore_post_url: buildSquorePostUrl(request, squoreToken)
+      },
       {
         headers: responseHeaders()
       }
@@ -167,6 +183,7 @@ export async function DELETE(request: NextRequest) {
 
   try {
     await clearStoredLiveStream();
+    await clearStoredLiveScoreboard();
 
     await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
       actorId: auth.user.id,
