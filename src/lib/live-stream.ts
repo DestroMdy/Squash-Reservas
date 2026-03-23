@@ -3,6 +3,7 @@ import { LiveStreamConfig } from "@/types/db";
 type RawLiveStreamConfig = Partial<LiveStreamConfig> & {
   title?: string | null;
   description?: string | null;
+  banner_url?: string | null;
   youtube_url?: string | null;
   youtube_video_id?: string | null;
   is_live?: boolean | null;
@@ -47,6 +48,26 @@ export function buildYouTubeEmbedUrl(videoId: string) {
   return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`;
 }
 
+export function normalizeOptionalHttpUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(trimmed);
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return null;
+    }
+
+    return parsedUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeLiveStreamConfig(
   raw: RawLiveStreamConfig | null | undefined
 ) {
@@ -66,6 +87,7 @@ export function normalizeLiveStreamConfig(
   return {
     title: raw.title.trim(),
     description: raw.description?.trim() || null,
+    banner_url: normalizeOptionalHttpUrl(raw.banner_url),
     youtube_url: raw.youtube_url.trim(),
     youtube_video_id: videoId,
     embed_url: buildYouTubeEmbedUrl(videoId),

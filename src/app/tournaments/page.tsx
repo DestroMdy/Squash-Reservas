@@ -3,8 +3,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
-import { fetchExternalTournaments } from "@/lib/supabase";
-import { ExternalTournament, ExternalTournamentPlatform } from "@/types/db";
+import { fetchExternalTournaments, fetchLiveStream } from "@/lib/supabase";
+import {
+  ExternalTournament,
+  ExternalTournamentPlatform,
+  LiveStreamConfig
+} from "@/types/db";
 
 type TournamentFilter =
   | "all"
@@ -188,6 +192,20 @@ function formatDateCompact(eventDate: string | null) {
   };
 }
 
+function formatStreamStartsAt(value: string | null) {
+  if (!value) {
+    return "Horario a confirmar";
+  }
+
+  return new Intl.DateTimeFormat("es-AR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
 function getStatusMeta(tournament: ExternalTournament) {
   if (!tournament.event_date) {
     return {
@@ -366,6 +384,7 @@ function TournamentCard({
 
 export default function TournamentsPage() {
   const [tournaments, setTournaments] = useState<ExternalTournament[]>([]);
+  const [liveStream, setLiveStream] = useState<LiveStreamConfig | null>(null);
   const [filter, setFilter] = useState<TournamentFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -379,12 +398,17 @@ export default function TournamentsPage() {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchExternalTournaments();
+        const [data, currentLiveStream] = await Promise.all([
+          fetchExternalTournaments(),
+          fetchLiveStream().catch(() => null)
+        ]);
         setTournaments(data ?? []);
+        setLiveStream(currentLiveStream);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "No se pudieron cargar los torneos."
         );
+        setLiveStream(null);
       } finally {
         setLoading(false);
       }
@@ -495,6 +519,63 @@ export default function TournamentsPage() {
       {!loading && !error ? (
         tournaments.length ? (
           <div className="space-y-6">
+            {liveStream ? (
+              <section className="card overflow-hidden rounded-2xl border border-orange-200 p-5 shadow-[0_20px_40px_-28px_rgba(249,115,22,0.35)]">
+                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex-1 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-800">
+                        {liveStream.is_live ? "En vivo ahora" : "Próxima transmisión"}
+                      </span>
+                      <span className="text-sm text-slate-500">
+                        {formatStreamStartsAt(liveStream.starts_at)}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      <h2 className="text-2xl font-bold text-slate-950">
+                        {liveStream.title}
+                      </h2>
+                      {liveStream.description ? (
+                        <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                          {liveStream.description}
+                        </p>
+                      ) : (
+                        <p className="max-w-2xl text-sm leading-6 text-slate-600">
+                          Seguí la transmisión oficial del club desde la app o abrila directo en YouTube.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <Link href="/live" className="btn-accent">
+                        Ver transmisión
+                      </Link>
+                      <a
+                        href={liveStream.youtube_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn-secondary"
+                      >
+                        Abrir YouTube
+                      </a>
+                    </div>
+                  </div>
+
+                  {liveStream.banner_url ? (
+                    <div
+                      className="h-44 w-full rounded-2xl border border-orange-200 bg-slate-100 shadow-sm lg:h-52 lg:w-[320px]"
+                      style={{
+                        backgroundImage: `url("${liveStream.banner_url}")`,
+                        backgroundPosition: "center",
+                        backgroundRepeat: "no-repeat",
+                        backgroundSize: "cover"
+                      }}
+                    />
+                  ) : null}
+                </div>
+              </section>
+            ) : null}
+
             <section
               className={`card rounded-2xl p-6 ${
                 spotlightTournament

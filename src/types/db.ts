@@ -5,6 +5,7 @@ export type ExternalTournamentPlatform = "rankedin" | "tournamentsoftware" | "ot
 export interface LiveStreamConfig {
   title: string;
   description: string | null;
+  banner_url: string | null;
   youtube_url: string;
   youtube_video_id: string;
   embed_url: string;

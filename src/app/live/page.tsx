@@ -74,6 +74,15 @@ export default function LivePage() {
             ) : null}
           </div>
 
+          {stream.banner_url ? (
+            <div className="mt-6 overflow-hidden rounded-3xl border border-orange-200 bg-slate-100 shadow-sm">
+              <div
+                className="h-56 w-full bg-cover bg-center bg-no-repeat sm:h-72"
+                style={{ backgroundImage: `url("${stream.banner_url}")` }}
+              />
+            </div>
+          ) : null}
+
           <div className="mt-6 overflow-hidden rounded-3xl border border-slate-200 bg-black shadow-sm">
             <div className="aspect-video">
               <iframe

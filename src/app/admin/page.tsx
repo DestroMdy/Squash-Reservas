@@ -55,6 +55,7 @@ type TournamentFormState = {
 type LiveStreamFormState = {
   title: string;
   description: string;
+  banner_url: string;
   youtube_url: string;
   starts_at: string;
   is_live: boolean;
@@ -89,6 +90,7 @@ function getEmptyLiveStreamForm(): LiveStreamFormState {
   return {
     title: "",
     description: "",
+    banner_url: "",
     youtube_url: "",
     starts_at: "",
     is_live: false
@@ -262,6 +264,7 @@ export default function AdminPage() {
         ? {
             title: currentLiveStream.title,
             description: currentLiveStream.description || "",
+            banner_url: currentLiveStream.banner_url || "",
             youtube_url: currentLiveStream.youtube_url,
             starts_at: formatDateTimeLocalValue(currentLiveStream.starts_at),
             is_live: currentLiveStream.is_live
@@ -594,6 +597,7 @@ export default function AdminPage() {
       const stream = await updateLiveStream(token, {
         title: liveStreamForm.title,
         description: liveStreamForm.description || null,
+        banner_url: liveStreamForm.banner_url || null,
         youtube_url: liveStreamForm.youtube_url,
         starts_at: liveStreamForm.starts_at
           ? new Date(liveStreamForm.starts_at).toISOString()
@@ -607,6 +611,7 @@ export default function AdminPage() {
           ? {
               title: stream.title,
               description: stream.description || "",
+              banner_url: stream.banner_url || "",
               youtube_url: stream.youtube_url,
               starts_at: formatDateTimeLocalValue(stream.starts_at),
               is_live: stream.is_live
@@ -742,6 +747,14 @@ export default function AdminPage() {
                     {liveStream.description}
                   </p>
                 ) : null}
+                {liveStream.banner_url ? (
+                  <div className="mt-3 overflow-hidden rounded-2xl border border-orange-200 bg-slate-100">
+                    <div
+                      className="h-32 w-full bg-cover bg-center bg-no-repeat"
+                      style={{ backgroundImage: `url("${liveStream.banner_url}")` }}
+                    />
+                  </div>
+                ) : null}
                 <p className="mt-2 text-sm text-slate-500">
                   {liveStream.starts_at
                     ? `Inicio: ${new Date(liveStream.starts_at).toLocaleString("es-AR")}`
@@ -810,6 +823,26 @@ export default function AdminPage() {
                   }
                   placeholder="https://www.youtube.com/watch?v=..."
                 />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="mb-1 block text-sm font-medium text-slate-700">
+                  Banner / afiche
+                </label>
+                <input
+                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                  value={liveStreamForm.banner_url}
+                  onChange={(event) =>
+                    setLiveStreamForm({
+                      ...liveStreamForm,
+                      banner_url: event.target.value
+                    })
+                  }
+                  placeholder="https://.../afiche.jpg"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Opcional. Se muestra arriba del player y en la promo del vivo.
+                </p>
               </div>
 
               <div className="md:col-span-2">

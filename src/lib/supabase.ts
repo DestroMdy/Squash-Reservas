@@ -1258,6 +1258,7 @@ export async function updateLiveStream(
   payload: {
     title: string;
     description?: string | null;
+    banner_url?: string | null;
     youtube_url: string;
     starts_at?: string | null;
     is_live: boolean;

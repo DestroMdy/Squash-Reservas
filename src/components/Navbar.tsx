@@ -3,8 +3,9 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  fetchLiveStream,
   fetchUnreadPrivateMessagesCount,
   fetchProfileRole,
   getSession,
@@ -12,7 +13,7 @@ import {
   signOut
 } from "@/lib/supabase";
 
-const navItems = [
+const baseNavItems = [
   { href: "/schedule", label: "Agenda" },
   { href: "/my-bookings", label: "Mis reservas" },
   { href: "/matches", label: "Partidos" },
@@ -29,12 +30,26 @@ export function Navbar() {
   const [isLogged, setIsLogged] = useState(false);
   const [isAdminUser, setIsAdminUser] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [hasActiveLiveStream, setHasActiveLiveStream] = useState(false);
+
+  const navItems = useMemo(() => {
+    const items = [...baseNavItems];
+
+    if (hasActiveLiveStream) {
+      items.splice(1, 0, { href: "/live", label: "En vivo" });
+    }
+
+    return items;
+  }, [hasActiveLiveStream]);
 
   useEffect(() => {
     setMounted(true);
     let intervalId: number | null = null;
 
     async function updateAuth() {
+      const liveStream = await fetchLiveStream().catch(() => null);
+      setHasActiveLiveStream(Boolean(liveStream?.is_live));
+
       const session = getSession();
       setIsLogged(Boolean(session?.access_token));
 

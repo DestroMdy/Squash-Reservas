@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
-import { extractYouTubeVideoId } from "@/lib/live-stream";
+import {
+  extractYouTubeVideoId,
+  normalizeOptionalHttpUrl
+} from "@/lib/live-stream";
 import {
   clearStoredLiveStream,
   getStoredLiveStream,
@@ -12,6 +15,7 @@ import { requireAdminRequest } from "@/lib/server-auth";
 type LiveStreamBody = {
   title?: string;
   description?: string | null;
+  banner_url?: string | null;
   youtube_url?: string;
   starts_at?: string | null;
   is_live?: boolean;
@@ -91,10 +95,23 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  const normalizedBannerUrl =
+    body.banner_url === undefined
+      ? null
+      : normalizeOptionalHttpUrl(body.banner_url);
+
+  if (body.banner_url?.trim() && !normalizedBannerUrl) {
+    return NextResponse.json(
+      { error: "La URL del banner no es valida." },
+      { status: 400, headers: responseHeaders() }
+    );
+  }
+
   try {
     const stream = await setStoredLiveStream({
       title: body.title.trim(),
       description: body.description?.trim() || null,
+      banner_url: normalizedBannerUrl,
       youtube_url: body.youtube_url.trim(),
       youtube_video_id: videoId,
       is_live: Boolean(body.is_live),
@@ -110,6 +127,7 @@ export async function PATCH(request: NextRequest) {
       targetId: "current",
       details: {
         title: stream.title,
+        banner_url: stream.banner_url,
         youtube_url: stream.youtube_url,
         is_live: stream.is_live,
         starts_at: stream.starts_at
