@@ -27,6 +27,14 @@ const GENERIC_TOURNAMENT_URLS = new Set([
   "https://aasra.com.ar"
 ]);
 
+const OFFICIAL_PLATFORM_HOSTS: Record<
+  Extract<ExternalTournamentPlatform, "rankedin" | "tournamentsoftware">,
+  string[]
+> = {
+  rankedin: ["rankedin.com"],
+  tournamentsoftware: ["tournamentsoftware.com"]
+};
+
 const venueCoordinates: Record<string, UserCoordinates> = {
   "Comodoro Rivadavia": { latitude: -45.8641, longitude: -67.4966 },
   "Asunción, Paraguay": { latitude: -25.2637, longitude: -57.5759 },
@@ -236,6 +244,29 @@ function getStatusMeta(tournament: ExternalTournament) {
 
 function hasRealTournamentLink(tournament: ExternalTournament) {
   return Boolean(tournament.url?.trim()) && !GENERIC_TOURNAMENT_URLS.has(tournament.url.trim());
+}
+
+function hasFeaturedTournamentLink(tournament: ExternalTournament) {
+  if (!hasRealTournamentLink(tournament)) {
+    return false;
+  }
+
+  if (
+    tournament.platform !== "rankedin" &&
+    tournament.platform !== "tournamentsoftware"
+  ) {
+    return false;
+  }
+
+  try {
+    const hostname = new URL(tournament.url.trim()).hostname.toLowerCase();
+    return OFFICIAL_PLATFORM_HOSTS[tournament.platform].some(
+      (allowedHost) =>
+        hostname === allowedHost || hostname.endsWith(`.${allowedHost}`)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function toRadians(value: number) {
@@ -693,7 +724,7 @@ export default function TournamentsPage() {
                   )}
                 </div>
 
-                {featuredTournament && hasRealTournamentLink(featuredTournament) ? (
+                {featuredTournament && hasFeaturedTournamentLink(featuredTournament) ? (
                   <a
                     href={featuredTournament.url}
                     target="_blank"
