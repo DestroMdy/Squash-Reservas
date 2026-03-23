@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Torneos | Squash Reservas"
+  title: "Torneos | Squash"
 };
 
 export default function TournamentsLayout({

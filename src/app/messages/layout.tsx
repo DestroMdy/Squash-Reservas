@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Mensajes | Squash Reservas"
+  title: "Mensajes | Squash"
 };
 
 export default function MessagesLayout({

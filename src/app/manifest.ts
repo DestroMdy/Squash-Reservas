@@ -2,7 +2,7 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Squash Reservas",
+    name: "Squash",
     short_name: "Squash",
     description: "App para reservar canchas de squash",
     start_url: "/",

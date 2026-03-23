@@ -6,8 +6,8 @@ import { SessionGate } from "@/components/SessionGate";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  applicationName: "Squash Reservas",
-  title: "Squash Reservas",
+  applicationName: "Squash",
+  title: "Squash",
   description: "App para reservar canchas de squash",
   manifest: "/manifest.webmanifest",
   formatDetection: {
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Squash Reservas"
+    title: "Squash"
   }
 };
 

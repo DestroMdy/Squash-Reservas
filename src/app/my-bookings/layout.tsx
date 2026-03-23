@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Mis Reservas | Squash Reservas",
+  title: "Mis Reservas | Squash",
   description: "Gestiona tus reservas actuales",
 };
 

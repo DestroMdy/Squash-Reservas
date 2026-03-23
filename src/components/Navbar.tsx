@@ -113,7 +113,7 @@ export function Navbar() {
           <Link href="/" className="flex min-w-0 items-center gap-3">
             <Image
               src="/logo.png"
-              alt="Squash Reservas"
+              alt="Squash"
               width={40}
               height={40}
               sizes="(max-width: 640px) 40px, 48px"
@@ -125,7 +125,7 @@ export function Navbar() {
                 La Martineta
               </p>
               <p className="truncate text-lg font-bold leading-tight text-white sm:text-xl">
-                Squash Reservas
+                Squash
               </p>
             </div>
           </Link>

@@ -199,7 +199,7 @@ export default function HomePage() {
               <p className="font-dodger text-sm text-slate-500">La Martineta</p>
               <div className="space-y-3">
                 <h1 className="text-4xl font-bold text-slate-900 sm:text-5xl">
-                  Squash Reservas
+                  Squash
                 </h1>
                 <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
                   Reserva canchas, revisa tus turnos y administra tu perfil desde

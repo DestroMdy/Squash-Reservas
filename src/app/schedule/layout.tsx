@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Horarios | Squash Reservas",
+  title: "Horarios | Squash",
   description: "Consulta la grilla de horarios disponibles",
 };
 
