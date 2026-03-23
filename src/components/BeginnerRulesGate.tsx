@@ -32,7 +32,7 @@ export function BeginnerRulesGate() {
         const status = await fetchBeginnerRulesStatus(session.access_token);
 
         if (!cancelled) {
-          setOpen(Boolean(status.required));
+          setOpen(Boolean(status.required || status.always_show));
           setLoading(false);
         }
       } catch {

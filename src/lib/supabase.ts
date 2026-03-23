@@ -959,7 +959,9 @@ export async function fetchBeginnerRulesStatus(token: string) {
   const payload = await parseJsonPayload<{
     error?: string;
     required?: boolean;
+    always_show?: boolean;
     category?: string | null;
+    role?: string | null;
     acknowledged_at?: string | null;
   }>(response);
 
@@ -971,7 +973,9 @@ export async function fetchBeginnerRulesStatus(token: string) {
 
   return {
     required: payload?.required === true,
+    always_show: payload?.always_show === true,
     category: payload?.category ?? null,
+    role: payload?.role ?? null,
     acknowledged_at: payload?.acknowledged_at ?? null
   };
 }
@@ -987,7 +991,9 @@ export async function acknowledgeBeginnerRules(token: string) {
   const payload = await parseJsonPayload<{
     error?: string;
     required?: boolean;
+    always_show?: boolean;
     category?: string | null;
+    role?: string | null;
     acknowledged_at?: string | null;
   }>(response);
 
@@ -1003,7 +1009,9 @@ export async function acknowledgeBeginnerRules(token: string) {
 
   return {
     required: payload?.required === true,
+    always_show: payload?.always_show === true,
     category: payload?.category ?? null,
+    role: payload?.role ?? null,
     acknowledged_at: payload?.acknowledged_at ?? null
   };
 }

@@ -34,7 +34,9 @@ export async function GET(request: NextRequest) {
 
     return noStoreJson({
       required: status.required,
+      always_show: status.alwaysShow,
       category: status.category,
+      role: status.role,
       acknowledged_at: status.acknowledgedAt
     });
   } catch (error) {
@@ -69,7 +71,9 @@ export async function POST(request: NextRequest) {
     return noStoreJson({
       ok: true,
       required: status.required,
+      always_show: status.alwaysShow,
       category: status.category,
+      role: status.role,
       acknowledged_at: status.acknowledgedAt
     });
   } catch (error) {

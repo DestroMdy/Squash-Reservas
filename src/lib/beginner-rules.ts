@@ -6,13 +6,13 @@ export function isBeginnerCategory(category: string | null | undefined) {
   return category?.trim().toLowerCase() === "principiante";
 }
 
-export async function fetchUserProfileCategory(
+export async function fetchUserProfileStatus(
   supabaseUrl: string,
   serviceRoleKey: string,
   userId: string
 ) {
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?select=category&id=eq.${userId}&limit=1`,
+    `${supabaseUrl}/rest/v1/profiles?select=category,role&id=eq.${userId}&limit=1`,
     {
       method: "GET",
       headers: adminHeaders(serviceRoleKey),
@@ -20,13 +20,19 @@ export async function fetchUserProfileCategory(
     }
   );
 
-  const rows = (await response.json()) as Array<{ category?: string | null }>;
+  const rows = (await response.json()) as Array<{
+    category?: string | null;
+    role?: string | null;
+  }>;
 
   if (!response.ok) {
-    throw new Error("No se pudo cargar la categoria del perfil.");
+    throw new Error("No se pudo cargar el estado del perfil.");
   }
 
-  return rows[0]?.category ?? null;
+  return {
+    category: rows[0]?.category ?? null,
+    role: rows[0]?.role ?? null
+  };
 }
 
 export async function getBeginnerRulesStatus(
@@ -34,15 +40,20 @@ export async function getBeginnerRulesStatus(
   serviceRoleKey: string,
   userId: string
 ) {
-  const [category, acknowledgedAt] = await Promise.all([
-    fetchUserProfileCategory(supabaseUrl, serviceRoleKey, userId),
+  const [profile, acknowledgedAt] = await Promise.all([
+    fetchUserProfileStatus(supabaseUrl, serviceRoleKey, userId),
     getBeginnerRulesAcknowledgedAt(userId)
   ]);
 
+  const isBeginner = isBeginnerCategory(profile.category);
+  const alwaysShow = isBeginner && profile.role === "admin";
+
   return {
-    category,
+    category: profile.category,
+    role: profile.role,
     acknowledgedAt,
-    required: isBeginnerCategory(category) && !acknowledgedAt
+    required: isBeginner && !acknowledgedAt,
+    alwaysShow
   };
 }
 
@@ -51,25 +62,29 @@ export async function acknowledgeBeginnerRules(
   serviceRoleKey: string,
   userId: string
 ) {
-  const category = await fetchUserProfileCategory(
+  const profile = await fetchUserProfileStatus(
     supabaseUrl,
     serviceRoleKey,
     userId
   );
 
-  if (!isBeginnerCategory(category)) {
+  if (!isBeginnerCategory(profile.category)) {
     return {
-      category,
+      category: profile.category,
+      role: profile.role,
       acknowledgedAt: null,
-      required: false
+      required: false,
+      alwaysShow: false
     };
   }
 
   const acknowledgedAt = await setBeginnerRulesAcknowledgedAt(userId);
 
   return {
-    category,
+    category: profile.category,
+    role: profile.role,
     acknowledgedAt,
-    required: false
+    required: false,
+    alwaysShow: profile.role === "admin"
   };
 }
