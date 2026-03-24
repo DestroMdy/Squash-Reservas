@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { squashRules } from "@/lib/club-content";
+import { squashRuleCuriosities, squashRules } from "@/lib/club-content";
 import {
   acknowledgeBeginnerRules,
   fetchBeginnerRulesStatus,
@@ -13,6 +13,7 @@ export function BeginnerRulesGate() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -24,6 +25,7 @@ export function BeginnerRulesGate() {
         if (!session?.user?.id || !session.access_token) {
           if (!cancelled) {
             setOpen(false);
+            setShowMoreDetails(false);
             setLoading(false);
           }
           return;
@@ -33,11 +35,13 @@ export function BeginnerRulesGate() {
 
         if (!cancelled) {
           setOpen(Boolean(status.required));
+          setShowMoreDetails(false);
           setLoading(false);
         }
       } catch {
         if (!cancelled) {
           setOpen(false);
+          setShowMoreDetails(false);
           setLoading(false);
         }
       }
@@ -122,6 +126,29 @@ export function BeginnerRulesGate() {
           </p>
         </div>
 
+        {showMoreDetails ? (
+          <div className="mt-6 space-y-3">
+            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Curiosidades y reglas poco conocidas
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {squashRuleCuriosities.map((rule) => (
+                <article
+                  key={rule.title}
+                  className="rounded-2xl border border-slate-200 bg-white p-4"
+                >
+                  <h3 className="text-sm font-semibold text-slate-950 sm:text-base">
+                    {rule.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {rule.description}
+                  </p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
           <button
             type="button"
@@ -139,9 +166,13 @@ export function BeginnerRulesGate() {
           >
             Ver reglamento completo
           </Link>
-          <Link href="/club" className="text-sm font-medium text-slate-600 underline">
-            Ver mas detalles
-          </Link>
+          <button
+            type="button"
+            className="text-left text-sm font-medium text-slate-600 underline"
+            onClick={() => setShowMoreDetails((current) => !current)}
+          >
+            {showMoreDetails ? "Ocultar mas detalles" : "Ver mas detalles"}
+          </button>
         </div>
       </div>
     </div>
