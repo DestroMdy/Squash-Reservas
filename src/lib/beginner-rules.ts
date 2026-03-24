@@ -1,5 +1,9 @@
 import "server-only";
-import { getBeginnerRulesAcknowledgedAt, setBeginnerRulesAcknowledgedAt } from "@/lib/beginner-rules-store";
+import {
+  clearBeginnerRulesAcknowledgedAt,
+  getBeginnerRulesAcknowledgedAt,
+  setBeginnerRulesAcknowledgedAt
+} from "@/lib/beginner-rules-store";
 import { adminHeaders } from "@/lib/server-auth";
 
 export function isBeginnerCategory(category: string | null | undefined) {
@@ -40,20 +44,25 @@ export async function getBeginnerRulesStatus(
   serviceRoleKey: string,
   userId: string
 ) {
-  const [profile, acknowledgedAt] = await Promise.all([
+  const [profile, storedAcknowledgedAt] = await Promise.all([
     fetchUserProfileStatus(supabaseUrl, serviceRoleKey, userId),
     getBeginnerRulesAcknowledgedAt(userId)
   ]);
 
   const isBeginner = isBeginnerCategory(profile.category);
-  const alwaysShow = isBeginner && profile.role === "admin";
+  let acknowledgedAt = storedAcknowledgedAt;
+
+  if (profile.role === "admin" && !isBeginner && acknowledgedAt) {
+    await clearBeginnerRulesAcknowledgedAt(userId);
+    acknowledgedAt = null;
+  }
 
   return {
     category: profile.category,
     role: profile.role,
     acknowledgedAt,
     required: isBeginner && !acknowledgedAt,
-    alwaysShow
+    alwaysShow: false
   };
 }
 
@@ -85,6 +94,6 @@ export async function acknowledgeBeginnerRules(
     role: profile.role,
     acknowledgedAt,
     required: false,
-    alwaysShow: profile.role === "admin"
+    alwaysShow: false
   };
 }

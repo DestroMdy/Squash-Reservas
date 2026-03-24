@@ -95,3 +95,14 @@ export async function setBeginnerRulesAcknowledgedAt(
   await persistMap(map);
   return acknowledgedAt;
 }
+
+export async function clearBeginnerRulesAcknowledgedAt(userId: string) {
+  const map = await getStoredMap();
+
+  if (!(userId in map)) {
+    return;
+  }
+
+  delete map[userId];
+  await persistMap(map);
+}
