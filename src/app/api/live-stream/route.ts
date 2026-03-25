@@ -3,6 +3,7 @@ import { fetchProfilesForLiveAvatars } from "@/lib/live-avatar-profiles";
 import { attachLiveScoreboardAvatars } from "@/lib/live-score";
 import {
   getStoredLiveCenterCourts,
+  getStoredLivePlayerMappings,
   isLiveStreamStoreConfigured
 } from "@/lib/live-stream-store";
 import { getPrimaryLiveCourt, toPublicLiveStreamConfig } from "@/lib/live-stream";
@@ -26,16 +27,17 @@ export async function GET() {
   }
 
   try {
-    const [storedCourts, profiles] = await Promise.all([
+    const [storedCourts, profiles, mappings] = await Promise.all([
       getStoredLiveCenterCourts(),
-      fetchProfilesForLiveAvatars().catch(() => [])
+      fetchProfilesForLiveAvatars().catch(() => []),
+      getStoredLivePlayerMappings().catch(() => [])
     ]);
 
     const courts = storedCourts.map((court) => ({
       ...court,
       stream: toPublicLiveStreamConfig(court.stream),
       scoreboard: court.scoreboard
-        ? attachLiveScoreboardAvatars(court.scoreboard, profiles)
+        ? attachLiveScoreboardAvatars(court.scoreboard, profiles, mappings)
         : null
     }));
     const primaryCourt = getPrimaryLiveCourt(courts);

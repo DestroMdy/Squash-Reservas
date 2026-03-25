@@ -1,4 +1,4 @@
-import { LiveScoreboard } from "@/types/db";
+import { LivePlayerMapping, LiveScoreboard } from "@/types/db";
 import { LiveAvatarProfile } from "@/lib/live-avatar-profiles";
 
 type RawScorePayload = Record<string, unknown>;
@@ -82,9 +82,14 @@ function normalizeNameForLookup(value: string | null | undefined) {
 
 export function attachLiveScoreboardAvatars(
   scoreboard: LiveScoreboard,
-  profiles: LiveAvatarProfile[]
+  profiles: LiveAvatarProfile[],
+  mappings: LivePlayerMapping[] = []
 ) {
   const profilesByName = new Map<string, string>();
+  const mappedProfilesByName = new Map<
+    string,
+    { avatar_url: string | null; profile_name: string | null }
+  >();
 
   for (const profile of profiles) {
     const normalizedName = normalizeNameForLookup(profile.full_name);
@@ -96,14 +101,40 @@ export function attachLiveScoreboardAvatars(
     profilesByName.set(normalizedName, profile.avatar_url);
   }
 
+  for (const mapping of mappings) {
+    const normalizedName = normalizeNameForLookup(mapping.squore_name);
+
+    if (!normalizedName || mappedProfilesByName.has(normalizedName)) {
+      continue;
+    }
+
+    mappedProfilesByName.set(normalizedName, {
+      avatar_url: mapping.avatar_url || null,
+      profile_name: mapping.profile_name || null
+    });
+  }
+
+  const playerOneMapping = mappedProfilesByName.get(
+    normalizeNameForLookup(scoreboard.player_one_name)
+  );
+  const playerTwoMapping = mappedProfilesByName.get(
+    normalizeNameForLookup(scoreboard.player_two_name)
+  );
+
   const playerOneAvatar =
-    profilesByName.get(normalizeNameForLookup(scoreboard.player_one_name)) || null;
+    playerOneMapping?.avatar_url ||
+    profilesByName.get(normalizeNameForLookup(scoreboard.player_one_name)) ||
+    null;
   const playerTwoAvatar =
-    profilesByName.get(normalizeNameForLookup(scoreboard.player_two_name)) || null;
+    playerTwoMapping?.avatar_url ||
+    profilesByName.get(normalizeNameForLookup(scoreboard.player_two_name)) ||
+    null;
 
   return {
     ...scoreboard,
+    player_one_name: playerOneMapping?.profile_name || scoreboard.player_one_name,
     player_one_avatar_url: playerOneAvatar,
+    player_two_name: playerTwoMapping?.profile_name || scoreboard.player_two_name,
     player_two_avatar_url: playerTwoAvatar
   } satisfies LiveScoreboard;
 }

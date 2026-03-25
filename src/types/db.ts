@@ -43,6 +43,16 @@ export interface LiveScoreboard {
   updated_at: string;
 }
 
+export interface LivePlayerMapping {
+  id: string;
+  squore_name: string;
+  profile_id: string;
+  profile_name: string | null;
+  avatar_url?: string | null;
+  updated_at: string;
+  updated_by?: string | null;
+}
+
 export interface LiveIngestStatus {
   last_score_received_at: string | null;
   last_forwarded_at: string | null;

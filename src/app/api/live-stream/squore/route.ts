@@ -9,6 +9,7 @@ import { updateLiveIngestStatus } from "@/lib/live-ingest-status-store";
 import {
   getStoredLiveCourtSquoreToken,
   getStoredLiveCourtStream,
+  getStoredLivePlayerMappings,
   isLiveStreamStoreConfigured,
   setStoredLiveCourtScoreboard
 } from "@/lib/live-stream-store";
@@ -130,8 +131,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const profiles = await fetchProfilesForLiveAvatars().catch(() => []);
-    const enrichedScoreboard = attachLiveScoreboardAvatars(scoreboard, profiles);
+    const [profiles, mappings] = await Promise.all([
+      fetchProfilesForLiveAvatars().catch(() => []),
+      getStoredLivePlayerMappings().catch(() => [])
+    ]);
+    const enrichedScoreboard = attachLiveScoreboardAvatars(
+      scoreboard,
+      profiles,
+      mappings
+    );
 
     await setStoredLiveCourtScoreboard(courtId, enrichedScoreboard);
     await updateLiveIngestStatus(courtId, {

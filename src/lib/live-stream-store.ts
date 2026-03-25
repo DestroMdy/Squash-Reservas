@@ -8,6 +8,7 @@ import {
 import {
   AdminLiveStreamConfig,
   LiveCourtId,
+  LivePlayerMapping,
   LiveCourtState,
   LiveScoreboard
 } from "@/types/db";
@@ -15,6 +16,7 @@ import {
 const LIVE_CENTER_CONFIG_KV_KEY = "sr:live-center:config";
 const LIVE_CENTER_SCOREBOARDS_KV_KEY = "sr:live-center:scoreboards";
 const LIVE_CENTER_SQUORE_TOKENS_KV_KEY = "sr:live-center:squore-tokens";
+const LIVE_CENTER_PLAYER_MAPPINGS_KV_KEY = "sr:live-center:player-mappings";
 
 const LEGACY_LIVE_STREAM_KV_KEY = "sr:live-stream:config";
 const LEGACY_LIVE_STREAM_SCOREBOARD_KV_KEY = "sr:live-stream:scoreboard";
@@ -143,6 +145,22 @@ function serializeTokenMap(tokenMap: LiveCenterTokenMap) {
   return serialized;
 }
 
+function normalizePlayerMappings(raw: unknown) {
+  if (!Array.isArray(raw)) {
+    return [] as LivePlayerMapping[];
+  }
+
+  return raw
+    .filter((value) => value && typeof value === "object")
+    .map((value) => value as LivePlayerMapping)
+    .filter(
+      (value) =>
+        typeof value.id === "string" &&
+        typeof value.squore_name === "string" &&
+        typeof value.profile_id === "string"
+    );
+}
+
 function hasAnyValues(values: Record<string, unknown | null>) {
   return Object.values(values).some(Boolean);
 }
@@ -261,6 +279,62 @@ export async function getStoredLiveCenterSquoreTokenMap() {
   }
 
   return tokenMap;
+}
+
+export async function getStoredLivePlayerMappings() {
+  return normalizePlayerMappings(
+    await getJsonKv<LivePlayerMapping[]>(LIVE_CENTER_PLAYER_MAPPINGS_KV_KEY)
+  );
+}
+
+export async function upsertStoredLivePlayerMapping(
+  value: Omit<LivePlayerMapping, "id" | "updated_at"> & {
+    id?: string | null;
+  }
+) {
+  const mappings = await getStoredLivePlayerMappings();
+  const nextMapping: LivePlayerMapping = {
+    id: value.id?.trim() || randomUUID(),
+    squore_name: value.squore_name.trim(),
+    profile_id: value.profile_id.trim(),
+    profile_name: value.profile_name || null,
+    avatar_url: value.avatar_url || null,
+    updated_at: new Date().toISOString(),
+    updated_by: value.updated_by || null
+  };
+
+  const existingIndex = mappings.findIndex(
+    (mapping) =>
+      mapping.id === nextMapping.id ||
+      mapping.squore_name.trim().toLowerCase() ===
+        nextMapping.squore_name.trim().toLowerCase()
+  );
+
+  if (existingIndex >= 0) {
+    mappings[existingIndex] = {
+      ...mappings[existingIndex],
+      ...nextMapping
+    };
+  } else {
+    mappings.push(nextMapping);
+  }
+
+  mappings.sort((a, b) => a.squore_name.localeCompare(b.squore_name, "es"));
+  await setJsonKv(LIVE_CENTER_PLAYER_MAPPINGS_KV_KEY, mappings);
+  return nextMapping;
+}
+
+export async function deleteStoredLivePlayerMapping(mappingId: string) {
+  const mappings = await getStoredLivePlayerMappings();
+  const remainingMappings = mappings.filter((mapping) => mapping.id !== mappingId);
+
+  if (remainingMappings.length) {
+    await setJsonKv(LIVE_CENTER_PLAYER_MAPPINGS_KV_KEY, remainingMappings);
+  } else {
+    await callKv(["del", LIVE_CENTER_PLAYER_MAPPINGS_KV_KEY]);
+  }
+
+  return remainingMappings;
 }
 
 export async function getStoredLiveCenterCourts(): Promise<LiveCourtState[]> {

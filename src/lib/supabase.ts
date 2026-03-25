@@ -6,6 +6,7 @@ import {
 import {
   AdminLiveCourtState,
   LiveCourtId,
+  LivePlayerMapping,
   LiveCourtState,
   LiveScoreboard,
   LiveStreamConfig
@@ -1491,6 +1492,77 @@ export async function clearLiveStream(token: string, courtId: LiveCourtId) {
   return {
     courts: result?.courts || []
   };
+}
+
+export async function fetchLivePlayerMappings(token: string) {
+  const response = await authedRouteRequest("/api/admin/live-stream/player-mappings", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    mappings?: LivePlayerMapping[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudieron cargar las vinculaciones manuales."
+    );
+  }
+
+  return payload?.mappings || [];
+}
+
+export async function upsertLivePlayerMapping(
+  token: string,
+  payload: {
+    id?: string | null;
+    squore_name: string;
+    profile_id: string;
+  }
+) {
+  const response = await authedRouteRequest("/api/admin/live-stream/player-mappings", {
+    method: "POST",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify(payload)
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    mapping?: LivePlayerMapping | null;
+    mappings?: LivePlayerMapping[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo guardar la vinculacion.");
+  }
+
+  return {
+    mapping: result?.mapping || null,
+    mappings: result?.mappings || []
+  };
+}
+
+export async function deleteLivePlayerMapping(token: string, id: string) {
+  const response = await authedRouteRequest("/api/admin/live-stream/player-mappings", {
+    method: "DELETE",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify({ id })
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    mappings?: LivePlayerMapping[];
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo borrar la vinculacion.");
+  }
+
+  return result?.mappings || [];
 }
 
 export async function fetchAdminExternalTournaments(token: string) {

@@ -6,7 +6,9 @@ export type AdminAuditAction =
   | "external_tournament.updated"
   | "external_tournament.deleted"
   | "live_stream.updated"
-  | "live_stream.deleted";
+  | "live_stream.deleted"
+  | "live_stream.player_mapping_upserted"
+  | "live_stream.player_mapping_deleted";
 
 export type AdminAuditLogPayload = {
   actorId: string;

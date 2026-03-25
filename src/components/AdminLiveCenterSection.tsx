@@ -1,14 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AvatarImage } from "@/components/AvatarImage";
 import { LIVE_COURTS } from "@/lib/live-stream";
 import {
   clearLiveStream,
+  deleteLivePlayerMapping,
   fetchAdminLiveStream,
+  fetchLivePlayerMappings,
+  fetchPlayers,
   getSession,
+  upsertLivePlayerMapping,
   updateLiveStream
 } from "@/lib/supabase";
-import { AdminLiveCourtState, LiveCourtId } from "@/types/db";
+import {
+  AdminLiveCourtState,
+  LiveCourtId,
+  LivePlayerMapping,
+  Profile
+} from "@/types/db";
 
 type LiveCourtFormState = {
   title: string;
@@ -21,6 +31,11 @@ type LiveCourtFormState = {
   tournament_software_post_url: string;
 };
 
+type LivePlayerMappingFormState = {
+  squore_name: string;
+  profile_id: string;
+};
+
 function getEmptyLiveCourtForm(): LiveCourtFormState {
   return {
     title: "",
@@ -31,6 +46,13 @@ function getEmptyLiveCourtForm(): LiveCourtFormState {
     scoreboard_delay_seconds: "5",
     is_live: false,
     tournament_software_post_url: ""
+  };
+}
+
+function getEmptyPlayerMappingForm(): LivePlayerMappingFormState {
+  return {
+    squore_name: "",
+    profile_id: ""
   };
 }
 
@@ -121,10 +143,25 @@ export function AdminLiveCenterSection() {
   const [clearingCourtId, setClearingCourtId] = useState<LiveCourtId | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [playerMappings, setPlayerMappings] = useState<LivePlayerMapping[]>([]);
+  const [availablePlayers, setAvailablePlayers] = useState<Profile[]>([]);
+  const [mappingForm, setMappingForm] = useState<LivePlayerMappingFormState>(
+    getEmptyPlayerMappingForm()
+  );
+  const [savingMapping, setSavingMapping] = useState(false);
+  const [deletingMappingId, setDeletingMappingId] = useState<string | null>(null);
 
   const liveCount = useMemo(
     () => courts.filter((court) => court.stream?.is_live).length,
     [courts]
+  );
+
+  const selectablePlayers = useMemo(
+    () =>
+      [...availablePlayers].sort((a, b) =>
+        (a.full_name || "").localeCompare(b.full_name || "", "es")
+      ),
+    [availablePlayers]
   );
 
   function applyCourts(nextCourts?: AdminLiveCourtState[]) {
@@ -139,8 +176,14 @@ export function AdminLiveCenterSection() {
       throw new Error("Debes iniciar sesion");
     }
 
-    const result = await fetchAdminLiveStream(token);
+    const [result, players, mappings] = await Promise.all([
+      fetchAdminLiveStream(token),
+      fetchPlayers(token),
+      fetchLivePlayerMappings(token)
+    ]);
     applyCourts(result.courts);
+    setAvailablePlayers(players || []);
+    setPlayerMappings(mappings || []);
   }, []);
 
   useEffect(() => {
@@ -231,6 +274,73 @@ export function AdminLiveCenterSection() {
       );
     } finally {
       setClearingCourtId(null);
+    }
+  }
+
+  async function handleSavePlayerMapping() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesion");
+      }
+
+      if (!mappingForm.squore_name.trim() || !mappingForm.profile_id) {
+        throw new Error("Debes indicar el nombre que manda Squore y el jugador de la app.");
+      }
+
+      setSavingMapping(true);
+      setMessage(null);
+      setError(null);
+
+      const result = await upsertLivePlayerMapping(token, {
+        squore_name: mappingForm.squore_name.trim(),
+        profile_id: mappingForm.profile_id
+      });
+
+      setPlayerMappings(result.mappings);
+      setMappingForm(getEmptyPlayerMappingForm());
+      setMessage("Vinculacion manual guardada.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar la vinculacion manual"
+      );
+    } finally {
+      setSavingMapping(false);
+    }
+  }
+
+  async function handleDeletePlayerMapping(mappingId: string) {
+    const confirmed = window.confirm(
+      "Vas a borrar esta vinculacion manual entre Squore y el perfil del jugador."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesion");
+      }
+
+      setDeletingMappingId(mappingId);
+      setMessage(null);
+      setError(null);
+
+      const mappings = await deleteLivePlayerMapping(token, mappingId);
+      setPlayerMappings(mappings);
+      setMessage("Vinculacion manual eliminada.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo borrar la vinculacion manual"
+      );
+    } finally {
+      setDeletingMappingId(null);
     }
   }
 
@@ -613,6 +723,120 @@ export function AdminLiveCenterSection() {
           );
         })}
       </div>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-900">
+              Vinculacion manual de jugadores Squore
+            </h3>
+            <p className="text-sm text-slate-500">
+              Si el nombre que llega desde Squore no coincide exactamente con el perfil, puedes enlazarlo aca para mostrar bien nombre y avatar en el vivo.
+            </p>
+          </div>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
+            {playerMappings.length} vinculacion{playerMappings.length === 1 ? "" : "es"}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[1.2fr_1fr_auto]">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Nombre exacto que manda Squore
+            </label>
+            <input
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+              value={mappingForm.squore_name}
+              onChange={(event) =>
+                setMappingForm((current) => ({
+                  ...current,
+                  squore_name: event.target.value
+                }))
+              }
+              placeholder="Ej: Agustin Rivero"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium text-slate-700">
+              Jugador de la app
+            </label>
+            <select
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+              value={mappingForm.profile_id}
+              onChange={(event) =>
+                setMappingForm((current) => ({
+                  ...current,
+                  profile_id: event.target.value
+                }))
+              }
+            >
+              <option value="">Seleccionar jugador</option>
+              {selectablePlayers.map((player) => (
+                <option key={player.id} value={player.id}>
+                  {player.full_name || "Sin nombre"}
+                  {player.category ? ` · ${player.category}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-end gap-2">
+            <button
+              type="button"
+              className="btn-primary whitespace-nowrap"
+              onClick={handleSavePlayerMapping}
+              disabled={savingMapping}
+            >
+              {savingMapping ? "Guardando..." : "Guardar vinculacion"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {playerMappings.length ? (
+            playerMappings.map((mapping) => (
+              <div
+                key={mapping.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <AvatarImage
+                    src={mapping.avatar_url}
+                    alt={mapping.profile_name || mapping.squore_name}
+                    size={44}
+                    className="h-11 w-11 rounded-full border border-slate-200 object-cover shadow-sm"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Squore
+                    </p>
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {mapping.squore_name}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-600">
+                      {mapping.profile_name || "Perfil sin nombre"}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => handleDeletePlayerMapping(mapping.id)}
+                  disabled={deletingMappingId === mapping.id}
+                >
+                  {deletingMappingId === mapping.id ? "Borrando..." : "Borrar"}
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+              Todavia no cargaste vinculaciones manuales. Solo hace falta si Squore usa nombres distintos a los perfiles del club.
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
