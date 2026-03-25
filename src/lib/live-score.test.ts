@@ -57,4 +57,52 @@ describe("live-score helpers", () => {
     expect(enriched.player_one_avatar_url).toBe("https://example.com/agustin.jpg");
     expect(enriched.player_two_name).toBe("Nico Asmus");
   });
+
+  it("automatically matches abbreviated first names and surnames against profiles", () => {
+    const score = normalizeSquoreScoreboard({
+      player1: "A. Rivero",
+      player2: "Nico Asmus"
+    });
+
+    const enriched = attachLiveScoreboardAvatars(score!, [
+      {
+        id: "profile-1",
+        full_name: "Agustin Rivero",
+        avatar_url: "https://example.com/agustin.jpg"
+      },
+      {
+        id: "profile-2",
+        full_name: "Nicolas Asmus",
+        avatar_url: "https://example.com/nicolas.jpg"
+      }
+    ]);
+
+    expect(enriched.player_one_name).toBe("Agustin Rivero");
+    expect(enriched.player_one_avatar_url).toBe("https://example.com/agustin.jpg");
+    expect(enriched.player_two_name).toBe("Nicolas Asmus");
+    expect(enriched.player_two_avatar_url).toBe("https://example.com/nicolas.jpg");
+  });
+
+  it("matches inverted token order from Squore against the profile name", () => {
+    const score = normalizeSquoreScoreboard({
+      player1: "Rivero Agustin",
+      player2: "Asmus Nicolas"
+    });
+
+    const enriched = attachLiveScoreboardAvatars(score!, [
+      {
+        id: "profile-1",
+        full_name: "Agustin Rivero",
+        avatar_url: "https://example.com/agustin.jpg"
+      },
+      {
+        id: "profile-2",
+        full_name: "Nicolas Asmus",
+        avatar_url: "https://example.com/nicolas.jpg"
+      }
+    ]);
+
+    expect(enriched.player_one_name).toBe("Agustin Rivero");
+    expect(enriched.player_two_name).toBe("Nicolas Asmus");
+  });
 });

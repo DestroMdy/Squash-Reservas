@@ -80,12 +80,113 @@ function normalizeNameForLookup(value: string | null | undefined) {
     .toLowerCase();
 }
 
+function tokenizeName(value: string | null | undefined) {
+  return normalizeNameForLookup(value)
+    .split(" ")
+    .filter(Boolean);
+}
+
+function isMeaningfulPrefixMatch(left: string, right: string) {
+  const minLength = Math.min(left.length, right.length);
+
+  if (minLength < 3) {
+    return false;
+  }
+
+  return left.startsWith(right) || right.startsWith(left);
+}
+
+function scoreAutomaticProfileMatch(
+  squoreName: string,
+  profile: LiveAvatarProfile
+) {
+  const squoreTokens = tokenizeName(squoreName);
+  const profileTokens = tokenizeName(profile.full_name);
+
+  if (!squoreTokens.length || !profileTokens.length) {
+    return null;
+  }
+
+  const squoreNormalized = squoreTokens.join(" ");
+  const profileNormalized = profileTokens.join(" ");
+
+  if (squoreNormalized === profileNormalized) {
+    return 100;
+  }
+
+  if (
+    squoreTokens.length === profileTokens.length &&
+    squoreTokens.every((token) => profileTokens.includes(token))
+  ) {
+    return 90;
+  }
+
+  const squoreFirst = squoreTokens[0];
+  const squoreLast = squoreTokens[squoreTokens.length - 1];
+  const profileFirst = profileTokens[0];
+  const profileLast = profileTokens[profileTokens.length - 1];
+
+  if (squoreLast === profileLast) {
+    if (
+      squoreFirst[0] === profileFirst[0] &&
+      (squoreFirst.length === 1 ||
+        profileFirst.length === 1 ||
+        isMeaningfulPrefixMatch(squoreFirst, profileFirst))
+    ) {
+      return 80;
+    }
+
+    if (isMeaningfulPrefixMatch(squoreFirst, profileFirst)) {
+      return 75;
+    }
+  }
+
+  return null;
+}
+
+function resolveAutomaticProfileMatch(
+  squoreName: string,
+  profiles: LiveAvatarProfile[]
+) {
+  let bestMatch: LiveAvatarProfile | null = null;
+  let bestScore = -1;
+  let duplicateBestScore = false;
+
+  for (const profile of profiles) {
+    const score = scoreAutomaticProfileMatch(squoreName, profile);
+
+    if (score === null) {
+      continue;
+    }
+
+    if (score > bestScore) {
+      bestMatch = profile;
+      bestScore = score;
+      duplicateBestScore = false;
+      continue;
+    }
+
+    if (score === bestScore) {
+      duplicateBestScore = true;
+    }
+  }
+
+  if (duplicateBestScore || !bestMatch) {
+    return null;
+  }
+
+  return bestMatch;
+}
+
 export function attachLiveScoreboardAvatars(
   scoreboard: LiveScoreboard,
   profiles: LiveAvatarProfile[],
   mappings: LivePlayerMapping[] = []
 ) {
-  const profilesByName = new Map<string, string>();
+  const profilesByName = new Map<
+    string,
+    { profile_name: string | null; avatar_url: string | null }
+  >();
   const mappedProfilesByName = new Map<
     string,
     { avatar_url: string | null; profile_name: string | null }
@@ -94,11 +195,14 @@ export function attachLiveScoreboardAvatars(
   for (const profile of profiles) {
     const normalizedName = normalizeNameForLookup(profile.full_name);
 
-    if (!normalizedName || !profile.avatar_url || profilesByName.has(normalizedName)) {
+    if (!normalizedName || profilesByName.has(normalizedName)) {
       continue;
     }
 
-    profilesByName.set(normalizedName, profile.avatar_url);
+    profilesByName.set(normalizedName, {
+      profile_name: profile.full_name || null,
+      avatar_url: profile.avatar_url || null
+    });
   }
 
   for (const mapping of mappings) {
@@ -120,21 +224,45 @@ export function attachLiveScoreboardAvatars(
   const playerTwoMapping = mappedProfilesByName.get(
     normalizeNameForLookup(scoreboard.player_two_name)
   );
+  const playerOneAutomaticProfile = resolveAutomaticProfileMatch(
+    scoreboard.player_one_name,
+    profiles
+  );
+  const playerTwoAutomaticProfile = resolveAutomaticProfileMatch(
+    scoreboard.player_two_name,
+    profiles
+  );
+  const playerOneExactProfile = profilesByName.get(
+    normalizeNameForLookup(scoreboard.player_one_name)
+  );
+  const playerTwoExactProfile = profilesByName.get(
+    normalizeNameForLookup(scoreboard.player_two_name)
+  );
 
   const playerOneAvatar =
     playerOneMapping?.avatar_url ||
-    profilesByName.get(normalizeNameForLookup(scoreboard.player_one_name)) ||
+    playerOneExactProfile?.avatar_url ||
+    playerOneAutomaticProfile?.avatar_url ||
     null;
   const playerTwoAvatar =
     playerTwoMapping?.avatar_url ||
-    profilesByName.get(normalizeNameForLookup(scoreboard.player_two_name)) ||
+    playerTwoExactProfile?.avatar_url ||
+    playerTwoAutomaticProfile?.avatar_url ||
     null;
 
   return {
     ...scoreboard,
-    player_one_name: playerOneMapping?.profile_name || scoreboard.player_one_name,
+    player_one_name:
+      playerOneMapping?.profile_name ||
+      playerOneExactProfile?.profile_name ||
+      playerOneAutomaticProfile?.full_name ||
+      scoreboard.player_one_name,
     player_one_avatar_url: playerOneAvatar,
-    player_two_name: playerTwoMapping?.profile_name || scoreboard.player_two_name,
+    player_two_name:
+      playerTwoMapping?.profile_name ||
+      playerTwoExactProfile?.profile_name ||
+      playerTwoAutomaticProfile?.full_name ||
+      scoreboard.player_two_name,
     player_two_avatar_url: playerTwoAvatar
   } satisfies LiveScoreboard;
 }
