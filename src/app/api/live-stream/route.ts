@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { fetchProfilesForLiveAvatars } from "@/lib/live-avatar-profiles";
+import { attachLiveScoreboardAvatars } from "@/lib/live-score";
 import {
   getStoredLiveCenterCourts,
   isLiveStreamStoreConfigured
@@ -24,9 +26,17 @@ export async function GET() {
   }
 
   try {
-    const courts = (await getStoredLiveCenterCourts()).map((court) => ({
+    const [storedCourts, profiles] = await Promise.all([
+      getStoredLiveCenterCourts(),
+      fetchProfilesForLiveAvatars().catch(() => [])
+    ]);
+
+    const courts = storedCourts.map((court) => ({
       ...court,
-      stream: toPublicLiveStreamConfig(court.stream)
+      stream: toPublicLiveStreamConfig(court.stream),
+      scoreboard: court.scoreboard
+        ? attachLiveScoreboardAvatars(court.scoreboard, profiles)
+        : null
     }));
     const primaryCourt = getPrimaryLiveCourt(courts);
 

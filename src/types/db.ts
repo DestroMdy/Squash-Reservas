@@ -28,7 +28,9 @@ export interface LiveScoreboard {
   round_name: string | null;
   location: string | null;
   player_one_name: string;
+  player_one_avatar_url?: string | null;
   player_two_name: string;
+  player_two_avatar_url?: string | null;
   result: string | null;
   game_scores: string | null;
   winner_name: string | null;

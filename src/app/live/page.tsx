@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
 import { fetchLiveCenterStatus } from "@/lib/supabase";
 import { LiveCourtState, LiveScoreboard } from "@/types/db";
@@ -200,15 +201,23 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
                   </div>
 
                   <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold sm:text-base">
-                        {visibleScoreboard.player_one_name}
-                      </p>
-                      {visibleScoreboard.winner_side === 1 ? (
-                        <p className="mt-1 text-[11px] font-medium text-emerald-300">
-                          Ganador
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <AvatarImage
+                        src={visibleScoreboard.player_one_avatar_url}
+                        alt={visibleScoreboard.player_one_name}
+                        size={isFullscreen ? 44 : 34}
+                        className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
+                      />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold sm:text-base">
+                          {visibleScoreboard.player_one_name}
                         </p>
-                      ) : null}
+                        {visibleScoreboard.winner_side === 1 ? (
+                          <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                            Ganador
+                          </p>
+                        ) : null}
+                      </div>
                     </div>
                     <div className="shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
                       <p className="text-[10px] uppercase tracking-[0.16em] text-white/60">
@@ -218,15 +227,23 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
                         {visibleScoreboard.game_scores || "-"}
                       </p>
                     </div>
-                    <div className="min-w-0 text-right">
-                      <p className="truncate text-sm font-semibold sm:text-base">
-                        {visibleScoreboard.player_two_name}
-                      </p>
-                      {visibleScoreboard.winner_side === 2 ? (
-                        <p className="mt-1 text-[11px] font-medium text-emerald-300">
-                          Ganador
+                    <div className="flex min-w-0 items-center justify-end gap-2.5">
+                      <div className="min-w-0 text-right">
+                        <p className="truncate text-sm font-semibold sm:text-base">
+                          {visibleScoreboard.player_two_name}
                         </p>
-                      ) : null}
+                        {visibleScoreboard.winner_side === 2 ? (
+                          <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                            Ganador
+                          </p>
+                        ) : null}
+                      </div>
+                      <AvatarImage
+                        src={visibleScoreboard.player_two_avatar_url}
+                        alt={visibleScoreboard.player_two_name}
+                        size={isFullscreen ? 44 : 34}
+                        className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
+                      />
                     </div>
                   </div>
                 </div>
@@ -294,27 +311,47 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <article className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                Jugador 1
-              </p>
-              <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                {visibleScoreboard.player_one_name}
-              </h3>
-              {visibleScoreboard.winner_side === 1 ? (
-                <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
-              ) : null}
+              <div className="flex items-center gap-3">
+                <AvatarImage
+                  src={visibleScoreboard.player_one_avatar_url}
+                  alt={visibleScoreboard.player_one_name}
+                  size={52}
+                  className="h-[52px] w-[52px] rounded-full border border-slate-200 object-cover shadow-sm"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                    Jugador 1
+                  </p>
+                  <h3 className="mt-2 text-2xl font-bold text-slate-950">
+                    {visibleScoreboard.player_one_name}
+                  </h3>
+                  {visibleScoreboard.winner_side === 1 ? (
+                    <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
+                  ) : null}
+                </div>
+              </div>
             </article>
 
             <article className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-              <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                Jugador 2
-              </p>
-              <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                {visibleScoreboard.player_two_name}
-              </h3>
-              {visibleScoreboard.winner_side === 2 ? (
-                <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
-              ) : null}
+              <div className="flex items-center gap-3">
+                <AvatarImage
+                  src={visibleScoreboard.player_two_avatar_url}
+                  alt={visibleScoreboard.player_two_name}
+                  size={52}
+                  className="h-[52px] w-[52px] rounded-full border border-slate-200 object-cover shadow-sm"
+                />
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                    Jugador 2
+                  </p>
+                  <h3 className="mt-2 text-2xl font-bold text-slate-950">
+                    {visibleScoreboard.player_two_name}
+                  </h3>
+                  {visibleScoreboard.winner_side === 2 ? (
+                    <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
+                  ) : null}
+                </div>
+              </div>
             </article>
           </div>
 

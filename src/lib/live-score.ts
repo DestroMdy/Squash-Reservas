@@ -1,4 +1,5 @@
 import { LiveScoreboard } from "@/types/db";
+import { LiveAvatarProfile } from "@/lib/live-avatar-profiles";
 
 type RawScorePayload = Record<string, unknown>;
 
@@ -53,7 +54,9 @@ export function normalizeSquoreScoreboard(payload: RawScorePayload) {
     round_name: getStringValue(payload, "eventround"),
     location: getStringValue(payload, "location"),
     player_one_name: playerOneName,
+    player_one_avatar_url: null,
     player_two_name: playerTwoName,
+    player_two_avatar_url: null,
     result: getStringValue(payload, "result"),
     game_scores: getStringValue(payload, "gamescores"),
     winner_name: getStringValue(payload, "winner"),
@@ -65,4 +68,42 @@ export function normalizeSquoreScoreboard(payload: RawScorePayload) {
     played_time: getStringValue(payload, "whentime"),
     updated_at: new Date().toISOString()
   } as LiveScoreboard;
+}
+
+function normalizeNameForLookup(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+export function attachLiveScoreboardAvatars(
+  scoreboard: LiveScoreboard,
+  profiles: LiveAvatarProfile[]
+) {
+  const profilesByName = new Map<string, string>();
+
+  for (const profile of profiles) {
+    const normalizedName = normalizeNameForLookup(profile.full_name);
+
+    if (!normalizedName || !profile.avatar_url || profilesByName.has(normalizedName)) {
+      continue;
+    }
+
+    profilesByName.set(normalizedName, profile.avatar_url);
+  }
+
+  const playerOneAvatar =
+    profilesByName.get(normalizeNameForLookup(scoreboard.player_one_name)) || null;
+  const playerTwoAvatar =
+    profilesByName.get(normalizeNameForLookup(scoreboard.player_two_name)) || null;
+
+  return {
+    ...scoreboard,
+    player_one_avatar_url: playerOneAvatar,
+    player_two_avatar_url: playerTwoAvatar
+  } satisfies LiveScoreboard;
 }

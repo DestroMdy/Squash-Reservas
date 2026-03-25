@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getLiveCourtLabel, isLiveCourtId } from "@/lib/live-stream";
-import { normalizeSquoreScoreboard } from "@/lib/live-score";
+import {
+  attachLiveScoreboardAvatars,
+  normalizeSquoreScoreboard
+} from "@/lib/live-score";
+import { fetchProfilesForLiveAvatars } from "@/lib/live-avatar-profiles";
 import { updateLiveIngestStatus } from "@/lib/live-ingest-status-store";
 import {
   getStoredLiveCourtSquoreToken,
@@ -126,10 +130,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await setStoredLiveCourtScoreboard(courtId, scoreboard);
+    const profiles = await fetchProfilesForLiveAvatars().catch(() => []);
+    const enrichedScoreboard = attachLiveScoreboardAvatars(scoreboard, profiles);
+
+    await setStoredLiveCourtScoreboard(courtId, enrichedScoreboard);
     await updateLiveIngestStatus(courtId, {
       last_score_received_at: new Date().toISOString(),
-      latest_payload_summary: `${scoreboard.player_one_name} vs ${scoreboard.player_two_name}`,
+      latest_payload_summary: `${enrichedScoreboard.player_one_name} vs ${enrichedScoreboard.player_two_name}`,
       last_forward_error: null
     }).catch(() => null);
 
@@ -164,7 +171,7 @@ export async function POST(request: NextRequest) {
       {
         ok: true,
         court_id: courtId,
-        scoreboard,
+        scoreboard: enrichedScoreboard,
         forwarded_to_tournament_software: forwardedToTournamentSoftware
       },
       { headers: responseHeaders() }
