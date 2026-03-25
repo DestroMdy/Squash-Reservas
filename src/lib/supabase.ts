@@ -1425,6 +1425,7 @@ export async function updateLiveStream(
     banner_url?: string | null;
     youtube_url: string;
     starts_at?: string | null;
+    scoreboard_delay_seconds?: number;
     is_live: boolean;
     tournament_software_post_url?: string | null;
   }

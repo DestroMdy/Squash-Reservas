@@ -16,6 +16,7 @@ type LiveCourtFormState = {
   banner_url: string;
   youtube_url: string;
   starts_at: string;
+  scoreboard_delay_seconds: string;
   is_live: boolean;
   tournament_software_post_url: string;
 };
@@ -27,6 +28,7 @@ function getEmptyLiveCourtForm(): LiveCourtFormState {
     banner_url: "",
     youtube_url: "",
     starts_at: "",
+    scoreboard_delay_seconds: "5",
     is_live: false,
     tournament_software_post_url: ""
   };
@@ -60,6 +62,7 @@ function mapStreamToForm(
     banner_url: stream.banner_url || "",
     youtube_url: stream.youtube_url,
     starts_at: formatDateTimeLocalValue(stream.starts_at),
+    scoreboard_delay_seconds: String(stream.scoreboard_delay_seconds ?? 5),
     is_live: stream.is_live,
     tournament_software_post_url: stream.tournament_software_post_url || ""
   };
@@ -179,6 +182,7 @@ export function AdminLiveCenterSection() {
         banner_url: form.banner_url || null,
         youtube_url: form.youtube_url,
         starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
+        scoreboard_delay_seconds: Number(form.scoreboard_delay_seconds || 5),
         is_live: form.is_live,
         tournament_software_post_url: form.tournament_software_post_url || null
       });
@@ -461,6 +465,33 @@ export function AdminLiveCenterSection() {
                       }
                       placeholder="https://www.youtube.com/watch?v=..."
                     />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Demora del marcador respecto del video
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      step={1}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={form.scoreboard_delay_seconds}
+                      onChange={(event) =>
+                        setForms((current) => ({
+                          ...current,
+                          [court.id]: {
+                            ...current[court.id],
+                            scoreboard_delay_seconds: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="5"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      En segundos. Sirve para acompaÃ±ar el delay real de YouTube y que el score no se adelante al video.
+                    </p>
                   </div>
 
                   <div>

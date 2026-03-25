@@ -16,6 +16,7 @@ type RawLiveStreamConfig = Partial<LiveStreamConfig> & {
   banner_url?: string | null;
   youtube_url?: string | null;
   youtube_video_id?: string | null;
+  scoreboard_delay_seconds?: number | string | null;
   is_live?: boolean | null;
   starts_at?: string | null;
   updated_at?: string | null;
@@ -90,6 +91,21 @@ export function normalizeOptionalHttpUrl(value: string | null | undefined) {
   }
 }
 
+function normalizeScoreboardDelaySeconds(value: number | string | null | undefined) {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+
+  if (!Number.isFinite(numericValue)) {
+    return 5;
+  }
+
+  return Math.min(30, Math.max(0, Math.round(numericValue)));
+}
+
 export function normalizeLiveStreamConfig(
   raw: RawLiveStreamConfig | null | undefined
 ) {
@@ -113,6 +129,9 @@ export function normalizeLiveStreamConfig(
     youtube_url: raw.youtube_url.trim(),
     youtube_video_id: videoId,
     embed_url: buildYouTubeEmbedUrl(videoId),
+    scoreboard_delay_seconds: normalizeScoreboardDelaySeconds(
+      raw.scoreboard_delay_seconds
+    ),
     is_live: Boolean(raw.is_live),
     starts_at: raw.starts_at?.trim() || null,
     updated_at: updatedAt,

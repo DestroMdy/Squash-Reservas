@@ -28,6 +28,7 @@ type LiveStreamBody = {
   banner_url?: string | null;
   youtube_url?: string;
   starts_at?: string | null;
+  scoreboard_delay_seconds?: number | string | null;
   is_live?: boolean;
   tournament_software_post_url?: string | null;
 };
@@ -43,6 +44,21 @@ function responseHeaders() {
 function buildSquorePostUrl(request: NextRequest, courtId: string, token: string) {
   const origin = new URL(request.url).origin;
   return `${origin}/api/live-stream/squore?courtId=${courtId}&token=${token}`;
+}
+
+function normalizeScoreboardDelaySeconds(value: number | string | null | undefined) {
+  const numericValue =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim()
+        ? Number(value)
+        : Number.NaN;
+
+  if (!Number.isFinite(numericValue)) {
+    return 5;
+  }
+
+  return Math.min(30, Math.max(0, Math.round(numericValue)));
 }
 
 function getRequestedCourtId(request: NextRequest) {
@@ -168,6 +184,9 @@ export async function PATCH(request: NextRequest) {
     body.tournament_software_post_url === undefined
       ? null
       : normalizeOptionalHttpUrl(body.tournament_software_post_url);
+  const normalizedScoreboardDelaySeconds = normalizeScoreboardDelaySeconds(
+    body.scoreboard_delay_seconds
+  );
 
   if (
     body.tournament_software_post_url?.trim() &&
@@ -186,6 +205,7 @@ export async function PATCH(request: NextRequest) {
       banner_url: normalizedBannerUrl,
       youtube_url: body.youtube_url.trim(),
       youtube_video_id: videoId,
+      scoreboard_delay_seconds: normalizedScoreboardDelaySeconds,
       is_live: Boolean(body.is_live),
       starts_at: body.starts_at?.trim() || null,
       updated_at: new Date().toISOString(),
@@ -205,6 +225,7 @@ export async function PATCH(request: NextRequest) {
         title: stream.title,
         banner_url: stream.banner_url,
         youtube_url: stream.youtube_url,
+        scoreboard_delay_seconds: stream.scoreboard_delay_seconds,
         tournament_software_post_url: stream.tournament_software_post_url,
         is_live: stream.is_live,
         starts_at: stream.starts_at

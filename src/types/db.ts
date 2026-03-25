@@ -10,6 +10,7 @@ export interface LiveStreamConfig {
   youtube_url: string;
   youtube_video_id: string;
   embed_url: string;
+  scoreboard_delay_seconds: number;
   is_live: boolean;
   starts_at: string | null;
   updated_at: string;

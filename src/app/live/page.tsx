@@ -7,7 +7,7 @@ import { fetchLiveCenterStatus } from "@/lib/supabase";
 import { LiveCourtState, LiveScoreboard } from "@/types/db";
 
 const LIVE_REFRESH_MS = 3_000;
-const SCOREBOARD_DELAY_MS = 5_000;
+const DEFAULT_SCOREBOARD_DELAY_MS = 5_000;
 
 function formatStartsAt(value: string | null) {
   if (!value) {
@@ -26,6 +26,10 @@ function formatStartsAt(value: string | null) {
 function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
   const stream = court.stream;
   const scoreboard = court.scoreboard;
+  const scoreboardDelayMs = Math.max(
+    0,
+    (stream?.scoreboard_delay_seconds ?? 5) * 1000
+  );
   const [visibleScoreboard, setVisibleScoreboard] = useState<LiveScoreboard | null>(
     scoreboard
   );
@@ -38,14 +42,17 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
 
     const updatedAt = new Date(scoreboard.updated_at).getTime();
     const ageMs = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0;
-    const delayMs = Math.max(0, SCOREBOARD_DELAY_MS - Math.max(0, ageMs));
+    const effectiveDelayMs = Number.isFinite(scoreboardDelayMs)
+      ? scoreboardDelayMs
+      : DEFAULT_SCOREBOARD_DELAY_MS;
+    const delayMs = Math.max(0, effectiveDelayMs - Math.max(0, ageMs));
 
     const timer = window.setTimeout(() => {
       setVisibleScoreboard(scoreboard);
     }, delayMs);
 
     return () => window.clearTimeout(timer);
-  }, [scoreboard]);
+  }, [scoreboard, scoreboardDelayMs]);
 
   if (!stream) {
     return (
@@ -134,7 +141,7 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
                 Actualizado: {new Date(visibleScoreboard.updated_at).toLocaleString("es-AR")}
               </p>
               <p className="mt-1 text-xs text-slate-400">
-                Sincronizado con la transmision con una demora corta para acompaÃ±ar el vivo.
+                Sincronizado con la transmision con una demora de {stream.scoreboard_delay_seconds} s para acompaÃ±ar el vivo.
               </p>
             </div>
             {visibleScoreboard.result ? (
