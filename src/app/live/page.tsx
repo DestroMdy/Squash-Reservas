@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
 import { fetchLiveCenterStatus } from "@/lib/supabase";
 import { LiveCourtState, LiveScoreboard } from "@/types/db";
@@ -26,6 +26,7 @@ function formatStartsAt(value: string | null) {
 function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
   const stream = court.stream;
   const scoreboard = court.scoreboard;
+  const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
   const scoreboardDelayMs = Math.max(
     0,
     (stream?.scoreboard_delay_seconds ?? 5) * 1000
@@ -33,6 +34,7 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
   const [visibleScoreboard, setVisibleScoreboard] = useState<LiveScoreboard | null>(
     scoreboard
   );
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     if (!scoreboard) {
@@ -53,6 +55,42 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
 
     return () => window.clearTimeout(timer);
   }, [scoreboard, scoreboardDelayMs]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === fullscreenContainerRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  async function handleEnterFullscreen() {
+    if (!fullscreenContainerRef.current || !document.fullscreenEnabled) {
+      return;
+    }
+
+    try {
+      await fullscreenContainerRef.current.requestFullscreen();
+    } catch {
+      setIsFullscreen(false);
+    }
+  }
+
+  async function handleExitFullscreen() {
+    if (!document.fullscreenElement) {
+      return;
+    }
+
+    try {
+      await document.exitFullscreen();
+    } catch {
+      setIsFullscreen(false);
+    }
+  }
 
   if (!stream) {
     return (
@@ -117,16 +155,119 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
         </div>
       ) : null}
 
-      <div className="mt-5 overflow-hidden rounded-3xl border border-slate-200 bg-black shadow-sm">
-        <div className="aspect-video">
-          <iframe
-            className="h-full w-full"
-            src={stream.embed_url}
-            title={`${court.label} - ${stream.title}`}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-            referrerPolicy="strict-origin-when-cross-origin"
-            allowFullScreen
-          />
+      <div className="mt-5 space-y-3">
+        <div
+          ref={fullscreenContainerRef}
+          className={`group relative overflow-hidden rounded-3xl border border-slate-200 bg-black shadow-sm ${
+            isFullscreen ? "h-screen w-screen rounded-none border-none" : ""
+          }`}
+        >
+          <div className={isFullscreen ? "h-full w-full" : "aspect-video"}>
+            <iframe
+              className="h-full w-full"
+              src={stream.embed_url}
+              title={`${court.label} - ${stream.title}`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
+          </div>
+
+          {visibleScoreboard ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 sm:p-4">
+              <div className="mx-auto max-w-5xl">
+                <div
+                  className={`rounded-2xl border border-white/15 bg-slate-950/68 text-white shadow-2xl backdrop-blur-md ${
+                    isFullscreen
+                      ? "mx-auto max-w-3xl px-4 py-3"
+                      : "ml-0 mr-auto max-w-xl px-3 py-2.5"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">
+                        Marcador en vivo
+                      </p>
+                      <p className="mt-1 text-[11px] text-white/65">
+                        {court.label} · demora configurada {stream.scoreboard_delay_seconds}s
+                      </p>
+                    </div>
+                    {visibleScoreboard.result ? (
+                      <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+                        {visibleScoreboard.result}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold sm:text-base">
+                        {visibleScoreboard.player_one_name}
+                      </p>
+                      {visibleScoreboard.winner_side === 1 ? (
+                        <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                          Ganador
+                        </p>
+                      ) : null}
+                    </div>
+                    <div className="shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
+                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/60">
+                        Games
+                      </p>
+                      <p className="mt-1 text-sm font-bold text-white sm:text-base">
+                        {visibleScoreboard.game_scores || "-"}
+                      </p>
+                    </div>
+                    <div className="min-w-0 text-right">
+                      <p className="truncate text-sm font-semibold sm:text-base">
+                        {visibleScoreboard.player_two_name}
+                      </p>
+                      {visibleScoreboard.winner_side === 2 ? (
+                        <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                          Ganador
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
+            <div className="mx-auto flex max-w-5xl items-start justify-between gap-3">
+              <span className="rounded-full bg-slate-950/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+                {court.label}
+              </span>
+              {isFullscreen ? (
+                <button
+                  type="button"
+                  onClick={handleExitFullscreen}
+                  className="pointer-events-auto rounded-full border border-white/15 bg-slate-950/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-slate-950/85"
+                >
+                  Cerrar pantalla completa
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={isFullscreen ? handleExitFullscreen : handleEnterFullscreen}
+            className="btn-secondary"
+          >
+            {isFullscreen ? "Salir de pantalla completa" : "Pantalla completa con marcador"}
+          </button>
+          <a
+            href={stream.youtube_url}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-accent"
+          >
+            Abrir en YouTube
+          </a>
         </div>
       </div>
 
@@ -218,17 +359,6 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
           El marcador de Squore va a aparecer aca apenas la tablet de {court.label.toLowerCase()} empiece a postear.
         </div>
       )}
-
-      <div className="mt-5 flex flex-wrap gap-3">
-        <a
-          href={stream.youtube_url}
-          target="_blank"
-          rel="noreferrer"
-          className="btn-accent"
-        >
-          Abrir en YouTube
-        </a>
-      </div>
     </article>
   );
 }
