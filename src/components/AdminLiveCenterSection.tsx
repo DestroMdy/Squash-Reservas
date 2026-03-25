@@ -32,7 +32,7 @@ type LiveCourtFormState = {
 };
 
 type LivePlayerMappingFormState = {
-  squore_name: string;
+  squore_names: string;
   profile_id: string;
 };
 
@@ -51,7 +51,7 @@ function getEmptyLiveCourtForm(): LiveCourtFormState {
 
 function getEmptyPlayerMappingForm(): LivePlayerMappingFormState {
   return {
-    squore_name: "",
+    squore_names: "",
     profile_id: ""
   };
 }
@@ -163,6 +163,46 @@ export function AdminLiveCenterSection() {
       ),
     [availablePlayers]
   );
+
+  const groupedPlayerMappings = useMemo(() => {
+    const groupedMappings = new Map<
+      string,
+      {
+        profile_id: string;
+        profile_name: string | null;
+        avatar_url?: string | null;
+        aliases: LivePlayerMapping[];
+      }
+    >();
+
+    for (const mapping of playerMappings) {
+      const key = mapping.profile_id || mapping.id;
+      const currentGroup = groupedMappings.get(key);
+
+      if (currentGroup) {
+        currentGroup.aliases.push(mapping);
+        continue;
+      }
+
+      groupedMappings.set(key, {
+        profile_id: mapping.profile_id,
+        profile_name: mapping.profile_name,
+        avatar_url: mapping.avatar_url,
+        aliases: [mapping]
+      });
+    }
+
+    return Array.from(groupedMappings.values())
+      .map((group) => ({
+        ...group,
+        aliases: [...group.aliases].sort((a, b) =>
+          a.squore_name.localeCompare(b.squore_name, "es")
+        )
+      }))
+      .sort((a, b) =>
+        (a.profile_name || "").localeCompare(b.profile_name || "", "es")
+      );
+  }, [playerMappings]);
 
   function applyCourts(nextCourts?: AdminLiveCourtState[]) {
     const normalized = normalizeCourts(nextCourts);
@@ -284,8 +324,8 @@ export function AdminLiveCenterSection() {
         throw new Error("Debes iniciar sesion");
       }
 
-      if (!mappingForm.squore_name.trim() || !mappingForm.profile_id) {
-        throw new Error("Debes indicar el nombre que manda Squore y el jugador de la app.");
+      if (!mappingForm.squore_names.trim() || !mappingForm.profile_id) {
+        throw new Error("Debes indicar al menos un alias de Squore y el jugador de la app.");
       }
 
       setSavingMapping(true);
@@ -293,13 +333,20 @@ export function AdminLiveCenterSection() {
       setError(null);
 
       const result = await upsertLivePlayerMapping(token, {
-        squore_name: mappingForm.squore_name.trim(),
+        squore_names: mappingForm.squore_names
+          .split(/[\r\n,;]+/)
+          .map((value) => value.trim())
+          .filter(Boolean),
         profile_id: mappingForm.profile_id
       });
 
       setPlayerMappings(result.mappings);
       setMappingForm(getEmptyPlayerMappingForm());
-      setMessage("Vinculacion manual guardada.");
+      setMessage(
+        result.saved_count > 1
+          ? `${result.saved_count} alias guardados.`
+          : "Alias guardado."
+      );
     } catch (err) {
       setError(
         err instanceof Error
@@ -742,19 +789,22 @@ export function AdminLiveCenterSection() {
         <div className="mt-4 grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:grid-cols-[1.2fr_1fr_auto]">
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-700">
-              Nombre exacto que manda Squore
+              Alias o nombres que manda Squore
             </label>
-            <input
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
-              value={mappingForm.squore_name}
+            <textarea
+              className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+              value={mappingForm.squore_names}
               onChange={(event) =>
                 setMappingForm((current) => ({
                   ...current,
-                  squore_name: event.target.value
+                  squore_names: event.target.value
                 }))
               }
-              placeholder="Ej: Agustin Rivero"
+              placeholder={`Ej:\nAgustin Rivero\nA. Rivero\nRivero, Agustin`}
             />
+            <p className="mt-1 text-xs text-slate-500">
+              Puedes cargar varios alias separados por coma o salto de linea.
+            </p>
           </div>
 
           <div>
@@ -794,45 +844,58 @@ export function AdminLiveCenterSection() {
         </div>
 
         <div className="mt-4 space-y-3">
-          {playerMappings.length ? (
-            playerMappings.map((mapping) => (
+          {groupedPlayerMappings.length ? (
+            groupedPlayerMappings.map((group) => (
               <div
-                key={mapping.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+                key={group.profile_id}
+                className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
               >
-                <div className="flex min-w-0 items-center gap-3">
-                  <AvatarImage
-                    src={mapping.avatar_url}
-                    alt={mapping.profile_name || mapping.squore_name}
-                    size={44}
-                    className="h-11 w-11 rounded-full border border-slate-200 object-cover shadow-sm"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-                      Squore
-                    </p>
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {mapping.squore_name}
-                    </p>
-                    <p className="mt-1 text-sm text-slate-600">
-                      {mapping.profile_name || "Perfil sin nombre"}
-                    </p>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <AvatarImage
+                      src={group.avatar_url}
+                      alt={group.profile_name || "Jugador"}
+                      size={44}
+                      className="h-11 w-11 rounded-full border border-slate-200 object-cover shadow-sm"
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                        Jugador vinculado
+                      </p>
+                      <p className="truncate text-sm font-semibold text-slate-900">
+                        {group.profile_name || "Perfil sin nombre"}
+                      </p>
+                    </div>
                   </div>
+
+                  <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+                    {group.aliases.length} alias{group.aliases.length === 1 ? "" : "es"}
+                  </span>
                 </div>
 
-                <button
-                  type="button"
-                  className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => handleDeletePlayerMapping(mapping.id)}
-                  disabled={deletingMappingId === mapping.id}
-                >
-                  {deletingMappingId === mapping.id ? "Borrando..." : "Borrar"}
-                </button>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {group.aliases.map((mapping) => (
+                    <span
+                      key={mapping.id}
+                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
+                    >
+                      <span>{mapping.squore_name}</span>
+                      <button
+                        type="button"
+                        className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600 transition hover:bg-red-100 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => handleDeletePlayerMapping(mapping.id)}
+                        disabled={deletingMappingId === mapping.id}
+                      >
+                        {deletingMappingId === mapping.id ? "..." : "x"}
+                      </button>
+                    </span>
+                  ))}
+                </div>
               </div>
             ))
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-              Todavia no cargaste vinculaciones manuales. Solo hace falta si Squore usa nombres distintos a los perfiles del club.
+              Todavia no cargaste alias manuales. Solo hace falta si Squore usa nombres distintos a los perfiles del club.
             </div>
           )}
         </div>

@@ -1518,7 +1518,8 @@ export async function upsertLivePlayerMapping(
   token: string,
   payload: {
     id?: string | null;
-    squore_name: string;
+    squore_name?: string;
+    squore_names?: string[];
     profile_id: string;
   }
 ) {
@@ -1533,6 +1534,7 @@ export async function upsertLivePlayerMapping(
     error?: string;
     mapping?: LivePlayerMapping | null;
     mappings?: LivePlayerMapping[];
+    saved_count?: number;
   }>(response);
 
   if (!response.ok) {
@@ -1541,7 +1543,8 @@ export async function upsertLivePlayerMapping(
 
   return {
     mapping: result?.mapping || null,
-    mappings: result?.mappings || []
+    mappings: result?.mappings || [],
+    saved_count: result?.saved_count || 0
   };
 }
 

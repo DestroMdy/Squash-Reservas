@@ -11,6 +11,7 @@ import {
 type PlayerMappingBody = {
   id?: string | null;
   squore_name?: string;
+  squore_names?: string[];
   profile_id?: string;
 };
 
@@ -20,6 +21,22 @@ function responseHeaders() {
     Pragma: "no-cache",
     Vary: "Authorization, Cookie"
   };
+}
+
+function parseSquoreAliases(body: PlayerMappingBody) {
+  const rawValues = [
+    ...(Array.isArray(body.squore_names) ? body.squore_names : []),
+    ...(body.squore_name ? [body.squore_name] : [])
+  ];
+
+  const aliases = rawValues
+    .flatMap((value) => value.split(/[\r\n,;]+/))
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return Array.from(
+    new Map(aliases.map((value) => [value.toLocaleLowerCase("es-AR"), value])).values()
+  );
 }
 
 async function fetchProfileSummary(
@@ -95,10 +112,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json()) as PlayerMappingBody;
+  const squoreAliases = parseSquoreAliases(body);
 
-  if (!body.squore_name?.trim() || !body.profile_id?.trim()) {
+  if (!squoreAliases.length || !body.profile_id?.trim()) {
     return NextResponse.json(
-      { error: "Nombre de Squore y jugador son obligatorios." },
+      { error: "Debes indicar al menos un alias de Squore y un jugador." },
       { status: 400, headers: responseHeaders() }
     );
   }
@@ -117,14 +135,18 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const mapping = await upsertStoredLivePlayerMapping({
-      id: body.id?.trim() || null,
-      squore_name: body.squore_name.trim(),
-      profile_id: profile.id,
-      profile_name: profile.full_name,
-      avatar_url: profile.avatar_url || null,
-      updated_by: auth.user.id
-    });
+    let lastMapping = null;
+
+    for (const squoreAlias of squoreAliases) {
+      lastMapping = await upsertStoredLivePlayerMapping({
+        id: body.id?.trim() || null,
+        squore_name: squoreAlias,
+        profile_id: profile.id,
+        profile_name: profile.full_name,
+        avatar_url: profile.avatar_url || null,
+        updated_by: auth.user.id
+      });
+    }
 
     const mappings = await getStoredLivePlayerMappings();
 
@@ -132,16 +154,21 @@ export async function POST(request: NextRequest) {
       actorId: auth.user.id,
       action: "live_stream.player_mapping_upserted",
       targetType: "live_player_mapping",
-      targetId: mapping.id,
+      targetId: profile.id,
       details: {
-        squore_name: mapping.squore_name,
-        profile_id: mapping.profile_id,
-        profile_name: mapping.profile_name
+        squore_aliases: squoreAliases,
+        profile_id: profile.id,
+        profile_name: profile.full_name
       }
     }).catch(() => null);
 
     return NextResponse.json(
-      { ok: true, mapping, mappings },
+      {
+        ok: true,
+        mapping: lastMapping,
+        mappings,
+        saved_count: squoreAliases.length
+      },
       {
         headers: responseHeaders()
       }
