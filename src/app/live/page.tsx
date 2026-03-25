@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { SectionTitle } from "@/components/SectionTitle";
 import { fetchLiveCenterStatus } from "@/lib/supabase";
-import { LiveCourtState } from "@/types/db";
+import { LiveCourtState, LiveScoreboard } from "@/types/db";
+
+const LIVE_REFRESH_MS = 3_000;
+const SCOREBOARD_DELAY_MS = 5_000;
 
 function formatStartsAt(value: string | null) {
   if (!value) {
@@ -23,6 +26,26 @@ function formatStartsAt(value: string | null) {
 function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
   const stream = court.stream;
   const scoreboard = court.scoreboard;
+  const [visibleScoreboard, setVisibleScoreboard] = useState<LiveScoreboard | null>(
+    scoreboard
+  );
+
+  useEffect(() => {
+    if (!scoreboard) {
+      setVisibleScoreboard(null);
+      return;
+    }
+
+    const updatedAt = new Date(scoreboard.updated_at).getTime();
+    const ageMs = Number.isFinite(updatedAt) ? Date.now() - updatedAt : 0;
+    const delayMs = Math.max(0, SCOREBOARD_DELAY_MS - Math.max(0, ageMs));
+
+    const timer = window.setTimeout(() => {
+      setVisibleScoreboard(scoreboard);
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [scoreboard]);
 
   if (!stream) {
     return (
@@ -100,7 +123,7 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
         </div>
       </div>
 
-      {scoreboard ? (
+      {visibleScoreboard ? (
         <section className="mt-5 rounded-3xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
@@ -108,12 +131,15 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
                 Marcador automatico
               </p>
               <p className="mt-1 text-sm text-slate-500">
-                Actualizado: {new Date(scoreboard.updated_at).toLocaleString("es-AR")}
+                Actualizado: {new Date(visibleScoreboard.updated_at).toLocaleString("es-AR")}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Sincronizado con la transmision con una demora corta para acompaÃ±ar el vivo.
               </p>
             </div>
-            {scoreboard.result ? (
+            {visibleScoreboard.result ? (
               <span className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
-                {scoreboard.result}
+                {visibleScoreboard.result}
               </span>
             ) : null}
           </div>
@@ -124,9 +150,9 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
                 Jugador 1
               </p>
               <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                {scoreboard.player_one_name}
+                {visibleScoreboard.player_one_name}
               </h3>
-              {scoreboard.winner_side === 1 ? (
+              {visibleScoreboard.winner_side === 1 ? (
                 <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
               ) : null}
             </article>
@@ -136,43 +162,45 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
                 Jugador 2
               </p>
               <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                {scoreboard.player_two_name}
+                {visibleScoreboard.player_two_name}
               </h3>
-              {scoreboard.winner_side === 2 ? (
+              {visibleScoreboard.winner_side === 2 ? (
                 <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
               ) : null}
             </article>
           </div>
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {scoreboard.game_scores ? (
+            {visibleScoreboard.game_scores ? (
               <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
                   Games
                 </p>
                 <p className="mt-2 text-base font-semibold text-slate-900">
-                  {scoreboard.game_scores}
+                  {visibleScoreboard.game_scores}
                 </p>
               </div>
             ) : null}
 
-            {(scoreboard.event_name || scoreboard.round_name || scoreboard.location) ? (
+            {(visibleScoreboard.event_name ||
+              visibleScoreboard.round_name ||
+              visibleScoreboard.location) ? (
               <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
                 <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
                   Partido
                 </p>
-                {scoreboard.event_name ? (
+                {visibleScoreboard.event_name ? (
                   <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {scoreboard.event_name}
+                    {visibleScoreboard.event_name}
                   </p>
                 ) : null}
-                {scoreboard.round_name ? (
+                {visibleScoreboard.round_name ? (
                   <p className="mt-1 text-sm text-slate-600">
-                    {scoreboard.round_name}
+                    {visibleScoreboard.round_name}
                   </p>
                 ) : null}
-                {scoreboard.location ? (
-                  <p className="mt-1 text-sm text-slate-500">{scoreboard.location}</p>
+                {visibleScoreboard.location ? (
+                  <p className="mt-1 text-sm text-slate-500">{visibleScoreboard.location}</p>
                 ) : null}
               </div>
             ) : null}
@@ -203,18 +231,51 @@ export default function LivePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    let loadingInFlight = false;
+
     async function loadStream() {
+      if (loadingInFlight) {
+        return;
+      }
+
+      loadingInFlight = true;
+
       try {
         const current = await fetchLiveCenterStatus();
-        setCourts(current.courts);
+        if (!cancelled) {
+          setCourts(current.courts);
+        }
       } catch {
-        setCourts([]);
+        if (!cancelled) {
+          setCourts([]);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+        }
+
+        loadingInFlight = false;
       }
     }
 
     void loadStream();
+
+    const intervalId = window.setInterval(() => {
+      void loadStream();
+    }, LIVE_REFRESH_MS);
+
+    const handleFocus = () => {
+      void loadStream();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   const configuredCourts = useMemo(
