@@ -7,10 +7,12 @@ import { SectionTitle } from "@/components/SectionTitle";
 import { buildCsv } from "@/lib/csv";
 import {
   createExternalTournament,
+  deleteAdminScheduleOverride,
   deleteExternalTournament,
   deleteProfileAsAdmin,
   fetchAdminAuditLogs,
   fetchAdminExternalTournaments,
+  fetchAdminScheduleOverrides,
   fetchAllBookings,
   fetchAllCasualMatches,
   fetchBookingStats,
@@ -19,6 +21,7 @@ import {
   getSession,
   getUser,
   promoteProfileToAdmin,
+  saveAdminScheduleOverride,
   updateBookingAsAdmin,
   updateExternalTournament
 } from "@/lib/supabase";
@@ -29,7 +32,8 @@ import type {
   CasualMatch,
   ExternalTournament,
   ExternalTournamentPlatform,
-  Profile
+  Profile,
+  ScheduleDayOverride
 } from "@/types/db";
 
 type BookingWithRelations = Booking & {
@@ -52,8 +56,11 @@ type TournamentFormState = {
   is_active: boolean;
 };
 
+type ScheduleFormMode = "default" | "closed" | "custom_hours";
+
 type AdminSectionKey =
   | "report"
+  | "schedule"
   | "live"
   | "tournaments"
   | "audit"
@@ -70,6 +77,13 @@ const tournamentPlatforms: ExternalTournamentPlatform[] = [
 function getCurrentMonthKey() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function getTodayLocalDate() {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  const local = new Date(now.getTime() - offset * 60 * 1000);
+  return local.toISOString().split("T")[0];
 }
 
 function getEmptyTournamentForm(): TournamentFormState {
@@ -139,13 +153,22 @@ export default function AdminPage() {
   const [auditActionFilter, setAuditActionFilter] = useState("all");
   const [auditTargetFilter, setAuditTargetFilter] = useState("all");
   const [reportMonth, setReportMonth] = useState(getCurrentMonthKey());
+  const [scheduleOverrides, setScheduleOverrides] = useState<ScheduleDayOverride[]>([]);
+  const [scheduleOverridesEnabled, setScheduleOverridesEnabled] = useState(true);
+  const [scheduleDate, setScheduleDate] = useState(getTodayLocalDate());
+  const [scheduleMode, setScheduleMode] = useState<ScheduleFormMode>("default");
+  const [scheduleOpensAt, setScheduleOpensAt] = useState("10:00");
+  const [scheduleClosesAt, setScheduleClosesAt] = useState("22:00");
+  const [scheduleNote, setScheduleNote] = useState("");
   const [tournamentForm, setTournamentForm] = useState<TournamentFormState>(getEmptyTournamentForm());
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingTournament, setSavingTournament] = useState(false);
+  const [deletingScheduleDate, setDeletingScheduleDate] = useState<string | null>(null);
   const [deletingTournamentId, setDeletingTournamentId] = useState<string | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
   const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
@@ -154,6 +177,7 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<AdminSectionKey, boolean>>({
     report: true,
+    schedule: false,
     live: false,
     tournaments: false,
     audit: false,
@@ -188,13 +212,21 @@ export default function AdminPage() {
       return;
     }
 
-    const [bookingStats, allBookings, allPlayers, externalTournaments, auditData] =
+    const [
+      bookingStats,
+      allBookings,
+      allPlayers,
+      externalTournaments,
+      auditData,
+      scheduleData
+    ] =
       await Promise.all([
         fetchBookingStats(token),
         fetchAllBookings(token),
         fetchPlayers(token),
         fetchAdminExternalTournaments(token),
-        fetchAdminAuditLogs(token)
+        fetchAdminAuditLogs(token),
+        fetchAdminScheduleOverrides(token)
       ]);
 
     setStats(bookingStats);
@@ -203,6 +235,8 @@ export default function AdminPage() {
     setTournaments(externalTournaments ?? []);
     setAuditLogs(auditData.logs ?? []);
     setAuditEnabled(auditData.enabled !== false);
+    setScheduleOverrides(scheduleData.overrides ?? []);
+    setScheduleOverridesEnabled(scheduleData.unavailable !== true);
     setError(null);
     setLoading(false);
   }, [redirectToLogin]);
@@ -220,6 +254,26 @@ export default function AdminPage() {
 
     void init();
   }, [loadAdminData]);
+
+  const selectedScheduleOverride = useMemo(
+    () => scheduleOverrides.find((override) => override.slot_date === scheduleDate) || null,
+    [scheduleDate, scheduleOverrides]
+  );
+
+  useEffect(() => {
+    if (!selectedScheduleOverride) {
+      setScheduleMode("default");
+      setScheduleOpensAt("10:00");
+      setScheduleClosesAt("22:00");
+      setScheduleNote("");
+      return;
+    }
+
+    setScheduleMode(selectedScheduleOverride.mode);
+    setScheduleOpensAt(selectedScheduleOverride.opens_at?.slice(0, 5) || "10:00");
+    setScheduleClosesAt(selectedScheduleOverride.closes_at?.slice(0, 5) || "22:00");
+    setScheduleNote(selectedScheduleOverride.note || "");
+  }, [selectedScheduleOverride]);
 
   const filteredBookings = useMemo(() => {
     const normalized = bookingFilter.trim().toLowerCase();
@@ -246,6 +300,44 @@ export default function AdminPage() {
         .includes(normalized);
     });
   }, [bookingFilter, bookings]);
+
+  const scheduleDateBookings = useMemo(
+    () =>
+      bookings.filter((booking) => booking.time_slots?.slot_date === scheduleDate),
+    [bookings, scheduleDate]
+  );
+
+  const scheduleDateConfirmedBookings = useMemo(
+    () => scheduleDateBookings.filter((booking) => booking.status === "confirmed"),
+    [scheduleDateBookings]
+  );
+
+  const scheduleDateOutsideOverrideCount = useMemo(() => {
+    if (scheduleMode !== "custom_hours") {
+      return 0;
+    }
+
+    const opensAt = `${scheduleOpensAt}:00`;
+    const closesAt = `${scheduleClosesAt}:00`;
+
+    return scheduleDateConfirmedBookings.filter((booking) => {
+      const startTime = booking.time_slots?.start_time;
+      const endTime = booking.time_slots?.end_time;
+
+      if (!startTime || !endTime) {
+        return false;
+      }
+
+      return (
+        startTime.localeCompare(opensAt) < 0 || endTime.localeCompare(closesAt) > 0
+      );
+    }).length;
+  }, [
+    scheduleClosesAt,
+    scheduleDateConfirmedBookings,
+    scheduleMode,
+    scheduleOpensAt
+  ]);
 
   const monthlyReport = useMemo(() => {
     const monthlyBookings = bookings.filter((booking) =>
@@ -340,6 +432,82 @@ export default function AdminPage() {
 
   function toggleSection(section: AdminSectionKey) {
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
+  }
+
+  async function handleSaveScheduleOverride() {
+    try {
+      const token = getAdminToken();
+
+      if (!scheduleDate) {
+        throw new Error("Debes elegir una fecha.");
+      }
+
+      if (scheduleMode === "default") {
+        throw new Error("Elige cerrado o horario especial para guardar una excepción.");
+      }
+
+      if (scheduleMode === "custom_hours") {
+        if (!scheduleOpensAt || !scheduleClosesAt) {
+          throw new Error("Debes indicar apertura y cierre.");
+        }
+
+        if (scheduleOpensAt >= scheduleClosesAt) {
+          throw new Error("La hora de cierre debe ser posterior a la de apertura.");
+        }
+      }
+
+      setSavingSchedule(true);
+      setMessage(null);
+      setError(null);
+
+      const result = await saveAdminScheduleOverride(token, {
+        slot_date: scheduleDate,
+        mode: scheduleMode,
+        opens_at: scheduleMode === "custom_hours" ? `${scheduleOpensAt}:00` : null,
+        closes_at: scheduleMode === "custom_hours" ? `${scheduleClosesAt}:00` : null,
+        note: scheduleNote.trim() || null
+      });
+
+      setScheduleOverrides(result.overrides);
+      setScheduleOverridesEnabled(result.unavailable !== true);
+      setMessage(
+        scheduleMode === "closed"
+          ? "Día cerrado guardado en la agenda."
+          : "Horario especial guardado en la agenda."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar la excepción de agenda."
+      );
+    } finally {
+      setSavingSchedule(false);
+    }
+  }
+
+  async function handleDeleteScheduleOverride(slotDate: string) {
+    if (!window.confirm(`Vas a quitar la excepción de agenda del ${slotDate}.`)) {
+      return;
+    }
+
+    try {
+      setDeletingScheduleDate(slotDate);
+      setMessage(null);
+      setError(null);
+      const result = await deleteAdminScheduleOverride(getAdminToken(), slotDate);
+      setScheduleOverrides(result.overrides);
+      setScheduleOverridesEnabled(result.unavailable !== true);
+      setMessage("La agenda volvió al horario habitual para esa fecha.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo borrar la excepción de agenda."
+      );
+    } finally {
+      setDeletingScheduleDate(null);
+    }
   }
 
   function resetTournamentForm() {
@@ -724,6 +892,209 @@ export default function AdminPage() {
                     )}
                   </article>
                 ))}
+              </div>
+            </div>
+          </AdminAccordionSection>
+
+          <AdminAccordionSection
+            title="Agenda por fecha"
+            description="Cierra un día completo o define un horario especial sin tocar todas las reservas."
+            count={scheduleOverrides.length}
+            open={openSections.schedule}
+            onToggle={() => toggleSection("schedule")}
+          >
+            <div className="space-y-5">
+              <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Fecha a modificar
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={scheduleDate}
+                    onChange={(event) => setScheduleDate(event.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Tipo de excepción
+                  </label>
+                  <select
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={scheduleMode}
+                    onChange={(event) => setScheduleMode(event.target.value as ScheduleFormMode)}
+                  >
+                    <option value="default">Horario habitual</option>
+                    <option value="closed">Día cerrado</option>
+                    <option value="custom_hours">Horario especial</option>
+                  </select>
+                </div>
+
+                {scheduleMode === "custom_hours" ? (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">
+                        Abre desde
+                      </label>
+                      <input
+                        type="time"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                        value={scheduleOpensAt}
+                        onChange={(event) => setScheduleOpensAt(event.target.value)}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-slate-700">
+                        Cierra a las
+                      </label>
+                      <input
+                        type="time"
+                        className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                        value={scheduleClosesAt}
+                        onChange={(event) => setScheduleClosesAt(event.target.value)}
+                      />
+                    </div>
+                  </>
+                ) : null}
+
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Nota visible en la agenda
+                  </label>
+                  <textarea
+                    className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={scheduleNote}
+                    onChange={(event) => setScheduleNote(event.target.value)}
+                    placeholder="Ejemplo: Cerrado por torneo interno o horario reducido por mantenimiento."
+                  />
+                </div>
+
+                <div className="md:col-span-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleSaveScheduleOverride}
+                    disabled={savingSchedule || !scheduleOverridesEnabled}
+                  >
+                    {savingSchedule ? "Guardando..." : "Guardar excepción"}
+                  </button>
+                  {selectedScheduleOverride ? (
+                    <button
+                      type="button"
+                      className="btn-secondary"
+                      onClick={() => handleDeleteScheduleOverride(scheduleDate)}
+                      disabled={
+                        deletingScheduleDate === scheduleDate || !scheduleOverridesEnabled
+                      }
+                    >
+                      {deletingScheduleDate === scheduleDate
+                        ? "Quitando..."
+                        : "Volver a horario habitual"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+
+              {!scheduleOverridesEnabled ? (
+                <p className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  La configuración de agenda por fecha no está disponible porque falta KV.
+                </p>
+              ) : null}
+
+              {scheduleDateConfirmedBookings.length ? (
+                <div className="rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+                  <p className="font-medium">
+                    Ya hay {scheduleDateConfirmedBookings.length} reserva(s) confirmada(s)
+                    para {scheduleDate}.
+                  </p>
+                  <p className="mt-1">
+                    Si cambias el horario o cierras el día, esas reservas siguen existiendo.
+                    Revísalas en el bloque de reservas si necesitas moverlas o cancelarlas.
+                  </p>
+                  {scheduleMode === "closed" ? (
+                    <p className="mt-2 font-medium">
+                      El día cerrado ocultará toda la agenda pública, pero no borra reservas
+                      existentes.
+                    </p>
+                  ) : null}
+                  {scheduleMode === "custom_hours" && scheduleDateOutsideOverrideCount ? (
+                    <p className="mt-2 font-medium">
+                      Hay {scheduleDateOutsideOverrideCount} reserva(s) confirmada(s) fuera del
+                      horario especial elegido.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="space-y-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Próximas excepciones</h2>
+                  <p className="text-sm text-slate-500">
+                    Carga un día puntual cerrado o con horario especial.
+                  </p>
+                </div>
+
+                {scheduleOverrides.length ? (
+                  scheduleOverrides.map((override) => {
+                    const isSelected = override.slot_date === scheduleDate;
+                    const modeLabel =
+                      override.mode === "closed"
+                        ? "Día cerrado"
+                        : `${override.opens_at?.slice(0, 5) || "--:--"} - ${override.closes_at?.slice(0, 5) || "--:--"}`;
+
+                    return (
+                      <article
+                        key={override.slot_date}
+                        className={`flex flex-col gap-3 rounded-2xl p-4 md:flex-row md:items-center md:justify-between ${
+                          isSelected
+                            ? "border-2 border-orange-300 bg-orange-50/60"
+                            : "border border-slate-200 bg-white"
+                        }`}
+                      >
+                        <div>
+                          <p className="font-medium text-slate-900">
+                            {new Intl.DateTimeFormat("es-AR", {
+                              weekday: "long",
+                              day: "2-digit",
+                              month: "2-digit"
+                            }).format(new Date(`${override.slot_date}T12:00:00`))}
+                          </p>
+                          <p className="text-sm text-slate-600">{modeLabel}</p>
+                          {override.note ? (
+                            <p className="mt-1 text-sm text-slate-500">{override.note}</p>
+                          ) : null}
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => setScheduleDate(override.slot_date)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            onClick={() => handleDeleteScheduleOverride(override.slot_date)}
+                            disabled={deletingScheduleDate === override.slot_date}
+                          >
+                            {deletingScheduleDate === override.slot_date
+                              ? "Quitando..."
+                              : "Quitar"}
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-slate-500">
+                    Todavía no hay días con horario especial o cierre manual.
+                  </p>
+                )}
               </div>
             </div>
           </AdminAccordionSection>

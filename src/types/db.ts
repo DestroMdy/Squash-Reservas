@@ -2,6 +2,17 @@ export type Role = "player" | "admin";
 export type BookingStatus = "confirmed" | "cancelled" | "completed";
 export type ExternalTournamentPlatform = "rankedin" | "tournamentsoftware" | "otro";
 export type LiveCourtId = "court-1" | "court-2";
+export type ScheduleDayOverrideMode = "closed" | "custom_hours";
+
+export interface ScheduleDayOverride {
+  slot_date: string;
+  mode: ScheduleDayOverrideMode;
+  opens_at: string | null;
+  closes_at: string | null;
+  note: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
 
 export interface LiveStreamConfig {
   title: string;

@@ -11,7 +11,7 @@ import {
   getUser
 } from "../../lib/supabase";
 import { isPastSlot, isSlotWithinClubHours } from "../../lib/time-rules";
-import { Booking, Court, TimeSlot } from "../../types/db";
+import { Booking, Court, ScheduleDayOverride, TimeSlot } from "../../types/db";
 
 type SlotWithRelations = TimeSlot & {
   courts?: Court;
@@ -37,6 +37,7 @@ export default function SchedulePage() {
   const [mounted, setMounted] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [slots, setSlots] = useState<SlotWithRelations[]>([]);
+  const [scheduleOverride, setScheduleOverride] = useState<ScheduleDayOverride | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function SchedulePage() {
       try {
         setLoading(true);
         setError(null);
+        setScheduleOverride(null);
         const token = getSession()?.access_token;
         let adminUser = false;
 
@@ -66,8 +68,9 @@ export default function SchedulePage() {
 
         setIsAdmin(adminUser);
         const data = await fetchSlotsByDate(selectedDate, token);
+        setScheduleOverride(data.scheduleOverride);
         setSlots(
-          (data ?? []).filter((slot) =>
+          (data.slots ?? []).filter((slot) =>
             adminUser ? true : !isPastSlot(slot.slot_date, slot.end_time)
           )
         );
@@ -84,7 +87,12 @@ export default function SchedulePage() {
   const sortedSlots = useMemo(() => {
     return [...slots]
       .filter((slot) =>
-        isSlotWithinClubHours(slot.slot_date, slot.start_time, slot.end_time)
+        isSlotWithinClubHours(
+          slot.slot_date,
+          slot.start_time,
+          slot.end_time,
+          scheduleOverride
+        )
       )
       .sort((a, b) => {
       if (a.start_time < b.start_time) return -1;
@@ -94,9 +102,33 @@ export default function SchedulePage() {
       const courtB = b.courts?.name ?? "";
       return courtA.localeCompare(courtB);
       });
-  }, [slots]);
+  }, [scheduleOverride, slots]);
 
   const tomorrow = useMemo(() => tomorrowLocalDate(), []);
+  const scheduleOverrideLabel = useMemo(() => {
+    if (!scheduleOverride) {
+      return null;
+    }
+
+    if (scheduleOverride.mode === "closed") {
+      return {
+        title: "Agenda cerrada por administración",
+        description:
+          scheduleOverride.note ||
+          "Este día quedó marcado como cerrado. Si ya tenías una reserva, revísala en Mis reservas."
+      };
+    }
+
+    const opensAt = scheduleOverride.opens_at?.slice(0, 5) || "--:--";
+    const closesAt = scheduleOverride.closes_at?.slice(0, 5) || "--:--";
+
+    return {
+      title: `Horario especial: ${opensAt} a ${closesAt}`,
+      description:
+        scheduleOverride.note ||
+        "La agenda de este día fue ajustada manualmente por administración."
+    };
+  }, [scheduleOverride]);
 
   if (!mounted) return null;
 
@@ -135,6 +167,21 @@ export default function SchedulePage() {
           </button>
         </div>
       </section>
+
+      {scheduleOverrideLabel ? (
+        <section
+          className={`card p-4 ${
+            scheduleOverride?.mode === "closed"
+              ? "border border-amber-300 bg-amber-50"
+              : "border border-orange-300 bg-orange-50"
+          }`}
+        >
+          <p className="font-semibold text-slate-900">{scheduleOverrideLabel.title}</p>
+          <p className="mt-1 text-sm text-slate-700">
+            {scheduleOverrideLabel.description}
+          </p>
+        </section>
+      ) : null}
 
       {loading ? <p className="text-sm text-slate-600">Cargando agenda...</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}

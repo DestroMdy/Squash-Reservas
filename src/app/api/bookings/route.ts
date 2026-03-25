@@ -5,6 +5,7 @@ import {
   requireAuthenticatedRequest
 } from "@/lib/server-auth";
 import { getBeginnerRulesStatus } from "@/lib/beginner-rules";
+import { getStoredScheduleOverride } from "@/lib/schedule-overrides-store";
 import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import {
@@ -100,6 +101,31 @@ function formatDayLabel(date: string) {
 
 function formatShortTime(value: string) {
   return value.slice(0, 5);
+}
+
+async function getScheduleRestrictionMessage(slotDate: string) {
+  const override = await getStoredScheduleOverride(slotDate).catch(() => null);
+
+  if (override?.mode === "closed") {
+    return override.note
+      ? `La agenda de ese día está cerrada por administración. ${override.note}`
+      : "La agenda de ese día está cerrada por administración.";
+  }
+
+  if (override?.mode === "custom_hours") {
+    const hoursText =
+      override.opens_at && override.closes_at
+        ? `${formatShortTime(override.opens_at)} a ${formatShortTime(
+            override.closes_at
+          )}`
+        : "el horario especial configurado";
+
+    return override.note
+      ? `Ese turno está fuera del horario especial de ${hoursText}. ${override.note}`
+      : `Ese turno está fuera del horario especial de ${hoursText}.`;
+  }
+
+  return "Ese turno está fuera del horario permitido. Los sábados se reserva de 09:00 a 21:00, con último turno a las 20:00.";
 }
 
 function normalizeSlotBookings(slotBookings: AgendaDaySlotRecord["bookings"]) {
@@ -339,6 +365,9 @@ export async function GET(request: NextRequest) {
 
     const maybeAuth = await requireAuthenticatedRequest(request);
     const accessToken = "error" in maybeAuth ? undefined : maybeAuth.accessToken;
+    const scheduleOverride = await getStoredScheduleOverride(date).catch(
+      () => null
+    );
 
     const response = await fetch(
       `${supabaseUrl}/rest/v1/time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category,avatar_url))&slot_date=eq.${date}&order=start_time.asc`,
@@ -358,7 +387,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ slots: rows });
+    const visibleSlots = rows.filter((slot) => {
+      const slotDate = typeof slot.slot_date === "string" ? slot.slot_date : date;
+      const startTime =
+        typeof slot.start_time === "string" ? slot.start_time : "00:00:00";
+      const endTime =
+        typeof slot.end_time === "string" ? slot.end_time : "00:00:00";
+
+      return isSlotWithinClubHours(
+        slotDate,
+        startTime,
+        endTime,
+        scheduleOverride
+      );
+    });
+
+    return NextResponse.json({
+      slots: visibleSlots,
+      schedule_override: scheduleOverride
+    });
   }
 
   if (scope === "my") {
@@ -548,6 +595,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Turno no encontrado" }, { status: 404 });
   }
 
+  const scheduleOverride = await getStoredScheduleOverride(slot.slot_date).catch(
+    () => null
+  );
+
   if (!canBookSlot(slot.slot_date)) {
     return NextResponse.json(
       { error: "Disponible desde las 22:00 del día anterior" },
@@ -555,12 +606,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!isSlotWithinClubHours(slot.slot_date, slot.start_time, slot.end_time)) {
+  if (
+    !isSlotWithinClubHours(
+      slot.slot_date,
+      slot.start_time,
+      slot.end_time,
+      scheduleOverride
+    )
+  ) {
     return NextResponse.json(
-      {
-        error:
-          "Ese turno está fuera del horario permitido. Los sábados se reserva de 09:00 a 21:00, con último turno a las 20:00."
-      },
+      { error: await getScheduleRestrictionMessage(slot.slot_date) },
       { status: 400 }
     );
   }

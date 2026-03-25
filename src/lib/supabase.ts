@@ -9,7 +9,8 @@ import {
   LivePlayerMapping,
   LiveCourtState,
   LiveScoreboard,
-  LiveStreamConfig
+  LiveStreamConfig,
+  ScheduleDayOverride
 } from "@/types/db";
 
 export interface SessionData {
@@ -557,13 +558,17 @@ export async function fetchSlotsByDate(date: string, token?: string) {
   const payload = await parseJsonPayload<{
     error?: string;
     slots?: any[];
+    schedule_override?: ScheduleDayOverride | null;
   }>(response);
 
   if (!response.ok) {
     throw new Error(payload?.error || "No se pudo cargar la agenda.");
   }
 
-  return payload?.slots || [];
+  return {
+    slots: payload?.slots || [],
+    scheduleOverride: payload?.schedule_override || null
+  };
 }
 
 export async function fetchWaitlistSnapshot(
@@ -812,6 +817,94 @@ export async function fetchLatestConfirmedBooking(token: string) {
   }
 
   return payload?.booking;
+}
+
+export async function fetchAdminScheduleOverrides(token: string) {
+  const response = await authedRouteRequest("/api/admin/schedule-overrides", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    overrides?: ScheduleDayOverride[];
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudieron cargar las excepciones de agenda."
+    );
+  }
+
+  return {
+    overrides: payload?.overrides || [],
+    unavailable: payload?.unavailable === true
+  };
+}
+
+export async function saveAdminScheduleOverride(
+  token: string,
+  payload: {
+    slot_date: string;
+    mode: "closed" | "custom_hours";
+    opens_at?: string | null;
+    closes_at?: string | null;
+    note?: string | null;
+  }
+) {
+  const response = await authedRouteRequest("/api/admin/schedule-overrides", {
+    method: "PATCH",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify(payload)
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    override?: ScheduleDayOverride | null;
+    overrides?: ScheduleDayOverride[];
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error || "No se pudo guardar la excepción de agenda."
+    );
+  }
+
+  return {
+    override: result?.override || null,
+    overrides: result?.overrides || [],
+    unavailable: result?.unavailable === true
+  };
+}
+
+export async function deleteAdminScheduleOverride(token: string, slotDate: string) {
+  const response = await authedRouteRequest(
+    `/api/admin/schedule-overrides?slot_date=${encodeURIComponent(slotDate)}`,
+    {
+      method: "DELETE",
+      token
+    }
+  );
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    overrides?: ScheduleDayOverride[];
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error || "No se pudo borrar la excepción de agenda."
+    );
+  }
+
+  return {
+    overrides: result?.overrides || [],
+    unavailable: result?.unavailable === true
+  };
 }
 
 export async function fetchCourts(token?: string) {

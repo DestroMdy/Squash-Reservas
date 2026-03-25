@@ -1,4 +1,5 @@
-import { describe, expect, it, vi, afterEach } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ScheduleDayOverride } from "@/types/db";
 import {
   canBookSlot,
   canCancelBooking,
@@ -43,5 +44,43 @@ describe("time-rules", () => {
     expect(isSlotWithinClubHours("2026-03-21", "20:00:00", "21:00:00")).toBe(true);
     expect(isSlotWithinClubHours("2026-03-21", "08:00:00", "09:00:00")).toBe(false);
     expect(isSlotWithinClubHours("2026-03-21", "21:00:00", "22:00:00")).toBe(false);
+  });
+
+  it("permite cerrar un día completo por excepción", () => {
+    const override: ScheduleDayOverride = {
+      slot_date: "2026-03-24",
+      mode: "closed",
+      opens_at: null,
+      closes_at: null,
+      note: "Cerrado por mantenimiento",
+      updated_at: "2026-03-20T10:00:00.000Z",
+      updated_by: "admin"
+    };
+
+    expect(
+      isSlotWithinClubHours("2026-03-24", "18:00:00", "19:00:00", override)
+    ).toBe(false);
+  });
+
+  it("respeta un horario especial por día", () => {
+    const override: ScheduleDayOverride = {
+      slot_date: "2026-03-24",
+      mode: "custom_hours",
+      opens_at: "10:00:00",
+      closes_at: "18:00:00",
+      note: "Horario especial",
+      updated_at: "2026-03-20T10:00:00.000Z",
+      updated_by: "admin"
+    };
+
+    expect(
+      isSlotWithinClubHours("2026-03-24", "10:00:00", "11:00:00", override)
+    ).toBe(true);
+    expect(
+      isSlotWithinClubHours("2026-03-24", "09:00:00", "10:00:00", override)
+    ).toBe(false);
+    expect(
+      isSlotWithinClubHours("2026-03-24", "18:00:00", "19:00:00", override)
+    ).toBe(false);
   });
 });

@@ -1,3 +1,5 @@
+import type { ScheduleDayOverride } from "@/types/db";
+
 function buildLocalDate(slotDate: string, hours = 0, minutes = 0, seconds = 0) {
   const [year, month, day] = slotDate.split("-").map(Number);
   return new Date(year, month - 1, day, hours, minutes, seconds, 0);
@@ -15,6 +17,26 @@ function getWeekday(slotDate: string) {
 function timeToMinutes(time: string) {
   const [hours, minutes] = time.slice(0, 5).split(":").map(Number);
   return hours * 60 + minutes;
+}
+
+function isWithinCustomScheduleHours(
+  startTime: string,
+  endTime: string,
+  scheduleOverride: ScheduleDayOverride
+) {
+  const opensAt = scheduleOverride.opens_at;
+  const closesAt = scheduleOverride.closes_at;
+
+  if (!opensAt || !closesAt) {
+    return false;
+  }
+
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = timeToMinutes(endTime);
+  const opensAtMinutes = timeToMinutes(opensAt);
+  const closesAtMinutes = timeToMinutes(closesAt);
+
+  return startMinutes >= opensAtMinutes && endMinutes <= closesAtMinutes;
 }
 
 export function canBookSlot(slotDate: string): boolean {
@@ -40,7 +62,22 @@ export function canCancelBooking(slotDate: string, startTime: string) {
   return new Date() <= minimumCancelTime;
 }
 
-export function isSlotWithinClubHours(slotDate: string, startTime: string, endTime: string) {
+export function isSlotWithinClubHours(
+  slotDate: string,
+  startTime: string,
+  endTime: string,
+  scheduleOverride?: ScheduleDayOverride | null
+) {
+  if (scheduleOverride?.slot_date === slotDate) {
+    if (scheduleOverride.mode === "closed") {
+      return false;
+    }
+
+    if (scheduleOverride.mode === "custom_hours") {
+      return isWithinCustomScheduleHours(startTime, endTime, scheduleOverride);
+    }
+  }
+
   const weekday = getWeekday(slotDate);
 
   if (weekday === 6) {
