@@ -10,6 +10,7 @@ import {
   LiveCourtState,
   LiveScoreboard,
   LiveStreamConfig,
+  Profile,
   ScheduleDayOverride
 } from "@/types/db";
 
@@ -735,6 +736,92 @@ export async function deleteProfileAsAdmin(
   if (!response.ok) {
     throw new Error(payload.error || "No se pudo eliminar el perfil.");
   }
+}
+
+export async function updatePlayerProfileAsAdmin(
+  profileId: string,
+  token: string,
+  payload: {
+    full_name?: string | null;
+    phone?: string | null;
+    category?: string | null;
+  }
+) {
+  const response = await authedRouteRequest(`/api/admin/players/${profileId}`, {
+    method: "PATCH",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify(payload)
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    profile?: Profile | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo actualizar el perfil.");
+  }
+
+  return result?.profile || null;
+}
+
+export async function uploadPlayerAvatarAsAdmin(
+  profileId: string,
+  token: string,
+  file: File
+) {
+  const extension = AVATAR_ALLOWED_MIME_TYPES.get(file.type);
+
+  if (!extension) {
+    throw new Error("La foto debe ser JPG, PNG o WebP.");
+  }
+
+  if (file.size > AVATAR_MAX_SIZE_BYTES) {
+    throw new Error("La foto no puede superar los 5 MB.");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file, `${profileId}/avatar.${extension}`);
+
+  const response = await authedRouteRequest(`/api/admin/players/${profileId}/avatar`, {
+    method: "POST",
+    token,
+    body: formData
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    avatar_url?: string;
+    profile?: Profile | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo subir la foto.");
+  }
+
+  return {
+    avatarUrl: result?.avatar_url || null,
+    profile: result?.profile || null
+  };
+}
+
+export async function deletePlayerAvatarAsAdmin(profileId: string, token: string) {
+  const response = await authedRouteRequest(`/api/admin/players/${profileId}/avatar`, {
+    method: "DELETE",
+    token
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    profile?: Profile | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo borrar la foto.");
+  }
+
+  return result?.profile || null;
 }
 
 export async function promoteProfileToAdmin(profileId: string, token: string) {

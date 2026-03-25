@@ -1,5 +1,8 @@
 export type AdminAuditAction =
   | "booking.updated"
+  | "profile.updated"
+  | "profile.avatar.updated"
+  | "profile.avatar.deleted"
   | "profile.deleted"
   | "profile.promoted"
   | "external_tournament.created"

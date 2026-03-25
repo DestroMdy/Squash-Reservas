@@ -1,6 +1,14 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ChangeEvent,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState
+} from "react";
 import { AdminLiveCenterSection } from "@/components/AdminLiveCenterSection";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
@@ -8,6 +16,7 @@ import { buildCsv } from "@/lib/csv";
 import {
   createExternalTournament,
   deleteAdminScheduleOverride,
+  deletePlayerAvatarAsAdmin,
   deleteExternalTournament,
   deleteProfileAsAdmin,
   fetchAdminAuditLogs,
@@ -22,8 +31,10 @@ import {
   getUser,
   promoteProfileToAdmin,
   saveAdminScheduleOverride,
+  updatePlayerProfileAsAdmin,
   updateBookingAsAdmin,
-  updateExternalTournament
+  updateExternalTournament,
+  uploadPlayerAvatarAsAdmin
 } from "@/lib/supabase";
 import type {
   AdminAuditLog,
@@ -44,6 +55,13 @@ type EditState = {
   userId: string;
   status: BookingStatus;
   notes: string;
+};
+
+type PlayerEditState = {
+  full_name: string;
+  phone: string;
+  category: string;
+  avatar_url: string;
 };
 
 type TournamentFormState = {
@@ -72,6 +90,14 @@ const tournamentPlatforms: ExternalTournamentPlatform[] = [
   "rankedin",
   "tournamentsoftware",
   "otro"
+];
+const categoryOptions = [
+  "Primera",
+  "Segunda",
+  "Tercera",
+  "Cuarta",
+  "Quinta",
+  "Principiante"
 ];
 
 function getCurrentMonthKey() {
@@ -164,13 +190,18 @@ export default function AdminPage() {
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+  const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
+  const [playerEditState, setPlayerEditState] = useState<PlayerEditState | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPlayerId, setSavingPlayerId] = useState<string | null>(null);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingTournament, setSavingTournament] = useState(false);
   const [deletingScheduleDate, setDeletingScheduleDate] = useState<string | null>(null);
   const [deletingTournamentId, setDeletingTournamentId] = useState<string | null>(null);
   const [deletingProfileId, setDeletingProfileId] = useState<string | null>(null);
+  const [uploadingPlayerAvatarId, setUploadingPlayerAvatarId] = useState<string | null>(null);
+  const [deletingPlayerAvatarId, setDeletingPlayerAvatarId] = useState<string | null>(null);
   const [promotingProfileId, setPromotingProfileId] = useState<string | null>(null);
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -547,6 +578,21 @@ export default function AdminPage() {
     setEditState(null);
   }
 
+  function startPlayerEditing(player: Profile) {
+    setEditingPlayerId(player.id);
+    setPlayerEditState({
+      full_name: player.full_name || "",
+      phone: player.phone || "",
+      category: player.category || "",
+      avatar_url: player.avatar_url || ""
+    });
+  }
+
+  function stopPlayerEditing() {
+    setEditingPlayerId(null);
+    setPlayerEditState(null);
+  }
+
   async function handleSave(bookingId: string) {
     try {
       const token = getAdminToken();
@@ -592,6 +638,89 @@ export default function AdminPage() {
       setError(err instanceof Error ? err.message : "No se pudo eliminar el perfil.");
     } finally {
       setDeletingProfileId(null);
+    }
+  }
+
+  async function handleSavePlayerProfile(playerId: string) {
+    try {
+      if (!playerEditState) {
+        throw new Error("No hay cambios para guardar.");
+      }
+
+      setSavingPlayerId(playerId);
+      setMessage(null);
+      setError(null);
+
+      await updatePlayerProfileAsAdmin(playerId, getAdminToken(), {
+        full_name: playerEditState.full_name.trim() || null,
+        phone: playerEditState.phone.trim() || null,
+        category: playerEditState.category.trim() || null
+      });
+      await loadAdminData();
+      setMessage("Perfil actualizado correctamente.");
+      stopPlayerEditing();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo actualizar el perfil.");
+    } finally {
+      setSavingPlayerId(null);
+    }
+  }
+
+  async function handlePlayerAvatarChange(
+    player: Profile,
+    event: ChangeEvent<HTMLInputElement>
+  ) {
+    try {
+      const file = event.target.files?.[0];
+      if (!file) return;
+
+      setUploadingPlayerAvatarId(player.id);
+      setMessage(null);
+      setError(null);
+
+      const result = await uploadPlayerAvatarAsAdmin(player.id, getAdminToken(), file);
+
+      if (editingPlayerId === player.id && playerEditState) {
+        setPlayerEditState({
+          ...playerEditState,
+          avatar_url: result.avatarUrl || ""
+        });
+      }
+
+      await loadAdminData();
+      setMessage("Foto de perfil actualizada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo subir la foto.");
+    } finally {
+      setUploadingPlayerAvatarId(null);
+      event.target.value = "";
+    }
+  }
+
+  async function handleDeletePlayerAvatar(player: Profile) {
+    if (!window.confirm(`Vas a quitar la foto de ${player.full_name || "este jugador"}.`)) {
+      return;
+    }
+
+    try {
+      setDeletingPlayerAvatarId(player.id);
+      setMessage(null);
+      setError(null);
+      await deletePlayerAvatarAsAdmin(player.id, getAdminToken());
+
+      if (editingPlayerId === player.id && playerEditState) {
+        setPlayerEditState({
+          ...playerEditState,
+          avatar_url: ""
+        });
+      }
+
+      await loadAdminData();
+      setMessage("Foto de perfil eliminada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "No se pudo borrar la foto.");
+    } finally {
+      setDeletingPlayerAvatarId(null);
     }
   }
 
@@ -1381,7 +1510,7 @@ export default function AdminPage() {
                 <div>
                   <h2 className="text-lg font-semibold text-slate-900">Gestión de jugadores</h2>
                   <p className="text-sm text-slate-500">
-                    Como admin puedes borrar perfiles de usuarios o promoverlos.
+                    Como admin puedes editar datos, gestionar fotos, borrar perfiles o promover usuarios.
                   </p>
                 </div>
                 <button type="button" className="btn-secondary" onClick={handleExportPlayers} disabled={exportingKey === "players"}>
@@ -1394,15 +1523,29 @@ export default function AdminPage() {
                   const isCurrentAdmin = player.role === "admin";
                   const isDeleting = deletingProfileId === player.id;
                   const isPromoting = promotingProfileId === player.id;
+                  const isEditingPlayer =
+                    editingPlayerId === player.id && Boolean(playerEditState);
+                  const isSavingPlayer = savingPlayerId === player.id;
+                  const isUploadingAvatar = uploadingPlayerAvatarId === player.id;
+                  const isDeletingAvatar = deletingPlayerAvatarId === player.id;
+                  const previewAvatarUrl =
+                    isEditingPlayer && playerEditState
+                      ? playerEditState.avatar_url || player.avatar_url
+                      : player.avatar_url;
 
                   return (
                     <article
                       key={player.id}
-                      className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between"
+                      className={`rounded-xl border bg-white p-4 transition ${
+                        isEditingPlayer
+                          ? "border-orange-300 shadow-[0_12px_30px_rgba(251,146,60,0.12)]"
+                          : "border-slate-200"
+                      }`}
                     >
-                      <div className="flex items-center gap-3">
+                      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-center gap-3">
                         <AvatarImage
-                          src={player.avatar_url}
+                          src={previewAvatarUrl}
                           alt={player.full_name || "Jugador"}
                           size={56}
                           className="h-14 w-14 rounded-full border border-slate-200 object-cover"
@@ -1416,32 +1559,176 @@ export default function AdminPage() {
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2">
-                        {isCurrentAdmin ? (
-                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
-                            Admin protegido
-                          </span>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              className="rounded-xl border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              onClick={() => handlePromoteProfile(player)}
-                              disabled={Boolean(promotingProfileId) || Boolean(deletingProfileId)}
-                            >
-                              {isPromoting ? "Promoviendo..." : "Hacer admin"}
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
-                              onClick={() => handleDeleteProfile(player)}
-                              disabled={Boolean(deletingProfileId) || Boolean(promotingProfileId)}
-                            >
-                              {isDeleting ? "Eliminando..." : "Borrar perfil"}
-                            </button>
-                          </>
-                        )}
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() =>
+                              isEditingPlayer ? stopPlayerEditing() : startPlayerEditing(player)
+                            }
+                            disabled={
+                              Boolean(savingPlayerId) ||
+                              Boolean(uploadingPlayerAvatarId) ||
+                              Boolean(deletingPlayerAvatarId)
+                            }
+                          >
+                            {isEditingPlayer ? "Cerrar editor" : "Editar perfil"}
+                          </button>
+                          {isCurrentAdmin ? (
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
+                              Admin protegido
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="rounded-xl border border-blue-300 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => handlePromoteProfile(player)}
+                                disabled={Boolean(promotingProfileId) || Boolean(deletingProfileId)}
+                              >
+                                {isPromoting ? "Promoviendo..." : "Hacer admin"}
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                onClick={() => handleDeleteProfile(player)}
+                                disabled={Boolean(deletingProfileId) || Boolean(promotingProfileId)}
+                              >
+                                {isDeleting ? "Eliminando..." : "Borrar perfil"}
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
+
+                      {isEditingPlayer && playerEditState ? (
+                        <div className="mt-4 grid gap-4 rounded-2xl border border-orange-200 bg-orange-50/40 p-4 md:grid-cols-2">
+                          <div className="md:col-span-2 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div className="flex items-center gap-3">
+                              <AvatarImage
+                                src={previewAvatarUrl}
+                                alt={playerEditState.full_name || player.full_name || "Jugador"}
+                                size={88}
+                                className="h-20 w-20 rounded-full border border-slate-200 object-cover"
+                              />
+                              <div>
+                                <p className="font-medium text-slate-900">
+                                  {playerEditState.full_name || "Jugador sin nombre"}
+                                </p>
+                                <p className="text-sm text-slate-500">
+                                  {playerEditState.category || "Sin categoria"}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              <label className="btn-secondary inline-flex cursor-pointer items-center justify-center">
+                                {isUploadingAvatar ? "Subiendo..." : "Cambiar foto"}
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  className="hidden"
+                                  onChange={(event) =>
+                                    void handlePlayerAvatarChange(player, event)
+                                  }
+                                  disabled={isUploadingAvatar || isDeletingAvatar}
+                                />
+                              </label>
+
+                              {previewAvatarUrl ? (
+                                <button
+                                  type="button"
+                                  className="rounded-xl border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                                  onClick={() => void handleDeletePlayerAvatar(player)}
+                                  disabled={isUploadingAvatar || isDeletingAvatar}
+                                >
+                                  {isDeletingAvatar ? "Quitando..." : "Quitar foto"}
+                                </button>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                              Nombre y apellido
+                            </label>
+                            <input
+                              type="text"
+                              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                              value={playerEditState.full_name}
+                              onChange={(event) =>
+                                setPlayerEditState({
+                                  ...playerEditState,
+                                  full_name: event.target.value
+                                })
+                              }
+                              placeholder="Nombre completo"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                              Telefono
+                            </label>
+                            <input
+                              type="text"
+                              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                              value={playerEditState.phone}
+                              onChange={(event) =>
+                                setPlayerEditState({
+                                  ...playerEditState,
+                                  phone: event.target.value
+                                })
+                              }
+                              placeholder="Ej: 2804123456"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="mb-1 block text-sm font-medium text-slate-700">
+                              Categoria
+                            </label>
+                            <select
+                              className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                              value={playerEditState.category}
+                              onChange={(event) =>
+                                setPlayerEditState({
+                                  ...playerEditState,
+                                  category: event.target.value
+                                })
+                              }
+                            >
+                              <option value="">Sin categoria</option>
+                              {categoryOptions.map((category) => (
+                                <option key={category} value={category}>
+                                  {category}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div className="md:col-span-2 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              className="btn-primary"
+                              onClick={() => void handleSavePlayerProfile(player.id)}
+                              disabled={
+                                isSavingPlayer || isUploadingAvatar || isDeletingAvatar
+                              }
+                            >
+                              {isSavingPlayer ? "Guardando..." : "Guardar perfil"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn-secondary"
+                              onClick={stopPlayerEditing}
+                              disabled={isSavingPlayer}
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
                     </article>
                   );
                 })}
