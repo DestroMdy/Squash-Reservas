@@ -8,6 +8,7 @@ import { SectionTitle } from "../../components/SectionTitle";
 import {
   fetchProfile,
   getSession,
+  updateCurrentUserPassword,
   updateProfile,
   uploadProfileAvatar
 } from "../../lib/supabase";
@@ -31,6 +32,9 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -120,6 +124,34 @@ export default function ProfilePage() {
       setNoticeMessage("No se pudo guardar el perfil");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handlePasswordChange() {
+    try {
+      if (!newPassword.trim() || !confirmPassword.trim()) {
+        setNoticeMessage("Debes completar la nueva contraseña y su confirmación.");
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        setNoticeMessage("Las contraseñas no coinciden.");
+        return;
+      }
+
+      setUpdatingPassword(true);
+      await updateCurrentUserPassword(newPassword);
+      setNewPassword("");
+      setConfirmPassword("");
+      setNoticeMessage("Contraseña actualizada.");
+    } catch (error) {
+      setNoticeMessage(
+        error instanceof Error
+          ? error.message
+          : "No se pudo actualizar la contraseña."
+      );
+    } finally {
+      setUpdatingPassword(false);
     }
   }
 
@@ -227,6 +259,54 @@ export default function ProfilePage() {
             disabled={saving}
           >
             {saving ? "Guardando..." : "Guardar cambios"}
+          </button>
+        </div>
+
+        <div className="card space-y-4 p-6">
+          <div>
+            <p className="text-sm text-slate-500">Seguridad</p>
+            <h2 className="mt-1 text-xl font-bold text-slate-900">
+              Cambiar contraseña
+            </h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Actualizá tu contraseña desde tu sesión actual.
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Nueva contraseña
+            </label>
+            <input
+              type="password"
+              className="w-full rounded-xl border px-3 py-2"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              minLength={6}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">
+              Repetir nueva contraseña
+            </label>
+            <input
+              type="password"
+              className="w-full rounded-xl border px-3 py-2"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              minLength={6}
+              autoComplete="new-password"
+            />
+          </div>
+
+          <button
+            onClick={handlePasswordChange}
+            className="btn-secondary w-full"
+            disabled={updatingPassword}
+          >
+            {updatingPassword ? "Actualizando..." : "Actualizar contraseña"}
           </button>
         </div>
       </div>

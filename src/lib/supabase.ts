@@ -272,6 +272,24 @@ export async function updatePassword(accessToken: string, password: string) {
   }
 }
 
+export async function updateCurrentUserPassword(password: string) {
+  if (!password.trim()) {
+    throw new Error("Debes ingresar una nueva contraseña.");
+  }
+
+  if (password.trim().length < 6) {
+    throw new Error("La nueva contraseña debe tener al menos 6 caracteres.");
+  }
+
+  const session = await getValidSession();
+
+  if (!session?.access_token) {
+    throw new Error("Tu sesión expiró. Iniciá sesión nuevamente.");
+  }
+
+  await updatePassword(session.access_token, password.trim());
+}
+
 export async function signInWithPassword(email: string, password: string) {
   const response = await fetch("/api/auth/login", {
     method: "POST",
