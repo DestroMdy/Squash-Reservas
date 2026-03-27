@@ -165,6 +165,21 @@ export const squashTrainingSources = [
   }
 ];
 
+export const squashWorldSources = [
+  {
+    title: "World Squash - Getting Started",
+    url: "https://www.worldsquash.sport/getting-started-poster-2/"
+  },
+  {
+    title: "World Squash - Sombras para fitness",
+    url: "https://www.worldsquash.sport/hesham-el-attar-on-ghosting-for-fitness/"
+  },
+  {
+    title: "World Squash - Sombras para velocidad y resistencia",
+    url: "https://www.worldsquash.sport/hesham-el-attar-on-ghosting-for-speed-endurance/"
+  }
+];
+
 export const clubHighlights = [
   {
     title: "Centro en vivo",
