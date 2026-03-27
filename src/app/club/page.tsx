@@ -212,11 +212,11 @@ export default function ClubPage() {
       <CollapsibleCardSection
         eyebrow="Referencias"
         title="Material para profundizar"
-        description="Separamos el material en espanol del original de World Squash para que cada uno abra lo que mas le sirve."
+        description="Separamos el material en español del original de World Squash para que cada uno abra lo que mas le sirve."
       >
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Material en espanol
+            Material en español
           </p>
           <div className="mt-4 flex flex-wrap gap-3">
             {squashTrainingSources.map((source) => (

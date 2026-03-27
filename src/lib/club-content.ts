@@ -148,15 +148,15 @@ export const squashIntermediateExercises = [
 
 export const squashTrainingSources = [
   {
-    title: "Videos en espanol: reglas basicas del squash",
+    title: "Videos en español: reglas basicas del squash",
     url: "https://www.youtube.com/results?search_query=reglas+basicas+del+squash+en+espanol"
   },
   {
-    title: "Videos en espanol: sombras y desplazamientos",
+    title: "Videos en español: sombras y desplazamientos",
     url: "https://www.youtube.com/results?search_query=sombras+de+squash+entrenamiento"
   },
   {
-    title: "Videos en espanol: ejercicios para principiantes",
+    title: "Videos en español: ejercicios para principiantes",
     url: "https://www.youtube.com/results?search_query=ejercicios+de+squash+para+principiantes+en+espanol"
   }
 ];
