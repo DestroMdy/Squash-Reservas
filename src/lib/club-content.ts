@@ -77,6 +77,77 @@ export const squashRuleCuriosities = [
   }
 ];
 
+export const squashTrainingTips = [
+  {
+    title: "Sal de la jugada despues de pegar",
+    description:
+      "Despues de cada golpe vuelve a despejar la linea del rival. Eso mejora tu posicion, evita interferencias y te da mas tiempo para recuperar el T."
+  },
+  {
+    title: "Primero control, despues potencia",
+    description:
+      "Para mejorar de verdad conviene priorizar golpes largos, altos y profundos antes que buscar winners todo el tiempo. La consistencia gana muchos mas puntos que el apuro."
+  },
+  {
+    title: "Entrena con reloj, no solo por sensacion",
+    description:
+      "Usar cronometro en sombras y desplazamientos ayuda a medir progreso real. Si haces siempre el mismo patron, podes comparar tiempos y recuperacion semana a semana."
+  },
+  {
+    title: "La seguridad tambien es tecnica",
+    description:
+      "Si hay riesgo de pegarle al rival, se frena la jugada. Jugar seguro no es ser pasivo: es tomar mejores decisiones y sostener el punto sin regalar un golpe peligroso."
+  }
+];
+
+export const squashExercises = [
+  {
+    title: "Sombras aerobicas continuas",
+    description:
+      "Moverse por distintos sectores de la cancha sin pelota, a ritmo medio y sostenido. Sirve para construir base fisica especifica de squash mejor que correr sin patron."
+  },
+  {
+    title: "Sombras de 60 segundos",
+    description:
+      "Series intensas de un minuto con uno o dos recorridos fijos. Ideales para simular rallies duros y mejorar la capacidad de sostener piernas pesadas con buena tecnica."
+  },
+  {
+    title: "Frentes mas voleas laterales",
+    description:
+      "Ir frente izquierdo, frente derecho y sumar desplazamiento lateral con swing alto. Es muy util para velocidad de pies, frenado, cambio de direccion y retorno al T."
+  },
+  {
+    title: "Velocidad pura de 10 a 15 segundos",
+    description:
+      "Bloques muy cortos al maximo, con descansos largos de 30 a 60 segundos. El objetivo no es aguantar mucho, sino moverse cada vez mas rapido y cortar cuando cae la calidad."
+  },
+  {
+    title: "Series de drive y largo paralelo",
+    description:
+      "Jugar muchas pelotas seguidas por la misma pared buscando altura, profundidad y margen sobre la chapa. Es el ejercicio mas simple y mas util para ganar control real."
+  },
+  {
+    title: "Calentamiento con zancada correcta",
+    description:
+      "En cada sombra o entrada a esquina, prestar atencion al pie de apoyo y a la salida. Ese detalle ordena mejor el movimiento y reduce desgaste innecesario."
+  }
+];
+
+export const squashTrainingSources = [
+  {
+    title: "World Squash - Getting Started",
+    url: "https://www.worldsquash.sport/getting-started-poster-2/"
+  },
+  {
+    title: "World Squash - Sombras para fitness",
+    url: "https://www.worldsquash.sport/hesham-el-attar-on-ghosting-for-fitness/"
+  },
+  {
+    title: "World Squash - Sombras para velocidad y resistencia",
+    url: "https://www.worldsquash.sport/hesham-el-attar-on-ghosting-for-speed-endurance/"
+  }
+];
+
 export const clubHighlights = [
   {
     title: "Centro en vivo",
