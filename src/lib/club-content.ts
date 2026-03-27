@@ -81,7 +81,7 @@ export const squashTrainingTips = [
   {
     title: "Sal de la jugada despues de pegar",
     description:
-      "Despues de cada golpe vuelve a despejar la linea del rival. Eso mejora tu posicion, evita interferencias y te da mas tiempo para recuperar el T."
+      "Despues de cada golpe vuelve a despejar la linea del rival. Eso mejora tu posicion, evita interferencias y te da mas tiempo para recuperar la T."
   },
   {
     title: "Primero control, despues potencia",
@@ -100,7 +100,30 @@ export const squashTrainingTips = [
   }
 ];
 
-export const squashExercises = [
+export const squashBeginnerExercises = [
+  {
+    title: "Sombras suaves a cuatro esquinas",
+    description:
+      "Entrar a frente izquierdo, frente derecho y dos esquinas de fondo a ritmo controlado. Ideal para aprender recorridos, frenado y regreso ordenado a la T."
+  },
+  {
+    title: "Series de drive y largo paralelo",
+    description:
+      "Jugar muchas pelotas seguidas por la misma pared buscando altura, profundidad y margen sobre la chapa. Es el ejercicio mas simple y mas util para ganar control real."
+  },
+  {
+    title: "Frentes cortos con salida limpia",
+    description:
+      "Entrar a las dos esquinas delanteras con pocos pasos, hacer swing corto y salir rapido sin cruzarse. Ayuda mucho a entender espacio, equilibrio y seguridad."
+  },
+  {
+    title: "Calentamiento con zancada correcta",
+    description:
+      "En cada sombra o entrada a esquina, prestar atencion al pie de apoyo y a la salida. Ese detalle ordena mejor el movimiento y reduce desgaste innecesario."
+  }
+];
+
+export const squashIntermediateExercises = [
   {
     title: "Sombras aerobicas continuas",
     description:
@@ -114,37 +137,31 @@ export const squashExercises = [
   {
     title: "Frentes mas voleas laterales",
     description:
-      "Ir frente izquierdo, frente derecho y sumar desplazamiento lateral con swing alto. Es muy util para velocidad de pies, frenado, cambio de direccion y retorno al T."
+      "Ir frente izquierdo, frente derecho y sumar desplazamiento lateral con swing alto. Es muy util para velocidad de pies, frenado, cambio de direccion y retorno a la T."
   },
   {
     title: "Velocidad pura de 10 a 15 segundos",
     description:
       "Bloques muy cortos al maximo, con descansos largos de 30 a 60 segundos. El objetivo no es aguantar mucho, sino moverse cada vez mas rapido y cortar cuando cae la calidad."
-  },
-  {
-    title: "Series de drive y largo paralelo",
-    description:
-      "Jugar muchas pelotas seguidas por la misma pared buscando altura, profundidad y margen sobre la chapa. Es el ejercicio mas simple y mas util para ganar control real."
-  },
-  {
-    title: "Calentamiento con zancada correcta",
-    description:
-      "En cada sombra o entrada a esquina, prestar atencion al pie de apoyo y a la salida. Ese detalle ordena mejor el movimiento y reduce desgaste innecesario."
   }
 ];
 
 export const squashTrainingSources = [
   {
-    title: "World Squash - Getting Started",
-    url: "https://www.worldsquash.sport/getting-started-poster-2/"
+    title: "Reglamento completo en espanol",
+    url: "/docs/reglamento-squash.pdf"
   },
   {
-    title: "World Squash - Sombras para fitness",
-    url: "https://www.worldsquash.sport/hesham-el-attar-on-ghosting-for-fitness/"
+    title: "Videos en espanol: reglas basicas del squash",
+    url: "https://www.youtube.com/results?search_query=reglas+basicas+del+squash+en+espanol"
   },
   {
-    title: "World Squash - Sombras para velocidad y resistencia",
-    url: "https://www.worldsquash.sport/hesham-el-attar-on-ghosting-for-speed-endurance/"
+    title: "Videos en espanol: sombras y desplazamientos",
+    url: "https://www.youtube.com/results?search_query=sombras+de+squash+entrenamiento"
+  },
+  {
+    title: "Videos en espanol: ejercicios para principiantes",
+    url: "https://www.youtube.com/results?search_query=ejercicios+de+squash+para+principiantes+en+espanol"
   }
 ];
 

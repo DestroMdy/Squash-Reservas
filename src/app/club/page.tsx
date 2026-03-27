@@ -5,7 +5,8 @@ import { SectionTitle } from "@/components/SectionTitle";
 import {
   clubHighlights,
   clubRules,
-  squashExercises,
+  squashBeginnerExercises,
+  squashIntermediateExercises,
   squashRuleCuriosities,
   squashRules,
   squashTrainingSources,
@@ -137,15 +138,37 @@ export default function ClubPage() {
       <section className="space-y-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-            Ejercicios utiles
+            Ejercicios para principiantes
           </p>
           <p className="mt-1 text-sm text-slate-600">
-            Ideas de trabajo practico para entrenar control, desplazamientos y fisico especifico del squash.
+            Opciones simples para alguien que recien empieza y necesita ordenarse dentro de la cancha antes de acelerar.
           </p>
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          {squashExercises.map((exercise) => (
+          {squashBeginnerExercises.map((exercise) => (
+            <article key={exercise.title} className="card rounded-2xl p-5">
+              <h3 className="text-lg font-semibold text-slate-950">{exercise.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                {exercise.description}
+              </p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            Ejercicios para intermedios
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Trabajo mas exigente para mejorar piernas, velocidad y capacidad de sostener puntos largos con tecnica.
+          </p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          {squashIntermediateExercises.map((exercise) => (
             <article key={exercise.title} className="card rounded-2xl p-5">
               <h3 className="text-lg font-semibold text-slate-950">{exercise.title}</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -158,13 +181,13 @@ export default function ClubPage() {
 
       <section className="card rounded-2xl border-slate-200 p-6">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-          Fuentes utiles
+          Fuentes utiles en espanol
         </p>
         <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">
           Material de referencia para profundizar
         </h2>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-          Este resumen esta armado a partir de material oficial y de coaching reconocido. Si alguien quiere ir mas a fondo, puede abrir las referencias originales.
+          Esta seleccion apunta a que quien quiera profundizar encuentre reglamento y material explicativo directamente en espanol.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
           {squashTrainingSources.map((source) => (
