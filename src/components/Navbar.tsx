@@ -21,7 +21,7 @@ const baseNavItems = [
   { href: "/tournaments", label: "Torneos" },
   { href: "/profile", label: "Mi perfil" },
   { href: "/players", label: "Jugadores" },
-  { href: "/courts", label: "Canchas" }
+  { href: "/club", label: "Club" }
 ];
 
 export function Navbar() {

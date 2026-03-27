@@ -430,18 +430,31 @@ export default function HomePage() {
 
           <Link
             href="/club"
-            className="card animate-fade-up rounded-2xl p-5 transition hover:border-orange-300"
+            className="card animate-fade-up rounded-2xl border-orange-200 bg-gradient-to-br from-orange-50 via-white to-white p-5 transition hover:border-orange-300 hover:shadow-[0_16px_35px_rgba(249,115,22,0.12)]"
             style={{ animationDelay: "180ms" }}
           >
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-              El club
-            </p>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-700">
+                El club
+              </p>
+              <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-orange-700 shadow-sm">
+                Abrir
+              </span>
+            </div>
             <h2 className="mt-3 text-xl font-bold text-slate-950">
               Reglas y experiencia
             </h2>
             <p className="mt-2 text-sm text-slate-600">
               Todo lo importante de La Martineta para jugadores y visitantes.
             </p>
+            <div className="mt-4 flex items-center justify-between rounded-2xl border border-orange-200 bg-white/90 px-4 py-3">
+              <p className="text-sm font-medium text-slate-700">
+                Toca para ver reglas, ejercicios y material util
+              </p>
+              <span className="text-lg font-semibold text-orange-600" aria-hidden="true">
+                →
+              </span>
+            </div>
           </Link>
 
           {clubHighlights.map((highlight, index) => (
