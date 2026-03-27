@@ -55,7 +55,10 @@ function getTournamentMarker(tournament: ExternalTournament) {
 }
 
 function hasRealTournamentLink(tournament: ExternalTournament) {
-  return Boolean(tournament.url?.trim()) && !GENERIC_TOURNAMENT_URLS.has(tournament.url.trim());
+  return (
+    Boolean(tournament.url?.trim()) &&
+    !GENERIC_TOURNAMENT_URLS.has(tournament.url.trim())
+  );
 }
 
 function hasFeaturedTournamentLink(tournament: ExternalTournament) {
@@ -92,10 +95,12 @@ export default function TournamentCenterPage() {
       try {
         setLoading(true);
         setError(null);
+
         const [nextTournaments, liveCenter] = await Promise.all([
           fetchExternalTournaments(),
           fetchLiveCenterStatus()
         ]);
+
         setTournaments(nextTournaments || []);
         setLiveCourts(liveCenter.courts || []);
       } catch (err) {
@@ -136,7 +141,7 @@ export default function TournamentCenterPage() {
 
       <SectionTitle
         title="Dashboard de torneo"
-        subtitle="Panel rápido para seguir las canchas en vivo, el torneo destacado y los accesos principales del evento."
+        subtitle="Panel rapido para seguir las canchas en vivo, el torneo destacado y los accesos principales del evento."
       />
 
       {loading ? (
@@ -150,7 +155,10 @@ export default function TournamentCenterPage() {
       {!loading && !error ? (
         <>
           <section className="grid gap-4 md:grid-cols-3">
-            <Link href="/live" className="card rounded-2xl p-5 transition hover:border-orange-300">
+            <Link
+              href="/live"
+              className="card rounded-2xl p-5 transition hover:border-orange-300"
+            >
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 En vivo
               </p>
@@ -160,7 +168,7 @@ export default function TournamentCenterPage() {
                   : "Centro en vivo"}
               </h2>
               <p className="mt-2 text-sm text-slate-600">
-                Sigue ambas transmisiones y el score automático de Squore.
+                Sigue ambas transmisiones y el score automatico de Squore.
               </p>
             </Link>
 
@@ -172,23 +180,40 @@ export default function TournamentCenterPage() {
                 Calendario
               </p>
               <h2 className="mt-3 text-xl font-bold text-slate-950">
-                {upcomingTournaments.length} próximo{upcomingTournaments.length === 1 ? "" : "s"}
+                {upcomingTournaments.length} proximo
+                {upcomingTournaments.length === 1 ? "" : "s"}
               </h2>
               <p className="mt-2 text-sm text-slate-600">
                 Fechas oficiales, links y sedes del circuito.
               </p>
             </Link>
 
-            <Link href="/club" className="card rounded-2xl p-5 transition hover:border-orange-300">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-                El club
-              </p>
+            <Link
+              href="/club"
+              className="card rounded-2xl border-orange-200 bg-gradient-to-br from-orange-50 via-white to-white p-5 transition hover:border-orange-300 hover:shadow-[0_16px_35px_rgba(249,115,22,0.12)]"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-700">
+                  El club
+                </p>
+                <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-orange-700 shadow-sm">
+                  Abrir
+                </span>
+              </div>
               <h2 className="mt-3 text-xl font-bold text-slate-950">
                 Reglas y experiencia
               </h2>
               <p className="mt-2 text-sm text-slate-600">
-                Todo lo importante de La Martineta en una sola página.
+                Todo lo importante de La Martineta en una sola pagina.
               </p>
+              <div className="mt-4 flex items-center justify-between rounded-2xl border border-orange-200 bg-white/90 px-4 py-3">
+                <p className="text-sm font-medium text-slate-700">
+                  Toca para abrir reglas, ejercicios y referencias
+                </p>
+                <span className="text-base font-semibold text-orange-600" aria-hidden="true">
+                  -&gt;
+                </span>
+              </div>
             </Link>
           </section>
 
@@ -259,7 +284,8 @@ export default function TournamentCenterPage() {
                   {court.scoreboard ? (
                     <div className="mt-4 rounded-2xl bg-slate-950 px-4 py-4 text-white">
                       <p className="text-sm font-semibold text-orange-300">
-                        {court.scoreboard.player_one_name} vs {court.scoreboard.player_two_name}
+                        {court.scoreboard.player_one_name} vs{" "}
+                        {court.scoreboard.player_two_name}
                       </p>
                       <p className="mt-2 text-2xl font-black">
                         {court.scoreboard.result || "En juego"}
@@ -270,7 +296,7 @@ export default function TournamentCenterPage() {
                     </div>
                   ) : (
                     <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-                      El marcador va a aparecer acá apenas Squore empiece a postear.
+                      El marcador va a aparecer aca apenas Squore empiece a postear.
                     </div>
                   )}
                 </article>
@@ -278,7 +304,7 @@ export default function TournamentCenterPage() {
             ) : (
               <article className="card rounded-2xl p-5 xl:col-span-2">
                 <p className="text-base font-medium text-slate-900">
-                  Todavía no hay canchas configuradas para el centro en vivo.
+                  Todavia no hay canchas configuradas para el centro en vivo.
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
                   Cuando el club programe las transmisiones, este tablero va a mostrar ambas canchas.
