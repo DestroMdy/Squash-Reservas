@@ -23,6 +23,17 @@ function buildRecaptchaDebug(verification: RecaptchaVerification) {
   };
 }
 
+function normalizeSignupError(errorDescription?: string | null, message?: string | null) {
+  const rawMessage = errorDescription || message || "";
+  const normalized = rawMessage.trim().toLowerCase();
+
+  if (normalized.includes("email rate limit exceeded")) {
+    return "Ya se enviaron demasiados mails de registro a esta dirección. Revisa tu bandeja o espera unos minutos antes de volver a intentar.";
+  }
+
+  return rawMessage || "No se pudo crear la cuenta.";
+}
+
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -151,10 +162,10 @@ export async function POST(request: NextRequest) {
   if (!signupResponse.ok) {
     return NextResponse.json(
       {
-        error:
-          signupData.error_description ||
-          signupData.msg ||
-          "No se pudo crear la cuenta."
+        error: normalizeSignupError(
+          signupData.error_description,
+          signupData.msg
+        )
       },
       { status: signupResponse.status }
     );
