@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
+import { buildAvatarPublicUrl, getAvatarStoragePath } from "@/lib/avatar-url";
 import { adminHeaders, requireAdminRequest } from "@/lib/server-auth";
 
 const AVATAR_BUCKET = "avatars";
@@ -15,19 +16,6 @@ type TargetProfile = {
   full_name?: string | null;
   avatar_url?: string | null;
 };
-
-function getAvatarStoragePath(avatarUrl: string | null | undefined) {
-  if (!avatarUrl) return null;
-
-  const marker = "/storage/v1/object/public/avatars/";
-  const index = avatarUrl.indexOf(marker);
-
-  if (index === -1) {
-    return null;
-  }
-
-  return avatarUrl.slice(index + marker.length);
-}
 
 async function fetchTargetProfile(
   supabaseUrl: string,
@@ -122,7 +110,7 @@ export async function POST(
     );
   }
 
-  const avatarUrl = `${auth.supabaseUrl}/storage/v1/object/public/${AVATAR_BUCKET}/${filePath}`;
+  const avatarUrl = buildAvatarPublicUrl(auth.supabaseUrl, filePath);
   const profileResponse = await fetch(
     `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${params.id}`,
     {

@@ -3,6 +3,7 @@ import {
   encodeUserCookie,
   USER_COOKIE_NAME
 } from "@/lib/session-cookies";
+import { buildAvatarPublicUrl } from "@/lib/avatar-url";
 import {
   AdminLiveCourtState,
   BookingAvailabilitySettings,
@@ -31,7 +32,6 @@ type SupabaseErrorPayload = {
   error?: string;
 };
 
-const AVATAR_BUCKET = "avatars";
 const AVATAR_MAX_SIZE_BYTES = 5 * 1024 * 1024;
 const AVATAR_ALLOWED_MIME_TYPES = new Map([
   ["image/jpeg", "jpg"],
@@ -553,7 +553,7 @@ export async function uploadProfileAvatar(
 
   return (
     payload?.avatar_url ||
-    `${supabaseUrl}/storage/v1/object/public/${AVATAR_BUCKET}/${filePath}`
+    buildAvatarPublicUrl(supabaseUrl, filePath)
   );
 }
 

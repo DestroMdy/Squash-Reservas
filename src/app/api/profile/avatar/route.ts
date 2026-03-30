@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { buildAvatarPublicUrl } from "@/lib/avatar-url";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 
 const AVATAR_BUCKET = "avatars";
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const avatarUrl = `${auth.supabaseUrl}/storage/v1/object/public/${AVATAR_BUCKET}/${filePath}`;
+  const avatarUrl = buildAvatarPublicUrl(auth.supabaseUrl, filePath);
   const profileResponse = await fetch(
     `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${auth.user.id}`,
     {
