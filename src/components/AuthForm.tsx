@@ -81,7 +81,7 @@ export function AuthForm() {
       if (mode === "register") {
         const captchaToken = await runRecaptcha("register");
         await signUp(email, password, captchaToken);
-        window.location.href = "/schedule";
+        window.location.href = "/profile";
       } else if (mode === "forgot") {
         await requestPasswordReset(email);
         setMessage(
