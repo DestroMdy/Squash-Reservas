@@ -27,6 +27,7 @@ import {
 
 type Tab = "direct" | "group";
 type GroupEditorMode = "create" | "edit";
+type MobilePane = "list" | "chat";
 
 function formatMessageTimestamp(dateValue?: string | null) {
   if (!dateValue) return "";
@@ -41,6 +42,7 @@ function formatMessageTimestamp(dateValue?: string | null) {
 
 export default function MessagesPage() {
   const [tab, setTab] = useState<Tab>("direct");
+  const [mobilePane, setMobilePane] = useState<MobilePane>("list");
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [players, setPlayers] = useState<Profile[]>([]);
   const [directMessages, setDirectMessages] = useState<PrivateMessage[]>([]);
@@ -70,6 +72,12 @@ export default function MessagesPage() {
     const params = new URLSearchParams(window.location.search);
     setInitialRecipientId(params.get("to"));
   }, []);
+
+  useEffect(() => {
+    if (initialRecipientId) {
+      setMobilePane("chat");
+    }
+  }, [initialRecipientId]);
 
   async function loadData(preferredRecipientId?: string | null) {
     const token = getSession()?.access_token;
@@ -301,6 +309,7 @@ export default function MessagesPage() {
   }
 
   function openCreateGroup() {
+    setMobilePane("list");
     setShowEditGroup(false);
     setGroupFormName("");
     setGroupFormMemberIds([]);
@@ -309,6 +318,7 @@ export default function MessagesPage() {
 
   function openEditGroup() {
     if (!selectedGroup) return;
+    setMobilePane("list");
     setShowCreateGroup(false);
     setGroupFormName(selectedGroup.name || "");
     setGroupFormMemberIds(
@@ -511,7 +521,10 @@ export default function MessagesPage() {
               <button
                 type="button"
                 className={tab === "direct" ? "btn-primary" : "btn-secondary"}
-                onClick={() => setTab("direct")}
+                onClick={() => {
+                  setTab("direct");
+                  setMobilePane("list");
+                }}
               >
                 Mensajes directos
                 {directUnreadCount > 0 ? (
@@ -523,7 +536,10 @@ export default function MessagesPage() {
               <button
                 type="button"
                 className={tab === "group" ? "btn-primary" : "btn-secondary"}
-                onClick={() => setTab("group")}
+                onClick={() => {
+                  setTab("group");
+                  setMobilePane("list");
+                }}
               >
                 Grupos privados
                 {groupUnreadCount > 0 ? (
@@ -535,7 +551,11 @@ export default function MessagesPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[320px,1fr]">
-              <section className="card space-y-4 p-4">
+              <section
+                className={`card space-y-4 p-4 ${
+                  mobilePane === "chat" ? "hidden lg:block" : "block"
+                }`}
+              >
                 {tab === "direct" ? (
                   <>
                     <label className="block text-sm font-medium text-slate-700">
@@ -573,7 +593,10 @@ export default function MessagesPage() {
                           <button
                             key={player.id}
                             type="button"
-                            onClick={() => setSelectedPlayerId(player.id)}
+                            onClick={() => {
+                              setSelectedPlayerId(player.id);
+                              setMobilePane("chat");
+                            }}
                             className={`animate-pop-in flex w-full items-center gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                               active
                                 ? "border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10"
@@ -691,7 +714,10 @@ export default function MessagesPage() {
                             <button
                               key={group.id}
                               type="button"
-                              onClick={() => setSelectedGroupId(group.id)}
+                              onClick={() => {
+                                setSelectedGroupId(group.id);
+                                setMobilePane("chat");
+                              }}
                               className={`animate-pop-in flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${
                                 active
                                   ? "border-slate-900 bg-slate-900 text-white shadow-lg shadow-slate-900/10"
@@ -787,9 +813,22 @@ export default function MessagesPage() {
                   </>
                 )}
               </section>
-              <section className="card flex min-h-[520px] flex-col p-4">
+              <section
+                className={`card min-h-[520px] flex-col p-4 ${
+                  mobilePane === "list" ? "hidden lg:flex" : "flex"
+                }`}
+              >
                 {tab === "direct" ? (
                   <>
+                    <div className="mb-3 lg:hidden">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setMobilePane("list")}
+                      >
+                        Volver a conversaciones
+                      </button>
+                    </div>
                     <div className="border-b border-slate-200 pb-4">
                       <div className="flex items-center gap-3">
                         <AvatarImage
@@ -876,6 +915,15 @@ export default function MessagesPage() {
                   </>
                 ) : (
                   <>
+                    <div className="mb-3 lg:hidden">
+                      <button
+                        type="button"
+                        className="btn-secondary"
+                        onClick={() => setMobilePane("list")}
+                      >
+                        Volver a grupos
+                      </button>
+                    </div>
                     <div className="border-b border-slate-200 pb-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
