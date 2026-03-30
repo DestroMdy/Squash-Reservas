@@ -81,8 +81,7 @@ export function AuthForm() {
       if (mode === "register") {
         const captchaToken = await runRecaptcha("register");
         await signUp(email, password, captchaToken);
-        setMessage("Cuenta creada. Ya puedes ingresar con tu email y contraseña.");
-        setMode("login");
+        window.location.href = "/schedule";
       } else if (mode === "forgot") {
         await requestPasswordReset(email);
         setMessage(

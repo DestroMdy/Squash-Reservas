@@ -1,5 +1,11 @@
+import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import {
+  encodeUserCookie,
+  REFRESH_COOKIE_NAME,
+  USER_COOKIE_NAME
+} from "@/lib/session-cookies";
 
 type RecaptchaVerification = {
   success?: boolean;
@@ -20,6 +26,18 @@ type AdminUserPayload = {
   msg?: string;
   error?: string;
   message?: string;
+  error_description?: string;
+};
+
+type SessionPayload = {
+  access_token: string;
+  refresh_token?: string;
+  token_type?: string;
+  expires_in?: number;
+  user?: {
+    id: string;
+    email?: string;
+  };
   error_description?: string;
 };
 
@@ -66,6 +84,11 @@ function adminHeaders(serviceRoleKey: string) {
     Authorization: `Bearer ${serviceRoleKey}`,
     "Content-Type": "application/json"
   };
+}
+
+function shouldUseSecureCookies(request: NextRequest) {
+  const host = request.headers.get("host") || "";
+  return !/^(localhost|127\.0\.0\.1)(:\d+)?$/i.test(host);
 }
 
 async function deleteAuthUser(
@@ -255,5 +278,67 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  return NextResponse.json({ ok: true });
+  const loginResponse = await fetch(
+    `${supabaseUrl}/auth/v1/token?grant_type=password`,
+    {
+      method: "POST",
+      headers: {
+        apikey: anonKey,
+        Authorization: `Bearer ${anonKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        email: normalizedEmail,
+        password: body.password
+      }),
+      cache: "no-store"
+    }
+  );
+
+  const loginData = (await loginResponse.json()) as SessionPayload;
+
+  if (!loginResponse.ok || !loginData.access_token) {
+    await deleteAuthUser(supabaseUrl, serviceRoleKey, createdUserId);
+
+    return NextResponse.json(
+      {
+        error:
+          loginData.error_description ||
+          "La cuenta se creó, pero no se pudo iniciar sesión automáticamente."
+      },
+      { status: 500 }
+    );
+  }
+
+  const cookieStore = cookies();
+  const secure = shouldUseSecureCookies(request);
+  const user = {
+    id: createdUserId,
+    email: normalizedEmail
+  };
+
+  if (loginData.refresh_token) {
+    cookieStore.set(REFRESH_COOKIE_NAME, loginData.refresh_token, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure,
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30
+    });
+  }
+
+  cookieStore.set(USER_COOKIE_NAME, encodeUserCookie(user), {
+    httpOnly: false,
+    sameSite: "lax",
+    secure,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 30
+  });
+
+  return NextResponse.json({
+    access_token: loginData.access_token,
+    token_type: loginData.token_type,
+    expires_in: loginData.expires_in,
+    user
+  });
 }

@@ -219,12 +219,21 @@ export async function signUp(
     body: JSON.stringify({ email, password, captchaToken })
   });
 
-  const data = (await response.json()) as {
+  const data = (await response.json()) as SessionData & {
     error?: string;
   };
 
   if (!response.ok) {
     throw new Error(data.error || "No se pudo registrar");
+  }
+
+  if (data.access_token) {
+    setSession({
+      access_token: data.access_token,
+      token_type: data.token_type,
+      expires_in: data.expires_in,
+      user: data.user
+    });
   }
 }
 
