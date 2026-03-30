@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { FormEvent, useEffect, useState } from "react";
+import { storePostSignupRedirect } from "@/lib/post-signup-redirect";
 import {
   requestPasswordReset,
   signInWithPassword,
@@ -81,7 +82,8 @@ export function AuthForm() {
       if (mode === "register") {
         const captchaToken = await runRecaptcha("register");
         await signUp(email, password, captchaToken);
-        window.location.href = "/profile?welcome=1";
+        storePostSignupRedirect("/profile?welcome=1");
+        window.location.replace("/profile?welcome=1");
       } else if (mode === "forgot") {
         await requestPasswordReset(email);
         setMessage(
