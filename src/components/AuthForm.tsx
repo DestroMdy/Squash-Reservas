@@ -81,9 +81,7 @@ export function AuthForm() {
       if (mode === "register") {
         const captchaToken = await runRecaptcha("register");
         await signUp(email, password, captchaToken);
-        setMessage(
-          "Cuenta creada. Revisá tu email para confirmar la cuenta antes de iniciar sesión."
-        );
+        setMessage("Cuenta creada. Ya puedes ingresar con tu email y contraseña.");
         setMode("login");
       } else if (mode === "forgot") {
         await requestPasswordReset(email);
@@ -96,7 +94,7 @@ export function AuthForm() {
         window.location.href = "/schedule";
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Ocurrió un error");
+      setMessage(error instanceof Error ? error.message : "Ocurrió un error.");
     } finally {
       setLoading(false);
     }
@@ -145,7 +143,7 @@ export function AuthForm() {
             type="email"
             className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(event) => setEmail(event.target.value)}
             required
           />
         </div>
@@ -159,7 +157,7 @@ export function AuthForm() {
               type="password"
               className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(event) => setPassword(event.target.value)}
               required
               minLength={6}
             />

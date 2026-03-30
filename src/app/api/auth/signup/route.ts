@@ -12,6 +12,17 @@ type RecaptchaVerification = {
 
 const RECAPTCHA_THRESHOLD = 0.5;
 
+type AdminUserPayload = {
+  id?: string;
+  user?: {
+    id?: string;
+  } | null;
+  msg?: string;
+  error?: string;
+  message?: string;
+  error_description?: string;
+};
+
 function buildRecaptchaDebug(verification: RecaptchaVerification) {
   return {
     success: verification.success ?? false,
@@ -31,16 +42,58 @@ function normalizeSignupError(errorDescription?: string | null, message?: string
     return "Ya se enviaron demasiados mails de registro a esta dirección. Revisa tu bandeja o espera unos minutos antes de volver a intentar.";
   }
 
+  if (
+    normalized.includes("already been registered") ||
+    normalized.includes("user already registered") ||
+    normalized.includes("already registered")
+  ) {
+    return "Ya existe una cuenta registrada con ese email.";
+  }
+
+  if (
+    normalized.includes("password should be at least") ||
+    normalized.includes("password is too short")
+  ) {
+    return "La contraseña debe tener al menos 6 caracteres.";
+  }
+
   return rawMessage || "No se pudo crear la cuenta.";
+}
+
+function adminHeaders(serviceRoleKey: string) {
+  return {
+    apikey: serviceRoleKey,
+    Authorization: `Bearer ${serviceRoleKey}`,
+    "Content-Type": "application/json"
+  };
+}
+
+async function deleteAuthUser(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string
+) {
+  await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    method: "DELETE",
+    headers: adminHeaders(serviceRoleKey),
+    cache: "no-store"
+  }).catch(() => null);
 }
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY;
   const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY;
 
-  if (!supabaseUrl || !anonKey || !recaptchaSecret || !recaptchaSiteKey) {
+  if (
+    !supabaseUrl ||
+    !anonKey ||
+    !serviceRoleKey ||
+    !recaptchaSecret ||
+    !recaptchaSiteKey
+  ) {
     return NextResponse.json(
       { error: "Falta configurar reCAPTCHA para habilitar registros nuevos." },
       { status: 503 }
@@ -141,23 +194,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const signupResponse = await fetch(`${supabaseUrl}/auth/v1/signup`, {
+  const normalizedEmail = body.email.trim().toLowerCase();
+
+  const signupResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
     method: "POST",
-    headers: {
-      apikey: anonKey,
-      Authorization: `Bearer ${anonKey}`,
-      "Content-Type": "application/json"
-    },
+    headers: adminHeaders(serviceRoleKey),
     body: JSON.stringify({
-      email: body.email,
-      password: body.password
-    })
+      email: normalizedEmail,
+      password: body.password,
+      email_confirm: true
+    }),
+    cache: "no-store"
   });
 
-  const signupData = (await signupResponse.json()) as {
-    error_description?: string;
-    msg?: string;
-  };
+  const signupData = (await signupResponse.json()) as AdminUserPayload;
 
   if (!signupResponse.ok) {
     return NextResponse.json(
@@ -168,6 +218,40 @@ export async function POST(request: NextRequest) {
         )
       },
       { status: signupResponse.status }
+    );
+  }
+
+  const createdUserId = signupData.user?.id || signupData.id;
+
+  if (!createdUserId) {
+    return NextResponse.json(
+      { error: "La cuenta se creó de forma incompleta. Intenta nuevamente." },
+      { status: 500 }
+    );
+  }
+
+  const profileResponse = await fetch(
+    `${supabaseUrl}/rest/v1/profiles?on_conflict=id`,
+    {
+      method: "POST",
+      headers: {
+        ...adminHeaders(serviceRoleKey),
+        Prefer: "resolution=merge-duplicates,return=minimal"
+      },
+      body: JSON.stringify({
+        id: createdUserId,
+        role: "player"
+      }),
+      cache: "no-store"
+    }
+  );
+
+  if (!profileResponse.ok) {
+    await deleteAuthUser(supabaseUrl, serviceRoleKey, createdUserId);
+
+    return NextResponse.json(
+      { error: "No se pudo preparar el perfil inicial de la cuenta." },
+      { status: 500 }
     );
   }
 
