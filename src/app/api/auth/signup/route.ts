@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { ensureGeneralMessageGroup } from "@/lib/general-message-group";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import {
   encodeUserCookie,
@@ -275,6 +276,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "No se pudo preparar el perfil inicial de la cuenta." },
       { status: 500 }
+    );
+  }
+
+  try {
+    await ensureGeneralMessageGroup({
+      supabaseUrl,
+      serviceRoleKey,
+      actorUserId: createdUserId
+    });
+  } catch (error) {
+    console.warn(
+      "No se pudo sincronizar el grupo general al registrar usuario",
+      error instanceof Error ? error.message : error
     );
   }
 

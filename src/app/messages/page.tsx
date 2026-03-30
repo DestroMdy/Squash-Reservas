@@ -178,8 +178,11 @@ export default function MessagesPage() {
     ? groupMembers
     : selectedGroup?.members || [];
 
+  const selectedGroupIsGeneral = Boolean(selectedGroup?.is_general);
   const canEditSelectedGroup =
-    Boolean(selectedGroup) && selectedGroup?.created_by === currentUserId;
+    Boolean(selectedGroup) &&
+    !selectedGroupIsGeneral &&
+    selectedGroup?.created_by === currentUserId;
 
   const directUnreadCount = useMemo(() => {
     if (!currentUserId) return 0;
@@ -629,7 +632,7 @@ export default function MessagesPage() {
                       <div>
                         <p className="font-medium text-slate-900">Tus grupos</p>
                         <p className="text-sm text-slate-500">
-                          Armá grupos cerrados entre jugadores.
+                          Usá el grupo general del club o armá grupos cerrados entre jugadores.
                         </p>
                       </div>
                       <div className="flex gap-2">
@@ -680,6 +683,9 @@ export default function MessagesPage() {
                             .map((member) => member.full_name || "Sin nombre")
                             .slice(0, 2)
                             .join(", ");
+                          const groupSummary = group.is_general
+                            ? `${group.members?.length || 0} jugadores registrados`
+                            : names || "Sin integrantes visibles";
 
                           return (
                             <button
@@ -707,13 +713,26 @@ export default function MessagesPage() {
                                   ))}
                                 </div>
                                 <div className="min-w-0">
-                                  <p className="truncate font-medium">{group.name}</p>
+                                  <div className="flex items-center gap-2">
+                                    <p className="truncate font-medium">{group.name}</p>
+                                    {group.is_general ? (
+                                      <span
+                                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                          active
+                                            ? "bg-orange-400 text-slate-950"
+                                            : "bg-orange-100 text-orange-700"
+                                        }`}
+                                      >
+                                        General
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   <p
                                     className={`truncate text-sm ${
                                       active ? "text-slate-200" : "text-slate-500"
                                     }`}
                                   >
-                                    {names || "Sin integrantes visibles"}
+                                    {groupSummary}
                                   </p>
                                   <p
                                     className={`mt-1 truncate text-xs ${
@@ -853,7 +872,9 @@ export default function MessagesPage() {
                             {selectedGroup?.name || "Elegí un grupo"}
                           </p>
                           <p className="text-sm text-slate-500">
-                            {visibleGroupMembers.length} integrantes
+                            {selectedGroupIsGeneral
+                              ? `${visibleGroupMembers.length} jugadores registrados`
+                              : `${visibleGroupMembers.length} integrantes`}
                           </p>
                         </div>
                         {canEditSelectedGroup ? (
@@ -866,7 +887,11 @@ export default function MessagesPage() {
                           </button>
                         ) : null}
                       </div>
-                      {visibleGroupMembers.length ? (
+                      {selectedGroupIsGeneral ? (
+                        <div className="mt-3 rounded-2xl border border-orange-200 bg-orange-50 p-3 text-sm text-slate-700">
+                          Este grupo incluye automáticamente a todos los jugadores registrados del club.
+                        </div>
+                      ) : visibleGroupMembers.length ? (
                         <div className="mt-3 flex flex-wrap gap-2">
                           {visibleGroupMembers.map((member) => (
                             <span

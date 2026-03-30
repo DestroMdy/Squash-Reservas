@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import {
+  ensureGeneralMessageGroup
+} from "@/lib/general-message-group";
+import {
+  isGeneralMessageGroupName,
+  sortPrivateMessageGroups
+} from "@/lib/message-groups";
 
 type CreateGroupBody = {
   name?: string;
@@ -21,6 +28,22 @@ export async function GET(request: NextRequest) {
   });
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  try {
+    await ensureGeneralMessageGroup({
+      supabaseUrl: auth.supabaseUrl,
+      serviceRoleKey: auth.serviceRoleKey,
+      actorUserId: auth.user.id
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+
+    if (isMissingGroupsError(message)) {
+      return NextResponse.json({ groups: [], unavailable: true });
+    }
+
+    console.warn("No se pudo sincronizar el grupo general", message);
   }
 
   const membershipsResponse = await fetch(
@@ -191,6 +214,7 @@ export async function GET(request: NextRequest) {
 
       return {
         ...group,
+        is_general: isGeneralMessageGroupName(group.name),
         members: groupMembers,
         unread_count: unreadCount,
         last_message_at: latestMessage?.created_at || null,
@@ -204,7 +228,7 @@ export async function GET(request: NextRequest) {
   );
 
   return NextResponse.json({
-    groups: enrichedGroups,
+    groups: sortPrivateMessageGroups(enrichedGroups),
     unavailable: false
   });
 }
@@ -226,6 +250,13 @@ export async function POST(request: NextRequest) {
   if (!name) {
     return NextResponse.json(
       { error: "El grupo necesita un nombre." },
+      { status: 400 }
+    );
+  }
+
+  if (isGeneralMessageGroupName(name)) {
+    return NextResponse.json(
+      { error: "Ese nombre est\u00e1 reservado para el grupo general del club." },
       { status: 400 }
     );
   }

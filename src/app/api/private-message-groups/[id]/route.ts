@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import { isGeneralMessageGroupName } from "@/lib/message-groups";
 
 type UpdateGroupBody = {
   name?: string;
@@ -30,6 +31,13 @@ async function requireGroupCreator(request: NextRequest, groupId: string) {
 
   if (!groupResponse.ok || !group) {
     return { error: "No se encontró el grupo.", status: 404 as const };
+  }
+
+  if (isGeneralMessageGroupName(group.name)) {
+    return {
+      error: "El grupo general del club se administra automáticamente.",
+      status: 403 as const
+    };
   }
 
   if (group.created_by !== auth.user.id) {
@@ -67,6 +75,13 @@ export async function PATCH(
   if (!name) {
     return NextResponse.json(
       { error: "El grupo necesita un nombre." },
+      { status: 400 }
+    );
+  }
+
+  if (isGeneralMessageGroupName(name)) {
+    return NextResponse.json(
+      { error: "Ese nombre está reservado para el grupo general del club." },
       { status: 400 }
     );
   }
@@ -111,7 +126,9 @@ export async function PATCH(
   const players = playersText.trim() ? JSON.parse(playersText) : [];
   const allowedPlayerIds = new Set(players.map((player: { id: string }) => player.id));
 
-  if ([auth.user.id, ...memberIds].some((memberId) => !allowedPlayerIds.has(memberId))) {
+  if (
+    [auth.user.id, ...memberIds].some((memberId) => !allowedPlayerIds.has(memberId))
+  ) {
     return NextResponse.json(
       { error: "Uno o más integrantes no son válidos." },
       { status: 400 }

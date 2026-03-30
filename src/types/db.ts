@@ -120,6 +120,7 @@ export interface PrivateMessageGroup {
   created_by: string;
   created_at: string;
   updated_at: string;
+  is_general?: boolean;
   unread_count?: number;
   last_message_at?: string | null;
   last_message_id?: string | null;
