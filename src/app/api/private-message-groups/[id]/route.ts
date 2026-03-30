@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 import { isGeneralMessageGroupName } from "@/lib/message-groups";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MESSAGES_ERROR,
+  isProfileCompletionRecordComplete
+} from "@/lib/profile-completion";
 
 type UpdateGroupBody = {
   name?: string;
@@ -14,6 +19,19 @@ async function requireGroupCreator(request: NextRequest, groupId: string) {
 
   if ("error" in auth) {
     return auth;
+  }
+
+  const profileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!profileStatus.complete) {
+    return {
+      error: INCOMPLETE_PROFILE_MESSAGES_ERROR,
+      status: 403 as const
+    };
   }
 
   const groupResponse = await fetch(
@@ -103,7 +121,7 @@ export async function PATCH(
       }
     ),
     fetch(
-      `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${[auth.user.id, ...memberIds].join(",")})`,
+      `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category,avatar_url&id=in.(${[auth.user.id, ...memberIds].join(",")})`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey),
@@ -132,6 +150,25 @@ export async function PATCH(
     return NextResponse.json(
       { error: "Uno o más integrantes no son válidos." },
       { status: 400 }
+    );
+  }
+
+  const hasIncompleteMember = players.some(
+    (player: {
+      id: string;
+      full_name?: string | null;
+      phone?: string | null;
+      category?: string | null;
+    }) => desiredIds.has(player.id) && !isProfileCompletionRecordComplete(player)
+  );
+
+  if (hasIncompleteMember) {
+    return NextResponse.json(
+      {
+        error:
+          "Solo puedes dejar en el grupo a jugadores que ya completaron su perfil."
+      },
+      { status: 403 }
     );
   }
 

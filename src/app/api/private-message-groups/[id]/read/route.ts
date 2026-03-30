@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MESSAGES_ERROR
+} from "@/lib/profile-completion";
 
 export async function POST(
   request: NextRequest,
@@ -11,6 +15,19 @@ export async function POST(
 
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const profileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!profileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MESSAGES_ERROR },
+      { status: 403 }
+    );
   }
 
   const updateResponse = await fetch(

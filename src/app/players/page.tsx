@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "../../components/AvatarImage";
+import { isProfileCompletionRecordComplete } from "../../lib/profile-completion";
 import { fetchPlayers, getSession } from "../../lib/supabase";
 import { SectionTitle } from "../../components/SectionTitle";
 import { Profile } from "../../types/db";
@@ -124,12 +125,18 @@ export default function PlayersPage() {
                           </div>
 
                           {player.id !== currentUserId ? (
+                            isProfileCompletionRecordComplete(player) ? (
                             <Link
                               href={`/messages?to=${player.id}`}
                               className="btn-secondary w-full text-center sm:w-auto sm:shrink-0 sm:whitespace-nowrap"
                             >
                               Enviar mensaje
                             </Link>
+                            ) : (
+                              <span className="rounded-full bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500 sm:text-left">
+                                Perfil incompleto
+                              </span>
+                            )
                           ) : (
                             <span className="rounded-full bg-slate-100 px-3 py-2 text-center text-xs font-medium text-slate-500 sm:text-left">
                               Tu perfil

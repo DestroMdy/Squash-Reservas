@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MESSAGES_ERROR
+} from "@/lib/profile-completion";
 
 async function requireGroupMember(request: NextRequest, groupId: string) {
   const auth = await requireAuthenticatedRequest(request, {
@@ -9,6 +13,19 @@ async function requireGroupMember(request: NextRequest, groupId: string) {
 
   if ("error" in auth) {
     return auth;
+  }
+
+  const profileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!profileStatus.complete) {
+    return {
+      error: INCOMPLETE_PROFILE_MESSAGES_ERROR,
+      status: 403 as const
+    };
   }
 
   const membershipResponse = await fetch(

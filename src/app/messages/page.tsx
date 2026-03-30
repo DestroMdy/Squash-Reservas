@@ -1,11 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { AppNoticeModal } from "@/components/AppNoticeModal";
 import { SectionTitle } from "@/components/SectionTitle";
 import {
+  INCOMPLETE_PROFILE_MESSAGES_ERROR,
+  isProfileCompletionRecordComplete
+} from "@/lib/profile-completion";
+import {
   createPrivateMessageGroup,
+  fetchProfile,
   fetchPlayers,
   fetchPrivateGroupMessages,
   fetchPrivateMessageGroups,
@@ -62,6 +68,7 @@ export default function MessagesPage() {
   const [groupsUnavailable, setGroupsUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [groupLoading, setGroupLoading] = useState(false);
+  const [profileComplete, setProfileComplete] = useState(true);
   const [sending, setSending] = useState(false);
   const [creatingGroup, setCreatingGroup] = useState(false);
   const [updatingGroup, setUpdatingGroup] = useState(false);
@@ -105,6 +112,22 @@ export default function MessagesPage() {
       setCurrentUserId(user.id);
     }
 
+    const currentProfile = await fetchProfile(userId, token).catch(() => null);
+    const currentProfileComplete = isProfileCompletionRecordComplete(currentProfile);
+    setProfileComplete(currentProfileComplete);
+
+    if (!currentProfileComplete) {
+      setPlayers([]);
+      setDirectMessages([]);
+      setGroups([]);
+      setGroupMessages([]);
+      setGroupMembers([]);
+      setGroupsUnavailable(false);
+      setError(INCOMPLETE_PROFILE_MESSAGES_ERROR);
+      setLoading(false);
+      return;
+    }
+
     const [allPlayers, messages, groupData] = await Promise.all([
       fetchPlayers(token),
       fetchPrivateMessages(userId, token),
@@ -114,7 +137,9 @@ export default function MessagesPage() {
       }))
     ]);
 
-    const availablePlayers = (allPlayers ?? []).filter((player) => player.id !== userId);
+    const availablePlayers = (allPlayers ?? []).filter(
+      (player) => player.id !== userId && isProfileCompletionRecordComplete(player)
+    );
     setPlayers(availablePlayers);
     setDirectMessages(messages ?? []);
     setGroups(groupData.groups ?? []);
@@ -609,9 +634,31 @@ export default function MessagesPage() {
         />
 
         {loading ? <p>Cargando mensajes...</p> : null}
-        {error ? <p className="text-red-600">{error}</p> : null}
+        {error && error !== INCOMPLETE_PROFILE_MESSAGES_ERROR ? (
+          <p className="text-red-600">{error}</p>
+        ) : null}
 
-        {!loading && !error ? (
+        {!loading && !profileComplete ? (
+          <div className="card border-2 border-amber-300 bg-amber-50 p-5">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">
+              Mensajes bloqueados
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-900">
+              Completá tu perfil para poder enviar y recibir mensajes
+            </h2>
+            <p className="mt-2 text-sm text-slate-700">
+              Antes de usar el chat, cargá tu nombre, teléfono y categoría en
+              tu perfil.
+            </p>
+            <div className="mt-4">
+              <Link href="/profile" className="btn-primary">
+                Ir a Mi perfil
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
+        {!loading && !error && profileComplete ? (
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               <button

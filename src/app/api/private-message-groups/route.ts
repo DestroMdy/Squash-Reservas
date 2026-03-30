@@ -8,6 +8,11 @@ import {
   isGeneralMessageGroupName,
   sortPrivateMessageGroups
 } from "@/lib/message-groups";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MESSAGES_ERROR,
+  isProfileCompletionRecordComplete
+} from "@/lib/profile-completion";
 
 type CreateGroupBody = {
   name?: string;
@@ -28,6 +33,19 @@ export async function GET(request: NextRequest) {
   });
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const profileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!profileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MESSAGES_ERROR },
+      { status: 403 }
+    );
   }
 
   try {
@@ -241,6 +259,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  const profileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!profileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MESSAGES_ERROR },
+      { status: 403 }
+    );
+  }
+
   const body = (await request.json()) as CreateGroupBody;
   const name = body.name?.trim() || "";
   const memberIds = Array.from(
@@ -333,6 +364,90 @@ export async function POST(request: NextRequest) {
   }
 
   const allMemberIds = [auth.user.id, ...memberIds];
+  const memberProfilesResponse = await fetch(
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category&id=in.(${allMemberIds.join(",")})`,
+    {
+      method: "GET",
+      headers: adminHeaders(auth.serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  const memberProfilesText = await memberProfilesResponse.text();
+
+  if (!memberProfilesResponse.ok) {
+    await fetch(
+      `${auth.supabaseUrl}/rest/v1/private_message_groups?id=eq.${createdGroup.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          ...adminHeaders(auth.serviceRoleKey),
+          Prefer: "return=minimal"
+        },
+        cache: "no-store"
+      }
+    ).catch(() => null);
+
+    return NextResponse.json(
+      { error: "No se pudieron validar los perfiles del grupo." },
+      { status: 400 }
+    );
+  }
+
+  const memberProfiles = memberProfilesText.trim()
+    ? JSON.parse(memberProfilesText)
+    : [];
+
+  if (memberProfiles.length !== allMemberIds.length) {
+    await fetch(
+      `${auth.supabaseUrl}/rest/v1/private_message_groups?id=eq.${createdGroup.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          ...adminHeaders(auth.serviceRoleKey),
+          Prefer: "return=minimal"
+        },
+        cache: "no-store"
+      }
+    ).catch(() => null);
+
+    return NextResponse.json(
+      { error: "Uno o más integrantes no son válidos." },
+      { status: 400 }
+    );
+  }
+
+  const hasIncompleteMember = memberProfiles.some(
+    (profile: {
+      id: string;
+      full_name?: string | null;
+      phone?: string | null;
+      category?: string | null;
+    }) => !isProfileCompletionRecordComplete(profile)
+  );
+
+  if (hasIncompleteMember) {
+    await fetch(
+      `${auth.supabaseUrl}/rest/v1/private_message_groups?id=eq.${createdGroup.id}`,
+      {
+        method: "DELETE",
+        headers: {
+          ...adminHeaders(auth.serviceRoleKey),
+          Prefer: "return=minimal"
+        },
+        cache: "no-store"
+      }
+    ).catch(() => null);
+
+    return NextResponse.json(
+      {
+        error:
+          "Solo puedes crear grupos con jugadores que ya completaron su perfil."
+      },
+      { status: 403 }
+    );
+  }
+
   const membersResponse = await fetch(
     `${auth.supabaseUrl}/rest/v1/private_message_group_members`,
     {

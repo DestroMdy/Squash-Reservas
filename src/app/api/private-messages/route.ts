@@ -4,10 +4,15 @@ import {
   requireAuthenticatedRequest
 } from "@/lib/server-auth";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MESSAGES_ERROR
+} from "@/lib/profile-completion";
 
 type ProfileRecord = {
   id: string;
   full_name?: string | null;
+  phone?: string | null;
   category?: string | null;
 };
 
@@ -119,6 +124,19 @@ export async function POST(request: NextRequest) {
 
   const serviceRoleKey = auth.serviceRoleKey as string;
 
+  const senderProfileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!senderProfileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MESSAGES_ERROR },
+      { status: 403 }
+    );
+  }
+
   const body = (await request.json()) as CreateMessageBody;
 
   if (!body.sender_id || !body.recipient_id || !body.body?.trim()) {
@@ -165,7 +183,7 @@ export async function POST(request: NextRequest) {
   }
 
   const profilesResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category&id=in.(${body.sender_id},${body.recipient_id})`,
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category&id=in.(${body.sender_id},${body.recipient_id})`,
     {
       method: "GET",
       headers: adminHeaders(serviceRoleKey)
@@ -182,6 +200,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "No se encontró el emisor o destinatario." },
       { status: 404 }
+    );
+  }
+
+  if (!recipientProfile.phone?.trim() || !recipientProfile.category?.trim() || !recipientProfile.full_name?.trim()) {
+    return NextResponse.json(
+      {
+        error:
+          "Ese jugador todavia no completo su perfil, por ahora no puede recibir mensajes."
+      },
+      { status: 403 }
     );
   }
 
@@ -246,6 +274,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  const profileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!profileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MESSAGES_ERROR },
+      { status: 403 }
+    );
+  }
+
   const senderFilter = `sender_id.eq.${auth.user.id}`;
   const recipientFilter = `recipient_id.eq.${auth.user.id}`;
 
@@ -277,6 +318,19 @@ export async function PATCH(request: NextRequest) {
 
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const profileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    auth.serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!profileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MESSAGES_ERROR },
+      { status: 403 }
+    );
   }
 
   const body = (await request.json()) as MarkReadBody;
