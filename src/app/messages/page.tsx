@@ -713,17 +713,10 @@ export default function MessagesPage() {
                                   ))}
                                 </div>
                                 <div className="min-w-0">
-                                  {group.is_general ? (
-                                    <p
-                                      className={`mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${
-                                        active ? "text-orange-300" : "text-orange-600"
-                                      }`}
-                                    >
-                                      Canal general del club
-                                    </p>
-                                  ) : null}
                                   <div className="flex items-center gap-2">
-                                    <p className="truncate font-medium">{group.name}</p>
+                                    <p className="truncate font-medium">
+                                      {group.is_general ? "Grupo general" : group.name}
+                                    </p>
                                     {group.is_general ? (
                                       <span
                                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
@@ -736,6 +729,15 @@ export default function MessagesPage() {
                                       </span>
                                     ) : null}
                                   </div>
+                                  {group.is_general ? (
+                                    <p
+                                      className={`mt-1 truncate text-xs font-medium ${
+                                        active ? "text-orange-300" : "text-orange-600"
+                                      }`}
+                                    >
+                                      Canal general del club
+                                    </p>
+                                  ) : null}
                                   <p
                                     className={`truncate text-sm ${
                                       active ? "text-slate-200" : "text-slate-500"
