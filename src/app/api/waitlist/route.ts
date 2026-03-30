@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getReservationsPausedMessage } from "@/lib/booking-availability";
+import { getStoredBookingAvailabilitySettings } from "@/lib/booking-availability-store";
 import {
   addUserToWaitlist,
   getWaitlistSnapshot,
@@ -62,6 +64,17 @@ export async function POST(request: NextRequest) {
   const auth = await requireAuthenticatedRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+
+  const bookingAvailability = await getStoredBookingAvailabilitySettings().catch(
+    () => null
+  );
+
+  if (bookingAvailability?.reservations_enabled === false) {
+    return NextResponse.json(
+      { error: getReservationsPausedMessage(bookingAvailability.note) },
+      { status: 403, headers: responseHeaders() }
+    );
   }
 
   if (!isBookingWaitlistStoreConfigured()) {

@@ -4,6 +4,13 @@ export type ExternalTournamentPlatform = "rankedin" | "tournamentsoftware" | "ot
 export type LiveCourtId = "court-1" | "court-2";
 export type ScheduleDayOverrideMode = "closed" | "custom_hours";
 
+export interface BookingAvailabilitySettings {
+  reservations_enabled: boolean;
+  note: string | null;
+  updated_at: string;
+  updated_by: string | null;
+}
+
 export interface ScheduleDayOverride {
   slot_date: string;
   mode: ScheduleDayOverrideMode;

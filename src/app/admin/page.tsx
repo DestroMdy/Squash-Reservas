@@ -12,9 +12,11 @@ import {
 import { AdminLiveCenterSection } from "@/components/AdminLiveCenterSection";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
+import { getReservationsPausedMessage } from "@/lib/booking-availability";
 import { buildCsv } from "@/lib/csv";
 import {
   createExternalTournament,
+  fetchAdminBookingAvailability,
   deleteAdminScheduleOverride,
   deletePlayerAvatarAsAdmin,
   deleteExternalTournament,
@@ -30,6 +32,7 @@ import {
   getSession,
   getUser,
   promoteProfileToAdmin,
+  saveAdminBookingAvailability,
   saveAdminScheduleOverride,
   updatePlayerProfileAsAdmin,
   updateBookingAsAdmin,
@@ -39,6 +42,7 @@ import {
 import type {
   AdminAuditLog,
   Booking,
+  BookingAvailabilitySettings,
   BookingStatus,
   CasualMatch,
   ExternalTournament,
@@ -179,6 +183,12 @@ export default function AdminPage() {
   const [auditActionFilter, setAuditActionFilter] = useState("all");
   const [auditTargetFilter, setAuditTargetFilter] = useState("all");
   const [reportMonth, setReportMonth] = useState(getCurrentMonthKey());
+  const [bookingAvailability, setBookingAvailability] =
+    useState<BookingAvailabilitySettings | null>(null);
+  const [bookingAvailabilityStoreEnabled, setBookingAvailabilityStoreEnabled] =
+    useState(true);
+  const [reservationsEnabled, setReservationsEnabled] = useState(true);
+  const [bookingAvailabilityNote, setBookingAvailabilityNote] = useState("");
   const [scheduleOverrides, setScheduleOverrides] = useState<ScheduleDayOverride[]>([]);
   const [scheduleOverridesEnabled, setScheduleOverridesEnabled] = useState(true);
   const [scheduleDate, setScheduleDate] = useState(getTodayLocalDate());
@@ -195,6 +205,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingPlayerId, setSavingPlayerId] = useState<string | null>(null);
+  const [savingBookingAvailability, setSavingBookingAvailability] =
+    useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [savingTournament, setSavingTournament] = useState(false);
   const [deletingScheduleDate, setDeletingScheduleDate] = useState<string | null>(null);
@@ -249,7 +261,8 @@ export default function AdminPage() {
       allPlayers,
       externalTournaments,
       auditData,
-      scheduleData
+      scheduleData,
+      bookingAvailabilityData
     ] =
       await Promise.all([
         fetchBookingStats(token),
@@ -257,7 +270,8 @@ export default function AdminPage() {
         fetchPlayers(token),
         fetchAdminExternalTournaments(token),
         fetchAdminAuditLogs(token),
-        fetchAdminScheduleOverrides(token)
+        fetchAdminScheduleOverrides(token),
+        fetchAdminBookingAvailability(token)
       ]);
 
     setStats(bookingStats);
@@ -268,6 +282,14 @@ export default function AdminPage() {
     setAuditEnabled(auditData.enabled !== false);
     setScheduleOverrides(scheduleData.overrides ?? []);
     setScheduleOverridesEnabled(scheduleData.unavailable !== true);
+    setBookingAvailability(bookingAvailabilityData.settings ?? null);
+    setBookingAvailabilityStoreEnabled(
+      bookingAvailabilityData.unavailable !== true
+    );
+    setReservationsEnabled(
+      bookingAvailabilityData.settings?.reservations_enabled !== false
+    );
+    setBookingAvailabilityNote(bookingAvailabilityData.settings?.note || "");
     setError(null);
     setLoading(false);
   }, [redirectToLogin]);
@@ -463,6 +485,37 @@ export default function AdminPage() {
 
   function toggleSection(section: AdminSectionKey) {
     setOpenSections((current) => ({ ...current, [section]: !current[section] }));
+  }
+
+  async function handleSaveBookingAvailability() {
+    try {
+      setSavingBookingAvailability(true);
+      setMessage(null);
+      setError(null);
+
+      const result = await saveAdminBookingAvailability(getAdminToken(), {
+        reservations_enabled: reservationsEnabled,
+        note: bookingAvailabilityNote.trim() || null
+      });
+
+      setBookingAvailability(result.settings);
+      setBookingAvailabilityStoreEnabled(result.unavailable !== true);
+      setReservationsEnabled(result.settings?.reservations_enabled !== false);
+      setBookingAvailabilityNote(result.settings?.note || "");
+      setMessage(
+        reservationsEnabled
+          ? "Las reservas volvieron a quedar habilitadas."
+          : "Las reservas quedaron pausadas temporalmente."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar el estado global de reservas."
+      );
+    } finally {
+      setSavingBookingAvailability(false);
+    }
   }
 
   async function handleSaveScheduleOverride() {
@@ -1027,12 +1080,113 @@ export default function AdminPage() {
 
           <AdminAccordionSection
             title="Agenda por fecha"
-            description="Cierra un día completo o define un horario especial sin tocar todas las reservas."
+            description="Pausa reservas en todo el club o define un horario especial para una fecha puntual."
             count={scheduleOverrides.length}
             open={openSections.schedule}
             onToggle={() => toggleSection("schedule")}
           >
             <div className="space-y-5">
+              <div
+                className={`space-y-4 rounded-2xl border p-4 ${
+                  reservationsEnabled
+                    ? "border-emerald-200 bg-emerald-50"
+                    : "border-amber-300 bg-amber-50"
+                }`}
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
+                      Estado global de reservas
+                    </p>
+                    <h2 className="mt-2 text-lg font-semibold text-slate-900">
+                      {reservationsEnabled
+                        ? "Las reservas están habilitadas"
+                        : "Las reservas están pausadas"}
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Sirve para lanzar la app, dejar que la gente se registre y recién después abrir la agenda.
+                    </p>
+                  </div>
+
+                  <span
+                    className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                      reservationsEnabled
+                        ? "bg-emerald-100 text-emerald-800"
+                        : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {reservationsEnabled ? "Habilitadas" : "Pausadas"}
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={reservationsEnabled ? "btn-primary" : "btn-secondary"}
+                    onClick={() => setReservationsEnabled(true)}
+                    disabled={!bookingAvailabilityStoreEnabled}
+                  >
+                    Habilitar reservas
+                  </button>
+                  <button
+                    type="button"
+                    className={!reservationsEnabled ? "btn-primary" : "btn-secondary"}
+                    onClick={() => setReservationsEnabled(false)}
+                    disabled={!bookingAvailabilityStoreEnabled}
+                  >
+                    Pausar reservas
+                  </button>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                    Mensaje visible en la agenda mientras estén pausadas
+                  </label>
+                  <textarea
+                    className="min-h-[88px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                    value={bookingAvailabilityNote}
+                    onChange={(event) => setBookingAvailabilityNote(event.target.value)}
+                    placeholder="Ejemplo: Estamos terminando la puesta en marcha. Pronto vamos a habilitar las reservas."
+                    disabled={!bookingAvailabilityStoreEnabled}
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleSaveBookingAvailability}
+                    disabled={savingBookingAvailability || !bookingAvailabilityStoreEnabled}
+                  >
+                    {savingBookingAvailability ? "Guardando..." : "Guardar estado global"}
+                  </button>
+                </div>
+
+                {!bookingAvailabilityStoreEnabled ? (
+                  <p className="rounded-2xl border border-amber-300 bg-white/80 px-4 py-3 text-sm text-amber-900">
+                    El switch global de reservas no está disponible porque falta KV.
+                  </p>
+                ) : !reservationsEnabled ? (
+                  <p className="rounded-2xl border border-amber-300 bg-white/80 px-4 py-3 text-sm text-amber-950">
+                    Vista previa pública: {getReservationsPausedMessage(bookingAvailabilityNote)}
+                  </p>
+                ) : (
+                  <p className="rounded-2xl border border-emerald-300 bg-white/80 px-4 py-3 text-sm text-emerald-900">
+                    La agenda sigue operativa y los usuarios pueden reservar normalmente.
+                  </p>
+                )}
+
+                {bookingAvailability?.updated_at && bookingAvailability?.updated_by ? (
+                  <p className="text-xs text-slate-500">
+                    Última actualización:{" "}
+                    {new Intl.DateTimeFormat("es-AR", {
+                      dateStyle: "short",
+                      timeStyle: "short"
+                    }).format(new Date(bookingAvailability.updated_at))}
+                  </p>
+                ) : null}
+              </div>
+
               <div className="grid gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2">
                 <div>
                   <label className="mb-1 block text-sm font-medium text-slate-700">

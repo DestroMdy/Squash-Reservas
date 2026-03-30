@@ -10,6 +10,7 @@ export type AdminAuditAction =
   | "external_tournament.deleted"
   | "schedule.override.updated"
   | "schedule.override.cleared"
+  | "booking.availability.updated"
   | "live_stream.updated"
   | "live_stream.deleted"
   | "live_stream.player_mapping_upserted"

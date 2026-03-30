@@ -10,8 +10,15 @@ import {
   getSession,
   getUser
 } from "../../lib/supabase";
+import { getReservationsPausedMessage } from "../../lib/booking-availability";
 import { isPastSlot, isSlotWithinClubHours } from "../../lib/time-rules";
-import { Booking, Court, ScheduleDayOverride, TimeSlot } from "../../types/db";
+import {
+  Booking,
+  BookingAvailabilitySettings,
+  Court,
+  ScheduleDayOverride,
+  TimeSlot
+} from "../../types/db";
 
 type SlotWithRelations = TimeSlot & {
   courts?: Court;
@@ -38,6 +45,8 @@ export default function SchedulePage() {
   const [selectedDate, setSelectedDate] = useState("");
   const [slots, setSlots] = useState<SlotWithRelations[]>([]);
   const [scheduleOverride, setScheduleOverride] = useState<ScheduleDayOverride | null>(null);
+  const [bookingAvailability, setBookingAvailability] =
+    useState<BookingAvailabilitySettings | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +64,7 @@ export default function SchedulePage() {
         setLoading(true);
         setError(null);
         setScheduleOverride(null);
+        setBookingAvailability(null);
         const token = getSession()?.access_token;
         let adminUser = false;
 
@@ -69,6 +79,7 @@ export default function SchedulePage() {
         setIsAdmin(adminUser);
         const data = await fetchSlotsByDate(selectedDate, token);
         setScheduleOverride(data.scheduleOverride);
+        setBookingAvailability(data.bookingAvailability);
         setSlots(
           (data.slots ?? []).filter((slot) =>
             adminUser ? true : !isPastSlot(slot.slot_date, slot.end_time)
@@ -130,6 +141,17 @@ export default function SchedulePage() {
     };
   }, [scheduleOverride]);
 
+  const bookingAvailabilityLabel = useMemo(() => {
+    if (bookingAvailability?.reservations_enabled !== false) {
+      return null;
+    }
+
+    return {
+      title: "Reservas pausadas temporalmente",
+      description: getReservationsPausedMessage(bookingAvailability.note)
+    };
+  }, [bookingAvailability]);
+
   if (!mounted) return null;
 
   return (
@@ -183,11 +205,26 @@ export default function SchedulePage() {
         </section>
       ) : null}
 
+      {bookingAvailabilityLabel ? (
+        <section className="card border border-amber-300 bg-amber-50 p-4">
+          <p className="font-semibold text-amber-950">
+            {bookingAvailabilityLabel.title}
+          </p>
+          <p className="mt-1 text-sm text-amber-900">
+            {bookingAvailabilityLabel.description}
+          </p>
+        </section>
+      ) : null}
+
       {loading ? <p className="text-sm text-slate-600">Cargando agenda...</p> : null}
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
 
       {!loading && !error ? (
-        <ScheduleGrid slots={sortedSlots} selectedDate={selectedDate} />
+        <ScheduleGrid
+          slots={sortedSlots}
+          selectedDate={selectedDate}
+          bookingAvailability={bookingAvailability}
+        />
       ) : null}
     </div>
   );

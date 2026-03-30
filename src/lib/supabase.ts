@@ -5,6 +5,7 @@ import {
 } from "@/lib/session-cookies";
 import {
   AdminLiveCourtState,
+  BookingAvailabilitySettings,
   LiveCourtId,
   LivePlayerMapping,
   LiveCourtState,
@@ -560,6 +561,7 @@ export async function fetchSlotsByDate(date: string, token?: string) {
     error?: string;
     slots?: any[];
     schedule_override?: ScheduleDayOverride | null;
+    booking_availability?: BookingAvailabilitySettings | null;
   }>(response);
 
   if (!response.ok) {
@@ -568,7 +570,8 @@ export async function fetchSlotsByDate(date: string, token?: string) {
 
   return {
     slots: payload?.slots || [],
-    scheduleOverride: payload?.schedule_override || null
+    scheduleOverride: payload?.schedule_override || null,
+    bookingAvailability: payload?.booking_availability || null
   };
 }
 
@@ -927,6 +930,62 @@ export async function fetchAdminScheduleOverrides(token: string) {
   return {
     overrides: payload?.overrides || [],
     unavailable: payload?.unavailable === true
+  };
+}
+
+export async function fetchAdminBookingAvailability(token: string) {
+  const response = await authedRouteRequest("/api/admin/booking-availability", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    settings?: BookingAvailabilitySettings | null;
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudo cargar el estado global de reservas."
+    );
+  }
+
+  return {
+    settings: payload?.settings || null,
+    unavailable: payload?.unavailable === true
+  };
+}
+
+export async function saveAdminBookingAvailability(
+  token: string,
+  payload: {
+    reservations_enabled: boolean;
+    note?: string | null;
+  }
+) {
+  const response = await authedRouteRequest("/api/admin/booking-availability", {
+    method: "PATCH",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify(payload)
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    settings?: BookingAvailabilitySettings | null;
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error || "No se pudo guardar el estado global de reservas."
+    );
+  }
+
+  return {
+    settings: result?.settings || null,
+    unavailable: result?.unavailable === true
   };
 }
 

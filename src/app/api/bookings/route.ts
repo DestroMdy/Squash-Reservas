@@ -4,6 +4,10 @@ import {
   requireAdminRequest,
   requireAuthenticatedRequest
 } from "@/lib/server-auth";
+import {
+  getReservationsPausedMessage
+} from "@/lib/booking-availability";
+import { getStoredBookingAvailabilitySettings } from "@/lib/booking-availability-store";
 import { getBeginnerRulesStatus } from "@/lib/beginner-rules";
 import { getStoredScheduleOverride } from "@/lib/schedule-overrides-store";
 import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
@@ -368,6 +372,9 @@ export async function GET(request: NextRequest) {
     const scheduleOverride = await getStoredScheduleOverride(date).catch(
       () => null
     );
+    const bookingAvailability = await getStoredBookingAvailabilitySettings().catch(
+      () => null
+    );
 
     const response = await fetch(
       `${supabaseUrl}/rest/v1/time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id,profiles(id,full_name,category,avatar_url))&slot_date=eq.${date}&order=start_time.asc`,
@@ -404,7 +411,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       slots: visibleSlots,
-      schedule_override: scheduleOverride
+      schedule_override: scheduleOverride,
+      booking_availability: bookingAvailability
     });
   }
 
@@ -545,9 +553,19 @@ export async function POST(request: NextRequest) {
     process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
 
   const body = (await request.json()) as { slotId?: string };
+  const bookingAvailability = await getStoredBookingAvailabilitySettings().catch(
+    () => null
+  );
 
   if (!body.slotId) {
     return NextResponse.json({ error: "slotId es requerido" }, { status: 400 });
+  }
+
+  if (bookingAvailability?.reservations_enabled === false) {
+    return NextResponse.json(
+      { error: getReservationsPausedMessage(bookingAvailability.note) },
+      { status: 403 }
+    );
   }
 
   if (serviceRoleKey) {

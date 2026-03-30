@@ -20,7 +20,12 @@ import {
   canReserveSlot,
   isPastSlot
 } from "../lib/time-rules";
-import { Booking, Court, TimeSlot } from "../types/db";
+import {
+  Booking,
+  BookingAvailabilitySettings,
+  Court,
+  TimeSlot
+} from "../types/db";
 
 type SlotWithRelations = TimeSlot & {
   courts?: Court;
@@ -32,10 +37,12 @@ type SlotWithRelations = TimeSlot & {
 
 export function ScheduleGrid({
   slots,
-  selectedDate
+  selectedDate,
+  bookingAvailability
 }: {
   slots: SlotWithRelations[];
   selectedDate: string;
+  bookingAvailability?: BookingAvailabilitySettings | null;
 }) {
   const [reloadAfterNotice, setReloadAfterNotice] = useState(false);
   const [pendingSlotId, setPendingSlotId] = useState<string | null>(null);
@@ -53,6 +60,7 @@ export function ScheduleGrid({
   const [waitlistPendingSlotId, setWaitlistPendingSlotId] = useState<string | null>(
     null
   );
+  const reservationsEnabled = bookingAvailability?.reservations_enabled !== false;
 
   useEffect(() => {
     async function loadSessionData() {
@@ -279,7 +287,10 @@ export function ScheduleGrid({
                 );
 
           const disabled =
-            isReserved || !canReserveThisSlot || profileComplete === false;
+            isReserved ||
+            !canReserveThisSlot ||
+            profileComplete === false ||
+            !reservationsEnabled;
 
           const cardClass = isMine
             ? "border-blue-300 bg-blue-50"
@@ -311,7 +322,11 @@ export function ScheduleGrid({
             joined: false
           };
           const canJoinWaitlist =
-            Boolean(currentUserId) && !isMine && isReserved && !isExpired;
+            Boolean(currentUserId) &&
+            !isMine &&
+            isReserved &&
+            !isExpired &&
+            reservationsEnabled;
           const playerName =
             confirmedBooking?.profiles?.full_name?.trim() || "Sin nombre";
           const playerCategory =
@@ -433,6 +448,8 @@ export function ScheduleGrid({
                         ? "No disponible"
                         : isExpired
                           ? "Turno vencido"
+                          : !reservationsEnabled
+                            ? "Reservas pausadas"
                           : pendingSlotId === slot.id
                             ? "Reservando..."
                             : "Reservar"}
