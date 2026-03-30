@@ -713,6 +713,15 @@ export default function MessagesPage() {
                                   ))}
                                 </div>
                                 <div className="min-w-0">
+                                  {group.is_general ? (
+                                    <p
+                                      className={`mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] ${
+                                        active ? "text-orange-300" : "text-orange-600"
+                                      }`}
+                                    >
+                                      Canal general del club
+                                    </p>
+                                  ) : null}
                                   <div className="flex items-center gap-2">
                                     <p className="truncate font-medium">{group.name}</p>
                                     {group.is_general ? (
@@ -868,6 +877,11 @@ export default function MessagesPage() {
                     <div className="border-b border-slate-200 pb-4">
                       <div className="flex items-center justify-between gap-3">
                         <div>
+                          {selectedGroupIsGeneral ? (
+                            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-600">
+                              Canal general del club
+                            </p>
+                          ) : null}
                           <p className="text-lg font-semibold text-slate-900">
                             {selectedGroup?.name || "Elegí un grupo"}
                           </p>
