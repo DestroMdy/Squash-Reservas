@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { AppNoticeModal } from "@/components/AppNoticeModal";
 import { SectionTitle } from "@/components/SectionTitle";
@@ -28,6 +28,7 @@ import {
 type Tab = "direct" | "group";
 type GroupEditorMode = "create" | "edit";
 type MobilePane = "list" | "chat";
+const MESSAGE_REFRESH_INTERVAL_MS = 3000;
 
 function formatMessageTimestamp(dateValue?: string | null) {
   if (!dateValue) return "";
@@ -79,7 +80,10 @@ export default function MessagesPage() {
     }
   }, [initialRecipientId]);
 
-  async function loadData(preferredRecipientId?: string | null) {
+  const loadData = useCallback(async (
+    preferredRecipientId?: string | null,
+    options?: { preserveSelection?: boolean; silent?: boolean }
+  ) => {
     const token = getSession()?.access_token;
     if (!token) {
       setError("Debes iniciar sesión");
@@ -87,25 +91,30 @@ export default function MessagesPage() {
       return;
     }
 
-    const user = await getUser(token);
-    if (!user) {
-      setError("Sesión inválida");
-      setLoading(false);
-      return;
-    }
+    let userId = currentUserId;
 
-    setCurrentUserId(user.id);
+    if (!userId) {
+      const user = await getUser(token);
+      if (!user) {
+        setError("Sesión inválida");
+        setLoading(false);
+        return;
+      }
+
+      userId = user.id;
+      setCurrentUserId(user.id);
+    }
 
     const [allPlayers, messages, groupData] = await Promise.all([
       fetchPlayers(token),
-      fetchPrivateMessages(user.id, token),
+      fetchPrivateMessages(userId, token),
       fetchPrivateMessageGroups(token).catch(() => ({
         groups: [],
         unavailable: true
       }))
     ]);
 
-    const availablePlayers = (allPlayers ?? []).filter((player) => player.id !== user.id);
+    const availablePlayers = (allPlayers ?? []).filter((player) => player.id !== userId);
     setPlayers(availablePlayers);
     setDirectMessages(messages ?? []);
     setGroups(groupData.groups ?? []);
@@ -120,7 +129,7 @@ export default function MessagesPage() {
         .slice()
         .reverse()
         .map((message) =>
-          message.sender_id === user.id ? message.recipient_id : message.sender_id
+          message.sender_id === userId ? message.recipient_id : message.sender_id
         )
         .find((playerId) =>
           availablePlayers.some((player) => player.id === playerId)
@@ -128,17 +137,28 @@ export default function MessagesPage() {
       availablePlayers[0]?.id ||
       "";
 
-    setSelectedPlayerId(suggestedPlayer);
+    setSelectedPlayerId((current) =>
+      options?.preserveSelection &&
+      current &&
+      availablePlayers.some((player) => player.id === current)
+        ? current
+        : suggestedPlayer
+    );
     setSelectedGroupId((current) =>
-      current && (groupData.groups ?? []).some((group) => group.id === current)
+      options?.preserveSelection &&
+      current &&
+      (groupData.groups ?? []).some((group) => group.id === current)
         ? current
         : groupData.groups?.[0]?.id || ""
     );
     setError(null);
     setLoading(false);
-  }
+  }, [currentUserId]);
 
-  async function loadGroupConversation(groupId: string) {
+  const loadGroupConversation = useCallback(async (
+    groupId: string,
+    options?: { silent?: boolean }
+  ) => {
     const token = getSession()?.access_token;
     if (!token || !groupId) {
       setGroupMessages([]);
@@ -146,7 +166,9 @@ export default function MessagesPage() {
       return;
     }
 
-    setGroupLoading(true);
+    if (!options?.silent) {
+      setGroupLoading(true);
+    }
     try {
       const payload = await fetchPrivateGroupMessages(groupId, token);
       setGroupMessages(payload.messages ?? []);
@@ -154,9 +176,11 @@ export default function MessagesPage() {
     } catch (err) {
       setNoticeMessage(err instanceof Error ? err.message : "No se pudo cargar el grupo");
     } finally {
-      setGroupLoading(false);
+      if (!options?.silent) {
+        setGroupLoading(false);
+      }
     }
-  }
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -164,13 +188,13 @@ export default function MessagesPage() {
       setError(err instanceof Error ? err.message : "No se pudieron cargar los mensajes");
       setLoading(false);
     });
-  }, [initialRecipientId]);
+  }, [initialRecipientId, loadData]);
 
   useEffect(() => {
     if (tab === "group" && selectedGroupId) {
       void loadGroupConversation(selectedGroupId);
     }
-  }, [tab, selectedGroupId]);
+  }, [tab, selectedGroupId, loadGroupConversation]);
 
   const selectedPlayer = useMemo(
     () => players.find((player) => player.id === selectedPlayerId) ?? null,
@@ -237,6 +261,78 @@ export default function MessagesPage() {
 
     return summaries;
   }, [currentUserId, directMessages]);
+
+  const sortedPlayers = useMemo(() => {
+    return [...players].sort((left, right) => {
+      const leftTimestamp = new Date(
+        directSummaries.get(left.id)?.created_at || 0
+      ).getTime();
+      const rightTimestamp = new Date(
+        directSummaries.get(right.id)?.created_at || 0
+      ).getTime();
+
+      if (leftTimestamp !== rightTimestamp) {
+        return rightTimestamp - leftTimestamp;
+      }
+
+      return (left.full_name || "").localeCompare(right.full_name || "", "es", {
+        sensitivity: "base"
+      });
+    });
+  }, [players, directSummaries]);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+
+    let active = true;
+    let refreshing = false;
+
+    async function refreshMessages() {
+      if (refreshing || !active) return;
+      refreshing = true;
+
+      try {
+        await loadData(initialRecipientId, {
+          preserveSelection: true,
+          silent: true
+        });
+
+        if (tab === "group" && selectedGroupId) {
+          await loadGroupConversation(selectedGroupId, { silent: true });
+        }
+      } catch {
+        // Ignore silent refresh errors to keep the chat stable.
+      } finally {
+        refreshing = false;
+      }
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refreshMessages();
+    }, MESSAGE_REFRESH_INTERVAL_MS);
+
+    const handleFocus = () => {
+      void refreshMessages();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshMessages();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("sr-messages-updated", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("sr-messages-updated", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [currentUserId, initialRecipientId, loadData, loadGroupConversation, selectedGroupId, tab]);
 
   useEffect(() => {
     async function syncRead() {
@@ -566,8 +662,8 @@ export default function MessagesPage() {
                       value={selectedPlayerId}
                       onChange={(e) => setSelectedPlayerId(e.target.value)}
                     >
-                      {players.length ? (
-                        players.map((player) => (
+                      {sortedPlayers.length ? (
+                        sortedPlayers.map((player) => (
                           <option key={player.id} value={player.id}>
                             {player.full_name || "Sin nombre"} ·{" "}
                             {player.category || "Sin categoría"}
@@ -579,7 +675,7 @@ export default function MessagesPage() {
                     </select>
 
                     <div className="space-y-2">
-                      {players.slice(0, 12).map((player) => {
+                      {sortedPlayers.map((player) => {
                         const unread = directMessages.filter(
                           (message) =>
                             message.sender_id === player.id &&

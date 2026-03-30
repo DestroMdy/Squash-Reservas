@@ -7,17 +7,26 @@ export function isGeneralMessageGroupName(name?: string | null) {
 export function sortPrivateMessageGroups<
   T extends {
     is_general?: boolean;
+    last_message_at?: string | null;
     updated_at?: string | null;
   }
 >(groups: T[]) {
   return [...groups].sort((left, right) => {
+    const leftTimestamp = new Date(
+      left.last_message_at || left.updated_at || 0
+    ).getTime();
+    const rightTimestamp = new Date(
+      right.last_message_at || right.updated_at || 0
+    ).getTime();
+
+    if (leftTimestamp !== rightTimestamp) {
+      return rightTimestamp - leftTimestamp;
+    }
+
     if (Boolean(left.is_general) !== Boolean(right.is_general)) {
       return left.is_general ? -1 : 1;
     }
 
-    return (
-      new Date(right.updated_at || 0).getTime() -
-      new Date(left.updated_at || 0).getTime()
-    );
+    return 0;
   });
 }

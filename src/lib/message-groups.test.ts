@@ -12,29 +12,32 @@ describe("message-groups", () => {
     expect(isGeneralMessageGroupName("Mi grupo del viernes")).toBe(false);
   });
 
-  it("ordena el grupo general primero y luego el resto por actividad", () => {
+  it("ordena los grupos por actividad reciente y usa el general solo como desempate", () => {
     const groups = sortPrivateMessageGroups([
       {
         id: "custom-older",
+        last_message_at: "2026-03-28T10:00:00.000Z",
         updated_at: "2026-03-28T10:00:00.000Z",
         is_general: false
       },
       {
         id: "general",
+        last_message_at: "2026-03-01T10:00:00.000Z",
         updated_at: "2026-03-01T10:00:00.000Z",
         is_general: true
       },
       {
         id: "custom-newer",
+        last_message_at: "2026-03-29T10:00:00.000Z",
         updated_at: "2026-03-29T10:00:00.000Z",
         is_general: false
       }
     ]);
 
     expect(groups.map((group) => group.id)).toEqual([
-      "general",
       "custom-newer",
-      "custom-older"
+      "custom-older",
+      "general"
     ]);
   });
 });
