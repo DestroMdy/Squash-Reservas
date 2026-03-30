@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "../../components/AvatarImage";
 import { AppNoticeModal } from "../../components/AppNoticeModal";
@@ -23,6 +24,7 @@ const categories = [
 ];
 
 export default function ProfilePage() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -65,6 +67,8 @@ export default function ProfilePage() {
   const isComplete = useMemo(() => {
     return Boolean(name.trim() && phone.trim() && category.trim());
   }, [name, phone, category]);
+
+  const showWelcomeNotice = searchParams.get("welcome") === "1";
 
   async function handleAvatarChange(event: React.ChangeEvent<HTMLInputElement>) {
     try {
@@ -168,6 +172,21 @@ export default function ProfilePage() {
           title="Mi perfil"
           subtitle="Completá tu información para poder reservar."
         />
+
+        {showWelcomeNotice ? (
+          <div className="card border-2 border-orange-200 bg-orange-50 p-5">
+            <p className="text-sm font-semibold uppercase tracking-[0.22em] text-orange-700">
+              Bienvenido
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-900">
+              Completá tu perfil para empezar a usar la app
+            </h2>
+            <p className="mt-2 text-sm text-slate-700">
+              Antes de reservar o usar el resto de las funciones, cargá tu
+              nombre, teléfono y categoría.
+            </p>
+          </div>
+        ) : null}
 
         <div className="card rounded-2xl p-5">
           <div className="flex items-center gap-4">
