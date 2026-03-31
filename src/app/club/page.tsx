@@ -18,7 +18,7 @@ import {
 type CollapsibleCardSectionProps = {
   eyebrow: string;
   title: string;
-  description: string;
+  description?: string;
   children: ReactNode;
   defaultOpen?: boolean;
   accent?: boolean;
@@ -58,9 +58,11 @@ function CollapsibleCardSection({
           <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950">
             {title}
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-            {description}
-          </p>
+          {description ? (
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+              {description}
+            </p>
+          ) : null}
         </div>
         <span className={badgeClassName}>
           <span className="group-open:hidden">Ver</span>
@@ -109,7 +111,6 @@ export default function ClubPage() {
       <CollapsibleCardSection
         eyebrow="Reglas del club"
         title="Como funciona la agenda"
-        description="Resumen rapido para que el jugador entienda como funciona la agenda del club sin perderse entre pantallas largas."
         defaultOpen
       >
         <div className="grid gap-4 md:grid-cols-2">
