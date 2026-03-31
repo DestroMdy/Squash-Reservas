@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 import { setCasualMatchConfirmationState } from "@/lib/casual-match-state-store";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MATCHES_ERROR
+} from "@/lib/profile-completion";
 
 type MatchRow = {
   id: string;
@@ -80,6 +84,21 @@ export async function POST(
     auth.serviceRoleKey as string,
     auth.user.id
   );
+
+  if (role !== "admin") {
+    const currentProfileStatus = await fetchProfileCompletionStatus(
+      auth.supabaseUrl,
+      auth.serviceRoleKey as string,
+      auth.user.id
+    );
+
+    if (!currentProfileStatus.complete) {
+      return NextResponse.json(
+        { error: INCOMPLETE_PROFILE_MATCHES_ERROR },
+        { status: 403 }
+      );
+    }
+  }
 
   if (currentMatch.player_two_id !== auth.user.id && role !== "admin") {
     return NextResponse.json(

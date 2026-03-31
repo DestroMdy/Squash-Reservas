@@ -4,6 +4,10 @@ import {
   clearCasualMatchConfirmationState,
   initializeCasualMatchConfirmationState
 } from "@/lib/casual-match-state-store";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MATCHES_ERROR
+} from "@/lib/profile-completion";
 
 type MatchRow = {
   id: string;
@@ -119,6 +123,22 @@ export async function PATCH(
     auth.serviceRoleKey as string,
     auth.user.id
   );
+
+  if (role !== "admin") {
+    const currentProfileStatus = await fetchProfileCompletionStatus(
+      auth.supabaseUrl,
+      auth.serviceRoleKey as string,
+      auth.user.id
+    );
+
+    if (!currentProfileStatus.complete) {
+      return NextResponse.json(
+        { error: INCOMPLETE_PROFILE_MATCHES_ERROR },
+        { status: 403 }
+      );
+    }
+  }
+
   const currentMatch = await fetchMatchById(
     auth.supabaseUrl,
     auth.serviceRoleKey as string,

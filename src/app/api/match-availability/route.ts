@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MATCHES_ERROR,
+  isProfileCompletionRecordComplete
+} from "@/lib/profile-completion";
 
 type AvailabilityRow = {
   id: string;
@@ -14,6 +19,7 @@ type AvailabilityRow = {
 type ProfileRecord = {
   id: string;
   full_name?: string | null;
+  phone?: string | null;
   category?: string | null;
   avatar_url?: string | null;
 };
@@ -40,7 +46,7 @@ async function fetchProfilesMap(
   if (!uniqueIds.length) return {};
 
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${uniqueIds.join(",")})`,
+    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category,avatar_url&id=in.(${uniqueIds.join(",")})`,
     {
       method: "GET",
       headers: adminHeaders(serviceRoleKey),
@@ -156,20 +162,21 @@ export async function GET(request: NextRequest) {
   }
 
   const serviceRoleKey = auth.serviceRoleKey as string;
-
-  const today = getTodayDate();
-
-  const currentProfileResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=eq.${auth.user.id}&limit=1`,
-    {
-      method: "GET",
-      headers: adminHeaders(serviceRoleKey),
-      cache: "no-store"
-    }
+  const currentProfileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    auth.user.id
   );
 
-  const currentProfileRows = (await currentProfileResponse.json()) as ProfileRecord[];
-  const currentProfile = currentProfileRows[0];
+  if (!currentProfileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MATCHES_ERROR },
+      { status: 403 }
+    );
+  }
+
+  const today = getTodayDate();
+  const currentProfile = currentProfileStatus.profile as ProfileRecord | null;
 
   const requestsResponse = await fetch(
     `${auth.supabaseUrl}/rest/v1/match_availability_requests?select=id,user_id,available_on,notes,created_at,updated_at&available_on=eq.${today}&order=created_at.desc`,
@@ -203,7 +210,11 @@ export async function GET(request: NextRequest) {
   const sameCategoryRequests = rows.filter((row) => {
     const profile = profilesMap[row.user_id];
     if (!profile || !currentProfile) return false;
-    return profile.category === currentProfile.category && row.user_id !== auth.user.id;
+    return (
+      isProfileCompletionRecordComplete(profile) &&
+      profile.category === currentProfile.category &&
+      row.user_id !== auth.user.id
+    );
   });
 
   const currentRequest = rows.find((row) => row.user_id === auth.user.id) ?? null;
@@ -229,6 +240,18 @@ export async function POST(request: NextRequest) {
   }
 
   const serviceRoleKey = auth.serviceRoleKey as string;
+  const currentProfileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!currentProfileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MATCHES_ERROR },
+      { status: 403 }
+    );
+  }
 
   const resendApiKey = process.env.RESEND_API_KEY;
   const fromEmail =
@@ -254,17 +277,7 @@ export async function POST(request: NextRequest) {
 
   const body = (await request.json()) as { notes?: string | null };
   const today = getTodayDate();
-
-  const profileResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=eq.${auth.user.id}&limit=1`,
-    {
-      method: "GET",
-      headers: adminHeaders(serviceRoleKey),
-      cache: "no-store"
-    }
-  );
-  const profileRows = (await profileResponse.json()) as ProfileRecord[];
-  const currentProfile = profileRows[0];
+  const currentProfile = currentProfileStatus.profile as ProfileRecord | null;
 
   if (!currentProfile?.category) {
     return NextResponse.json(
@@ -336,7 +349,7 @@ export async function POST(request: NextRequest) {
 
   if (resendApiKey && !existingRequest) {
     const categoryPeersResponse = await fetch(
-      `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,category&category=eq.${encodeURIComponent(
+      `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category&category=eq.${encodeURIComponent(
         currentProfile.category
       )}&id=neq.${auth.user.id}`,
       {
@@ -346,7 +359,9 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    const peers = (await categoryPeersResponse.json()) as ProfileRecord[];
+    const peers = ((await categoryPeersResponse.json()) as ProfileRecord[]).filter(
+      (peer) => isProfileCompletionRecordComplete(peer)
+    );
     const emails = await fetchAuthEmails(
       auth.supabaseUrl,
       serviceRoleKey,

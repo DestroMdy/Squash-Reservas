@@ -1,8 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
+import {
+  INCOMPLETE_PROFILE_MATCHES_ERROR,
+  isProfileCompletionRecordComplete
+} from "@/lib/profile-completion";
 import {
   activateMatchAvailability,
   confirmCasualMatch,
@@ -11,6 +16,7 @@ import {
   deleteCasualMatch,
   fetchCasualMatches,
   fetchMatchAvailability,
+  fetchProfile,
   fetchPlayers,
   getSession,
   getUser,
@@ -118,6 +124,7 @@ export default function MatchesPage() {
   const [saving, setSaving] = useState(false);
   const [unavailable, setUnavailable] = useState(false);
   const [availabilityUnavailable, setAvailabilityUnavailable] = useState(false);
+  const [profileComplete, setProfileComplete] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -136,6 +143,24 @@ export default function MatchesPage() {
       return;
     }
 
+    const currentProfile = await fetchProfile(user.id, token).catch(() => null);
+    const currentProfileComplete = isProfileCompletionRecordComplete(currentProfile);
+    setProfileComplete(currentProfileComplete);
+
+    if (!currentProfileComplete) {
+      setCurrentUserId(user.id);
+      setPlayers([]);
+      setMatches([]);
+      setAvailabilityRequests([]);
+      setCurrentAvailability(null);
+      setAvailabilityNote("");
+      setUnavailable(false);
+      setAvailabilityUnavailable(false);
+      setError(INCOMPLETE_PROFILE_MATCHES_ERROR);
+      setLoading(false);
+      return;
+    }
+
     const [playersData, matchesData, availabilityData] = await Promise.all([
       fetchPlayers(token),
       fetchCasualMatches(token),
@@ -147,7 +172,12 @@ export default function MatchesPage() {
     ]);
 
     setCurrentUserId(user.id);
-    setPlayers((playersData || []).filter((player) => player.id !== user.id));
+    setPlayers(
+      (playersData || []).filter(
+        (player) =>
+          player.id !== user.id && isProfileCompletionRecordComplete(player)
+      )
+    );
     setMatches(matchesData.matches || []);
     setUnavailable(matchesData.unavailable === true);
     setAvailabilityRequests(availabilityData.requests || []);
@@ -455,8 +485,30 @@ export default function MatchesPage() {
       />
 
       {message ? <p className="text-sm text-slate-600">{message}</p> : null}
-      {error ? <p className="text-sm text-red-600">{error}</p> : null}
+      {error && error !== INCOMPLETE_PROFILE_MATCHES_ERROR ? (
+        <p className="text-sm text-red-600">{error}</p>
+      ) : null}
       {loading ? <p className="text-sm text-slate-600">Cargando partidos...</p> : null}
+
+      {!loading && !profileComplete ? (
+        <div className="card border-2 border-amber-300 bg-amber-50 p-5">
+          <p className="text-sm font-semibold uppercase tracking-[0.22em] text-amber-700">
+            Partidos bloqueados
+          </p>
+          <h2 className="mt-2 text-2xl font-bold text-slate-900">
+            Completá tu perfil para poder armar o sumarte a partidos
+          </h2>
+          <p className="mt-2 text-sm text-slate-700">
+            Antes de usar esta sección, cargá tu nombre, teléfono y categoría en
+            tu perfil.
+          </p>
+          <div className="mt-4">
+            <Link href="/profile" className="btn-primary">
+              Completar mi perfil
+            </Link>
+          </div>
+        </div>
+      ) : null}
 
       {unavailable ? (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -465,7 +517,7 @@ export default function MatchesPage() {
         </div>
       ) : null}
 
-      {!loading && !unavailable ? (
+      {!loading && !unavailable && !error && profileComplete ? (
         <>
           <div className="grid gap-4 md:grid-cols-3">
             <article className="card p-5">

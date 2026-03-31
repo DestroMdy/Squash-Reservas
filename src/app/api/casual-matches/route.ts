@@ -9,6 +9,11 @@ import {
   getCasualMatchConfirmationStates,
   initializeCasualMatchConfirmationState
 } from "@/lib/casual-match-state-store";
+import {
+  fetchProfileCompletionStatus,
+  INCOMPLETE_PROFILE_MATCHES_ERROR,
+  isProfileCompletionRecordComplete
+} from "@/lib/profile-completion";
 import { CasualMatchConfirmationState } from "@/types/db";
 
 type MatchRow = {
@@ -43,7 +48,7 @@ async function fetchProfilesMap(
   if (!uniqueIds.length) return {};
 
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,category,avatar_url&id=in.(${uniqueIds.join(",")})`,
+    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category,avatar_url&id=in.(${uniqueIds.join(",")})`,
     {
       method: "GET",
       headers: adminHeaders(serviceRoleKey)
@@ -57,6 +62,7 @@ async function fetchProfilesMap(
   const rows = (await response.json()) as Array<{
     id: string;
     full_name?: string | null;
+    phone?: string | null;
     category?: string | null;
     avatar_url?: string | null;
   }>;
@@ -206,6 +212,19 @@ export async function GET(request: NextRequest) {
   const serviceRoleKey = auth.serviceRoleKey as string;
 
   try {
+    const currentProfileStatus = await fetchProfileCompletionStatus(
+      auth.supabaseUrl,
+      serviceRoleKey,
+      auth.user.id
+    );
+
+    if (!currentProfileStatus.complete) {
+      return NextResponse.json(
+        { error: INCOMPLETE_PROFILE_MATCHES_ERROR },
+        { status: 403 }
+      );
+    }
+
     const result = await fetchMatchesForUser(
       auth.supabaseUrl,
       serviceRoleKey,
@@ -257,6 +276,18 @@ export async function POST(request: NextRequest) {
   }
 
   const serviceRoleKey = auth.serviceRoleKey as string;
+  const currentProfileStatus = await fetchProfileCompletionStatus(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    auth.user.id
+  );
+
+  if (!currentProfileStatus.complete) {
+    return NextResponse.json(
+      { error: INCOMPLETE_PROFILE_MATCHES_ERROR },
+      { status: 403 }
+    );
+  }
 
   const body = (await request.json()) as MatchPayload;
 
@@ -277,6 +308,28 @@ export async function POST(request: NextRequest) {
   const scoreError = validateScores(body.score_self, body.score_opponent);
   if (scoreError) {
     return NextResponse.json({ error: scoreError }, { status: 400 });
+  }
+
+  const profilesMap = await fetchProfilesMap(auth.supabaseUrl, serviceRoleKey, [
+    body.opponent_id
+  ]);
+  const opponentProfile = profilesMap[body.opponent_id];
+
+  if (!opponentProfile) {
+    return NextResponse.json(
+      { error: "El rival seleccionado no existe." },
+      { status: 400 }
+    );
+  }
+
+  if (!isProfileCompletionRecordComplete(opponentProfile)) {
+    return NextResponse.json(
+      {
+        error:
+          "El rival debe completar su perfil antes de poder cargar partidos."
+      },
+      { status: 400 }
+    );
   }
 
   const ip = getRequestIp(request);
@@ -329,7 +382,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const profilesMap = await fetchProfilesMap(auth.supabaseUrl, serviceRoleKey, [
+  const createdProfilesMap = await fetchProfilesMap(auth.supabaseUrl, serviceRoleKey, [
     rows[0].player_one_id,
     rows[0].player_two_id
   ]);
@@ -342,7 +395,7 @@ export async function POST(request: NextRequest) {
     ok: true,
     match: formatMatches(
       rows,
-      profilesMap,
+      createdProfilesMap,
       { [rows[0].id]: confirmationState },
       auth.user.id
     )[0]
