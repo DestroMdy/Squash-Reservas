@@ -24,7 +24,7 @@ function buildCsp() {
     "font-src 'self' data:",
     "connect-src 'self' https://www.google.com https://www.gstatic.com https://*.supabase.co" +
       (supabaseOrigin ? ` ${supabaseOrigin}` : ""),
-    "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/",
+    "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com",
     "upgrade-insecure-requests"
   ].join("; ");
 }
