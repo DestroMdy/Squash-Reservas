@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
+import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import {
   fetchLiveCenterStatus,
   getSession,
@@ -680,7 +681,8 @@ export default function LivePage() {
 
   const loadStream = useCallback(async () => {
     const current = await fetchLiveCenterStatus();
-    setCourts(current.courts);
+    const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
+    setCourts(hydratedCourts);
   }, []);
 
   useEffect(() => {
@@ -700,8 +702,9 @@ export default function LivePage() {
 
       try {
         const current = await fetchLiveCenterStatus();
+        const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
         if (!cancelled) {
-          setCourts(current.courts);
+          setCourts(hydratedCourts);
         }
       } catch {
         if (!cancelled) {

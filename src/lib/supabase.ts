@@ -1732,6 +1732,7 @@ export async function updateLiveStream(
     description?: string | null;
     banner_url?: string | null;
     youtube_url: string;
+    squore_device_id?: string | null;
     starts_at?: string | null;
     scoreboard_delay_seconds?: number;
     is_live: boolean;

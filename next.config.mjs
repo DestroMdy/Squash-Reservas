@@ -17,9 +17,9 @@ function buildCsp() {
     "object-src 'none'",
     "manifest-src 'self'",
     "worker-src 'self' blob:",
-    "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/",
+    "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://squore.double-yellow.be",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://www.google.com https://www.gstatic.com https://*.supabase.co" +
+    "img-src 'self' data: blob: https://www.google.com https://www.gstatic.com https://*.supabase.co https://squore.double-yellow.be http://squore.double-yellow.be" +
       (supabaseOrigin ? ` ${supabaseOrigin}` : ""),
     "font-src 'self' data:",
     "connect-src 'self' https://www.google.com https://www.gstatic.com https://*.supabase.co" +
@@ -38,6 +38,14 @@ const nextConfig = {
       {
         protocol: "https",
         hostname: "**.supabase.co"
+      },
+      {
+        protocol: "https",
+        hostname: "squore.double-yellow.be"
+      },
+      {
+        protocol: "http",
+        hostname: "squore.double-yellow.be"
       }
     ]
   },

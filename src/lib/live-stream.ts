@@ -16,6 +16,7 @@ type RawLiveStreamConfig = Partial<LiveStreamConfig> & {
   banner_url?: string | null;
   youtube_url?: string | null;
   youtube_video_id?: string | null;
+  squore_device_id?: string | null;
   scoreboard_delay_seconds?: number | string | null;
   is_live?: boolean | null;
   starts_at?: string | null;
@@ -106,6 +107,17 @@ function normalizeScoreboardDelaySeconds(value: number | string | null | undefin
   return Math.min(30, Math.max(0, Math.round(numericValue)));
 }
 
+function normalizeSquoreDeviceId(value: string | null | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed.replace(/\s+/g, "");
+  return /^[A-Za-z0-9_-]{3,40}$/.test(normalized) ? normalized : null;
+}
+
 export function normalizeLiveStreamConfig(
   raw: RawLiveStreamConfig | null | undefined
 ) {
@@ -129,6 +141,7 @@ export function normalizeLiveStreamConfig(
     youtube_url: raw.youtube_url.trim(),
     youtube_video_id: videoId,
     embed_url: buildYouTubeEmbedUrl(videoId),
+    squore_device_id: normalizeSquoreDeviceId(raw.squore_device_id),
     scoreboard_delay_seconds: normalizeScoreboardDelaySeconds(
       raw.scoreboard_delay_seconds
     ),

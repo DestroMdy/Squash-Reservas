@@ -39,6 +39,36 @@ function getWinnerSide(payload: RawScorePayload) {
   return null;
 }
 
+function normalizeSquoreAssetUrl(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed.startsWith("//")) {
+    return `https:${trimmed}`;
+  }
+
+  if (trimmed.startsWith("/")) {
+    return `https://squore.double-yellow.be${trimmed}`;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:") {
+      parsed.protocol = "https:";
+    }
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeSquoreScoreboard(payload: RawScorePayload) {
   const playerOneName = getStringValue(payload, "player1");
   const playerTwoName = getStringValue(payload, "player2");
@@ -68,6 +98,47 @@ export function normalizeSquoreScoreboard(payload: RawScorePayload) {
     played_time: getStringValue(payload, "whentime"),
     updated_at: new Date().toISOString()
   } as LiveScoreboard;
+}
+
+export function normalizeSquoreRecentMatch(payload: RawScorePayload) {
+  const playerOneName = getStringValue(payload, "A");
+  const playerTwoName = getStringValue(payload, "B");
+
+  if (!playerOneName || !playerTwoName) {
+    return null;
+  }
+
+  const winner = getStringValue(payload, "isVictoryFor");
+  const winnerSide = winner === "A" ? 1 : winner === "B" ? 2 : null;
+  const durationSeconds = getNumberValue(payload, "duration");
+
+  return {
+    source: "squore",
+    event_name: getStringValue(payload, "event"),
+    division_name: getStringValue(payload, "division"),
+    round_name: getStringValue(payload, "round"),
+    location: getStringValue(payload, "court"),
+    player_one_name: playerOneName,
+    player_one_avatar_url: normalizeSquoreAssetUrl(getStringValue(payload, "avtA")),
+    player_two_name: playerTwoName,
+    player_two_avatar_url: normalizeSquoreAssetUrl(getStringValue(payload, "avtB")),
+    result: getStringValue(payload, "result"),
+    game_scores: getStringValue(payload, "gamescores"),
+    winner_name:
+      winnerSide === 1
+        ? playerOneName
+        : winnerSide === 2
+          ? playerTwoName
+          : null,
+    winner_side: winnerSide,
+    duration_minutes:
+      durationSeconds !== null ? Math.max(0, Math.round(durationSeconds / 60)) : null,
+    total_points_player_one: null,
+    total_points_player_two: null,
+    played_on: getStringValue(payload, "date"),
+    played_time: getStringValue(payload, "time"),
+    updated_at: new Date().toISOString()
+  } satisfies LiveScoreboard;
 }
 
 function normalizeNameForLookup(value: string | null | undefined) {

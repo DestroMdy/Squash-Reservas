@@ -29,6 +29,7 @@ type LiveStreamBody = {
   description?: string | null;
   banner_url?: string | null;
   youtube_url?: string;
+  squore_device_id?: string | null;
   starts_at?: string | null;
   scoreboard_delay_seconds?: number | string | null;
   is_live?: boolean;
@@ -216,6 +217,7 @@ export async function PATCH(request: NextRequest) {
       banner_url: normalizedBannerUrl,
       youtube_url: body.youtube_url.trim(),
       youtube_video_id: videoId,
+      squore_device_id: body.squore_device_id?.trim() || null,
       scoreboard_delay_seconds: normalizedScoreboardDelaySeconds,
       is_live: Boolean(body.is_live),
       starts_at: body.starts_at?.trim() || null,
@@ -236,6 +238,7 @@ export async function PATCH(request: NextRequest) {
         title: stream.title,
         banner_url: stream.banner_url,
         youtube_url: stream.youtube_url,
+        squore_device_id: stream.squore_device_id,
         scoreboard_delay_seconds: stream.scoreboard_delay_seconds,
         tournament_software_post_url: stream.tournament_software_post_url,
         is_live: stream.is_live,

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
+import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import { LIVE_COURTS } from "@/lib/live-stream";
 import {
   clearLiveStream,
@@ -25,6 +26,7 @@ type LiveCourtFormState = {
   description: string;
   banner_url: string;
   youtube_url: string;
+  squore_device_id: string;
   starts_at: string;
   scoreboard_delay_seconds: string;
   is_live: boolean;
@@ -42,6 +44,7 @@ function getEmptyLiveCourtForm(): LiveCourtFormState {
     description: "",
     banner_url: "",
     youtube_url: "",
+    squore_device_id: "",
     starts_at: "",
     scoreboard_delay_seconds: "5",
     is_live: false,
@@ -83,6 +86,7 @@ function mapStreamToForm(
     description: stream.description || "",
     banner_url: stream.banner_url || "",
     youtube_url: stream.youtube_url,
+    squore_device_id: stream.squore_device_id || "",
     starts_at: formatDateTimeLocalValue(stream.starts_at),
     scoreboard_delay_seconds: String(stream.scoreboard_delay_seconds ?? 5),
     is_live: stream.is_live,
@@ -221,7 +225,8 @@ export function AdminLiveCenterSection() {
       fetchPlayers(token),
       fetchLivePlayerMappings(token)
     ]);
-    applyCourts(result.courts);
+    const hydratedCourts = await hydrateCourtsWithSquoreFeed(result.courts);
+    applyCourts(hydratedCourts);
     setAvailablePlayers(players || []);
     setPlayerMappings(mappings || []);
   }, []);
@@ -267,10 +272,12 @@ export function AdminLiveCenterSection() {
         starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
         scoreboard_delay_seconds: Number(form.scoreboard_delay_seconds || 5),
         is_live: form.is_live,
-        tournament_software_post_url: form.tournament_software_post_url || null
+        tournament_software_post_url: form.tournament_software_post_url || null,
+        squore_device_id: form.squore_device_id || null
       });
 
-      applyCourts(result.courts);
+      const hydratedCourts = await hydrateCourtsWithSquoreFeed(result.courts);
+      applyCourts(hydratedCourts);
       setMessage(`${courts.find((court) => court.id === courtId)?.label || "La cancha"} guardada.`);
     } catch (err) {
       setError(
@@ -490,7 +497,7 @@ export function AdminLiveCenterSection() {
                         </span>
                       </p>
                       <p>
-                        Último score:{" "}
+                        Último POST recibido:{" "}
                         <span className="font-medium">
                           {formatStatusTime(
                             court.ingest_status?.last_score_received_at || null
@@ -511,6 +518,12 @@ export function AdminLiveCenterSection() {
                         Match actual:{" "}
                         <span className="font-medium">
                           {court.ingest_status?.latest_payload_summary || "Sin datos"}
+                        </span>
+                      </p>
+                      <p>
+                        Device Squore:{" "}
+                        <span className="font-medium">
+                          {court.stream?.squore_device_id || "No configurado"}
                         </span>
                       </p>
                     </div>
@@ -582,6 +595,29 @@ export function AdminLiveCenterSection() {
                       }
                       placeholder={`Ej: ${court.label} - Fecha del Patagonico`}
                     />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Device Unique Id de la tablet Squore
+                    </label>
+                    <input
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={form.squore_device_id}
+                      onChange={(event) =>
+                        setForms((current) => ({
+                          ...current,
+                          [court.id]: {
+                            ...current[court.id],
+                            squore_device_id: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Ej: XFQE3A"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Opcional. Si lo cargas, el vivo puede leer el partido actual directo desde el feed de esa tablet, aunque el PostResult automatico no dispare.
+                    </p>
                   </div>
 
                   <div>
