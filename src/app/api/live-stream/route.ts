@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchProfilesForLiveAvatars } from "@/lib/live-avatar-profiles";
+import { getStoredLiveCenterCommentsMap } from "@/lib/live-comments-store";
 import { attachLiveScoreboardAvatars } from "@/lib/live-score";
 import {
   getStoredLiveCenterCourts,
@@ -27,10 +28,14 @@ export async function GET() {
   }
 
   try {
-    const [storedCourts, profiles, mappings] = await Promise.all([
+    const [storedCourts, profiles, mappings, commentsMap] = await Promise.all([
       getStoredLiveCenterCourts(),
       fetchProfilesForLiveAvatars().catch(() => []),
-      getStoredLivePlayerMappings().catch(() => [])
+      getStoredLivePlayerMappings().catch(() => []),
+      getStoredLiveCenterCommentsMap().catch(() => ({
+        "court-1": [],
+        "court-2": []
+      }))
     ]);
 
     const courts = storedCourts.map((court) => ({
@@ -38,7 +43,8 @@ export async function GET() {
       stream: toPublicLiveStreamConfig(court.stream),
       scoreboard: court.scoreboard
         ? attachLiveScoreboardAvatars(court.scoreboard, profiles, mappings)
-        : null
+        : null,
+      comments: commentsMap[court.id] || []
     }));
     const primaryCourt = getPrimaryLiveCourt(courts);
 

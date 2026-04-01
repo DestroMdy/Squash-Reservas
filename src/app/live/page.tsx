@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
-import { fetchLiveCenterStatus } from "@/lib/supabase";
-import { LiveCourtState, LiveScoreboard } from "@/types/db";
+import {
+  fetchLiveCenterStatus,
+  getSession,
+  sendLiveComment
+} from "@/lib/supabase";
+import { LiveComment, LiveCourtState, LiveScoreboard } from "@/types/db";
 
 const LIVE_REFRESH_MS = 3_000;
 const DEFAULT_SCOREBOARD_DELAY_MS = 5_000;
@@ -19,6 +23,15 @@ function formatStartsAt(value: string | null) {
     weekday: "long",
     day: "2-digit",
     month: "long",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(new Date(value));
+}
+
+function formatCommentTime(value: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
@@ -115,7 +128,153 @@ function LiveScoreOverlay({
   );
 }
 
-function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
+function LiveCommentsSection({
+  court,
+  authenticatedUserId,
+  onRefresh
+}: {
+  court: LiveCourtState;
+  authenticatedUserId: string | null;
+  onRefresh: () => Promise<void>;
+}) {
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const comments = court.comments || [];
+
+  async function handleSubmit() {
+    const trimmedBody = body.trim();
+
+    if (!trimmedBody) {
+      return;
+    }
+
+    try {
+      setSending(true);
+      setError(null);
+      await sendLiveComment(
+        court.id,
+        trimmedBody,
+        getSession()?.access_token || undefined
+      );
+      setBody("");
+      await onRefresh();
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo enviar el comentario del vivo."
+      );
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <section className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Chat del vivo
+          </p>
+          <h3 className="mt-2 text-lg font-bold text-slate-950">
+            Comentarios de {court.label}
+          </h3>
+        </div>
+        <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+          {comments.length} comentario{comments.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {authenticatedUserId ? (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <label className="mb-2 block text-sm font-medium text-slate-700">
+            Deja tu comentario
+          </label>
+          <textarea
+            className="min-h-[88px] w-full rounded-2xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+            placeholder="Escribe algo sobre el partido, el punto o la transmision..."
+            value={body}
+            onChange={(event) => setBody(event.target.value.slice(0, 280))}
+          />
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">{body.trim().length}/280</p>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="btn-accent"
+              disabled={sending || !body.trim()}
+            >
+              {sending ? "Enviando..." : "Comentar el vivo"}
+            </button>
+          </div>
+          {error ? (
+            <p className="mt-3 text-sm text-red-600">{error}</p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4">
+          <p className="text-sm text-slate-600">
+            Inicia sesion y completa tu perfil para comentar el vivo.
+          </p>
+          <div className="mt-3">
+            <Link href="/login" className="btn-secondary">
+              Ingresar para comentar
+            </Link>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-1">
+        {comments.length ? (
+          comments.map((comment) => (
+            <article
+              key={comment.id}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+            >
+              <div className="flex items-start gap-3">
+                <AvatarImage
+                  src={comment.avatar_url}
+                  alt={comment.full_name}
+                  size={40}
+                  className="h-10 w-10 rounded-full border border-slate-200 object-cover shadow-sm"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold text-slate-900">
+                      {comment.full_name}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                      {formatCommentTime(comment.created_at)}
+                    </p>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">
+                    {comment.body}
+                  </p>
+                </div>
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-500">
+            Todavia no hay comentarios en {court.label.toLowerCase()}.
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function LiveCourtBroadcastCard({
+  court,
+  authenticatedUserId,
+  onRefresh
+}: {
+  court: LiveCourtState;
+  authenticatedUserId: string | null;
+  onRefresh: () => Promise<void>;
+}) {
   const stream = court.stream;
   const scoreboard = court.scoreboard;
   const fullscreenContainerRef = useRef<HTMLDivElement | null>(null);
@@ -457,6 +616,12 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
             {court.label.toLowerCase()} empiece a postear.
           </div>
         )}
+
+        <LiveCommentsSection
+          court={court}
+          authenticatedUserId={authenticatedUserId}
+          onRefresh={onRefresh}
+        />
       </article>
 
       {isFocusMode ? (
@@ -509,12 +674,24 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
 export default function LivePage() {
   const [courts, setCourts] = useState<LiveCourtState[]>([]);
   const [loading, setLoading] = useState(true);
+  const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(
+    null
+  );
+
+  const loadStream = useCallback(async () => {
+    const current = await fetchLiveCenterStatus();
+    setCourts(current.courts);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     let loadingInFlight = false;
 
-    async function loadStream() {
+    const syncAuthState = () => {
+      setAuthenticatedUserId(getSession()?.user?.id || null);
+    };
+
+    async function runLoad() {
       if (loadingInFlight) {
         return;
       }
@@ -539,22 +716,31 @@ export default function LivePage() {
       }
     }
 
-    void loadStream();
+    syncAuthState();
+    void runLoad();
 
     const intervalId = window.setInterval(() => {
-      void loadStream();
+      void runLoad();
     }, LIVE_REFRESH_MS);
 
     const handleFocus = () => {
-      void loadStream();
+      syncAuthState();
+      void runLoad();
+    };
+
+    const handleAuthChange = () => {
+      syncAuthState();
+      void runLoad();
     };
 
     window.addEventListener("focus", handleFocus);
+    window.addEventListener("sr-auth-change", handleAuthChange);
 
     return () => {
       cancelled = true;
       window.clearInterval(intervalId);
       window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("sr-auth-change", handleAuthChange);
     };
   }, []);
 
@@ -599,7 +785,12 @@ export default function LivePage() {
 
           <div className="grid gap-6 xl:grid-cols-2">
             {courts.map((court) => (
-              <LiveCourtBroadcastCard key={court.id} court={court} />
+              <LiveCourtBroadcastCard
+                key={court.id}
+                court={court}
+                authenticatedUserId={authenticatedUserId}
+                onRefresh={loadStream}
+              />
             ))}
           </div>
         </>

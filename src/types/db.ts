@@ -61,6 +61,16 @@ export interface LiveScoreboard {
   updated_at: string;
 }
 
+export interface LiveComment {
+  id: string;
+  court_id: LiveCourtId;
+  user_id: string;
+  full_name: string;
+  avatar_url?: string | null;
+  body: string;
+  created_at: string;
+}
+
 export interface LivePlayerMapping {
   id: string;
   squore_name: string;
@@ -83,6 +93,7 @@ export interface LiveCourtState {
   label: string;
   stream: LiveStreamConfig | null;
   scoreboard: LiveScoreboard | null;
+  comments?: LiveComment[];
 }
 
 export interface AdminLiveCourtState {

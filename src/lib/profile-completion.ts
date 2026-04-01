@@ -2,6 +2,8 @@ export const INCOMPLETE_PROFILE_MESSAGES_ERROR =
   "Debes completar tu perfil antes de usar los mensajes.";
 export const INCOMPLETE_PROFILE_MATCHES_ERROR =
   "Debes completar tu perfil antes de usar los partidos.";
+export const INCOMPLETE_PROFILE_LIVE_COMMENTS_ERROR =
+  "Debes completar tu perfil antes de comentar el vivo.";
 
 type ProfileCompletionRecord = {
   full_name?: string | null;

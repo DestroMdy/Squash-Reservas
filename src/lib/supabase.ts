@@ -7,6 +7,7 @@ import { buildAvatarPublicUrl } from "@/lib/avatar-url";
 import {
   AdminLiveCourtState,
   BookingAvailabilitySettings,
+  LiveComment,
   LiveCourtId,
   LivePlayerMapping,
   LiveCourtState,
@@ -1672,6 +1673,33 @@ export async function fetchLiveCenterStatus() {
     scoreboard: payload?.scoreboard || null,
     unavailable: payload?.unavailable === true
   };
+}
+
+export async function sendLiveComment(
+  courtId: LiveCourtId,
+  body: string,
+  token?: string
+) {
+  const response = await authedRouteRequest("/api/live-stream/comments", {
+    method: "POST",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify({
+      court_id: courtId,
+      body: body.trim()
+    })
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    comment?: LiveComment | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo enviar el comentario.");
+  }
+
+  return payload?.comment || null;
 }
 
 export async function fetchAdminLiveStream(token: string) {

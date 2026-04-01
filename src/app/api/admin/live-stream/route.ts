@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
+import { clearStoredLiveCourtComments } from "@/lib/live-comments-store";
 import {
   extractYouTubeVideoId,
   getLiveCourtLabel,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/live-ingest-status-store";
 import {
   clearStoredLiveCourtScoreboard,
+  getStoredLiveCourtStream,
   clearStoredLiveCourtStream,
   ensureStoredLiveCourtSquoreToken,
   getStoredLiveCenterConfigMap,
@@ -199,6 +201,15 @@ export async function PATCH(request: NextRequest) {
   }
 
   try {
+    const previousStream = await getStoredLiveCourtStream(body.court_id);
+
+    if (
+      previousStream?.youtube_video_id &&
+      previousStream.youtube_video_id !== videoId
+    ) {
+      await clearStoredLiveCourtComments(body.court_id);
+    }
+
     const stream = await setStoredLiveCourtStream(body.court_id, {
       title: body.title.trim(),
       description: body.description?.trim() || null,
@@ -280,7 +291,8 @@ export async function DELETE(request: NextRequest) {
     await Promise.all([
       clearStoredLiveCourtStream(courtId),
       clearStoredLiveCourtScoreboard(courtId),
-      clearLiveIngestStatus(courtId)
+      clearLiveIngestStatus(courtId),
+      clearStoredLiveCourtComments(courtId)
     ]);
 
     const courts = await buildAdminCourtsResponse(request);
