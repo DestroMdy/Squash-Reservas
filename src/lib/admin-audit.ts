@@ -7,6 +7,8 @@ export type AdminAuditAction =
   | "profile.promoted"
   | "external_tournament.created"
   | "external_tournament.updated"
+  | "external_tournament.flyer.updated"
+  | "external_tournament.flyer.deleted"
   | "external_tournament.deleted"
   | "schedule.override.updated"
   | "schedule.override.cleared"

@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
+import {
+  attachExternalTournamentFlyers,
+  deleteStoredExternalTournamentFlyer,
+  getStoredExternalTournamentFlyer
+} from "@/lib/external-tournament-flyers-store";
+import { getStoragePathFromPublicUrl } from "@/lib/avatar-url";
 import { adminHeaders, requireAdminRequest } from "@/lib/server-auth";
+
+const TOURNAMENT_FLYER_BUCKET = "avatars";
 
 async function fetchTournamentById(
   supabaseUrl: string,
@@ -18,7 +26,8 @@ async function fetchTournamentById(
 
   const text = await response.text();
   const rows = text.trim() ? JSON.parse(text) : [];
-  return rows[0] ?? null;
+  const tournaments = await attachExternalTournamentFlyers(rows);
+  return tournaments[0] ?? null;
 }
 
 export async function PATCH(
@@ -72,7 +81,9 @@ export async function PATCH(
     }
   }).catch(() => null);
 
-  return NextResponse.json({ ok: true, tournament: payload[0] });
+  const [tournament] = await attachExternalTournamentFlyers(payload);
+
+  return NextResponse.json({ ok: true, tournament });
 }
 
 export async function DELETE(
@@ -88,6 +99,9 @@ export async function DELETE(
     auth.supabaseUrl,
     auth.serviceRoleKey,
     params.id
+  );
+  const currentFlyerUrl = await getStoredExternalTournamentFlyer(params.id).catch(
+    () => null
   );
 
   const response = await fetch(
@@ -111,6 +125,24 @@ export async function DELETE(
       { status: 400 }
     );
   }
+
+  const flyerPath = getStoragePathFromPublicUrl(
+    TOURNAMENT_FLYER_BUCKET,
+    currentFlyerUrl
+  );
+
+  if (flyerPath) {
+    await fetch(`${auth.supabaseUrl}/storage/v1/object/${TOURNAMENT_FLYER_BUCKET}/${flyerPath}`, {
+      method: "DELETE",
+      headers: {
+        apikey: auth.serviceRoleKey,
+        Authorization: `Bearer ${auth.serviceRoleKey}`
+      },
+      cache: "no-store"
+    }).catch(() => null);
+  }
+
+  await deleteStoredExternalTournamentFlyer(params.id).catch(() => null);
 
   await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
     actorId: auth.user.id,

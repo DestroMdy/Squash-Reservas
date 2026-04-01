@@ -16,6 +16,7 @@ import { getReservationsPausedMessage } from "@/lib/booking-availability";
 import { buildCsv } from "@/lib/csv";
 import {
   createExternalTournament,
+  deleteExternalTournamentFlyerAsAdmin,
   fetchAdminBookingAvailability,
   deleteAdminScheduleOverride,
   deletePlayerAvatarAsAdmin,
@@ -37,6 +38,7 @@ import {
   updatePlayerProfileAsAdmin,
   updateBookingAsAdmin,
   updateExternalTournament,
+  uploadExternalTournamentFlyerAsAdmin,
   uploadPlayerAvatarAsAdmin
 } from "@/lib/supabase";
 import type {
@@ -74,6 +76,7 @@ type TournamentFormState = {
   event_date: string;
   location: string;
   url: string;
+  flyer_url: string;
   notes: string;
   is_active: boolean;
 };
@@ -123,6 +126,7 @@ function getEmptyTournamentForm(): TournamentFormState {
     event_date: "",
     location: "",
     url: "",
+    flyer_url: "",
     notes: "",
     is_active: true
   };
@@ -198,6 +202,9 @@ export default function AdminPage() {
   const [scheduleNote, setScheduleNote] = useState("");
   const [tournamentForm, setTournamentForm] = useState<TournamentFormState>(getEmptyTournamentForm());
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
+  const [tournamentFlyerFile, setTournamentFlyerFile] = useState<File | null>(null);
+  const [tournamentFlyerPreviewUrl, setTournamentFlyerPreviewUrl] = useState<string | null>(null);
+  const [removeTournamentFlyer, setRemoveTournamentFlyer] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [editingPlayerId, setEditingPlayerId] = useState<string | null>(null);
@@ -218,6 +225,7 @@ export default function AdminPage() {
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const tournamentFlyerObjectUrlRef = useRef<string | null>(null);
   const [openSections, setOpenSections] = useState<Record<AdminSectionKey, boolean>>({
     report: true,
     schedule: false,
@@ -227,6 +235,14 @@ export default function AdminPage() {
     players: false,
     bookings: false
   });
+
+  useEffect(() => {
+    return () => {
+      if (tournamentFlyerObjectUrlRef.current) {
+        URL.revokeObjectURL(tournamentFlyerObjectUrlRef.current);
+      }
+    };
+  }, []);
 
   const redirectToLogin = useCallback(() => {
     if (typeof window !== "undefined") {
@@ -594,19 +610,63 @@ export default function AdminPage() {
     }
   }
 
+  function clearTournamentFlyerObjectUrl() {
+    if (tournamentFlyerObjectUrlRef.current) {
+      URL.revokeObjectURL(tournamentFlyerObjectUrlRef.current);
+      tournamentFlyerObjectUrlRef.current = null;
+    }
+  }
+
+  function handleTournamentFlyerChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] || null;
+    clearTournamentFlyerObjectUrl();
+    setTournamentFlyerFile(file);
+    setRemoveTournamentFlyer(false);
+
+    if (file) {
+      const objectUrl = URL.createObjectURL(file);
+      tournamentFlyerObjectUrlRef.current = objectUrl;
+      setTournamentFlyerPreviewUrl(objectUrl);
+    } else {
+      setTournamentFlyerPreviewUrl(tournamentForm.flyer_url || null);
+    }
+
+    event.target.value = "";
+  }
+
+  function handleRemoveTournamentFlyer() {
+    clearTournamentFlyerObjectUrl();
+    setTournamentFlyerFile(null);
+    setTournamentFlyerPreviewUrl(null);
+    setRemoveTournamentFlyer(Boolean(editingTournamentId || tournamentForm.flyer_url));
+    setTournamentForm((current) => ({
+      ...current,
+      flyer_url: ""
+    }));
+  }
+
   function resetTournamentForm() {
+    clearTournamentFlyerObjectUrl();
     setEditingTournamentId(null);
+    setTournamentFlyerFile(null);
+    setTournamentFlyerPreviewUrl(null);
+    setRemoveTournamentFlyer(false);
     setTournamentForm(getEmptyTournamentForm());
   }
 
   function startTournamentEdit(tournament: ExternalTournament) {
+    clearTournamentFlyerObjectUrl();
     setEditingTournamentId(tournament.id);
+    setTournamentFlyerFile(null);
+    setTournamentFlyerPreviewUrl(tournament.flyer_url || null);
+    setRemoveTournamentFlyer(false);
     setTournamentForm({
       title: tournament.title,
       platform: tournament.platform,
       event_date: tournament.event_date || "",
       location: tournament.location || "",
       url: tournament.url,
+      flyer_url: tournament.flyer_url || "",
       notes: tournament.notes || "",
       is_active: tournament.is_active
     });
@@ -816,16 +876,52 @@ export default function AdminPage() {
         is_active: tournamentForm.is_active
       };
 
+      let savedTournament: ExternalTournament | null = null;
+
       if (editingTournamentId) {
-        await updateExternalTournament(editingTournamentId, getAdminToken(), payload);
-        setMessage("Torneo externo actualizado.");
+        savedTournament = await updateExternalTournament(
+          editingTournamentId,
+          getAdminToken(),
+          payload
+        );
       } else {
-        await createExternalTournament(getAdminToken(), payload);
-        setMessage("Torneo externo creado.");
+        savedTournament = await createExternalTournament(getAdminToken(), payload);
+      }
+
+      const savedTournamentId = savedTournament?.id || editingTournamentId;
+
+      if (savedTournamentId && tournamentFlyerFile) {
+        const flyerResult = await uploadExternalTournamentFlyerAsAdmin(
+          savedTournamentId,
+          getAdminToken(),
+          tournamentFlyerFile
+        );
+        savedTournament = savedTournament
+          ? {
+              ...savedTournament,
+              flyer_url: flyerResult.flyerUrl
+            }
+          : savedTournament;
+      } else if (savedTournamentId && removeTournamentFlyer) {
+        await deleteExternalTournamentFlyerAsAdmin(
+          savedTournamentId,
+          getAdminToken()
+        );
+        savedTournament = savedTournament
+          ? {
+              ...savedTournament,
+              flyer_url: null
+            }
+          : savedTournament;
       }
 
       await loadAdminData();
       resetTournamentForm();
+      setMessage(
+        editingTournamentId
+          ? "Torneo externo actualizado."
+          : "Torneo externo creado."
+      );
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "No se pudo guardar el torneo externo."
@@ -1484,6 +1580,58 @@ export default function AdminPage() {
                 </div>
 
                 <div className="md:col-span-2">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Flyer promocional</label>
+                  <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleTournamentFlyerChange}
+                      className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-xl file:border-0 file:bg-orange-100 file:px-4 file:py-2 file:font-medium file:text-orange-800 hover:file:bg-orange-200"
+                    />
+                    <p className="text-xs text-slate-500">
+                      Cargalo en JPG, PNG o WebP. En la lista pública se mostrará con proporción tipo flyer, sin deformar la imagen.
+                    </p>
+
+                    {tournamentFlyerPreviewUrl ? (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                        <div className="w-full max-w-[180px] overflow-hidden rounded-2xl border border-orange-200 bg-slate-100 p-3 shadow-sm">
+                          <div
+                            className="aspect-[4/5] rounded-xl bg-white"
+                            style={{
+                              backgroundImage: `url("${tournamentFlyerPreviewUrl}")`,
+                              backgroundPosition: "center",
+                              backgroundRepeat: "no-repeat",
+                              backgroundSize: "contain"
+                            }}
+                          />
+                        </div>
+                        <div className="space-y-2 text-sm text-slate-600">
+                          <p className="font-medium text-slate-900">
+                            {tournamentFlyerFile
+                              ? `Flyer listo para subir: ${tournamentFlyerFile.name}`
+                              : "Flyer actualmente cargado"}
+                          </p>
+                          <p>
+                            Si guardás el torneo, este flyer va a quedar asociado y visible en la página de torneos.
+                          </p>
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={handleRemoveTournamentFlyer}
+                          >
+                            Quitar flyer
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        Todavía no hay flyer cargado para este torneo.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
                   <label className="mb-1 block text-sm font-medium text-slate-700">Notas</label>
                   <textarea
                     className="min-h-[96px] w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
@@ -1523,7 +1671,21 @@ export default function AdminPage() {
                         editingTournamentId === tournament.id ? "border-2 border-orange-300 bg-orange-50/40" : "border border-slate-200 bg-white"
                       }`}
                     >
-                      <div>
+                      <div className="flex items-start gap-3">
+                        {tournament.flyer_url ? (
+                          <div className="w-[76px] shrink-0 overflow-hidden rounded-xl border border-orange-200 bg-slate-100 p-2 shadow-sm">
+                            <div
+                              className="aspect-[4/5] rounded-lg bg-white"
+                              style={{
+                                backgroundImage: `url("${tournament.flyer_url}")`,
+                                backgroundPosition: "center",
+                                backgroundRepeat: "no-repeat",
+                                backgroundSize: "contain"
+                              }}
+                            />
+                          </div>
+                        ) : null}
+                        <div>
                         <p className="font-medium text-slate-900">{tournament.title}</p>
                         <p className="text-sm text-slate-600">
                           {tournament.platform === "rankedin" ? "Rankedin" : tournament.platform === "tournamentsoftware" ? "Tournament Software" : "Otro"}
@@ -1533,6 +1695,7 @@ export default function AdminPage() {
                         <p className="mt-1 text-xs text-slate-500">
                           {tournament.is_active ? "Visible en público" : "Oculto"}
                         </p>
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap gap-2">

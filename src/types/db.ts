@@ -202,6 +202,7 @@ export interface ExternalTournament {
   event_date: string | null;
   location: string | null;
   url: string;
+  flyer_url?: string | null;
   notes: string | null;
   is_active: boolean;
   created_at: string;

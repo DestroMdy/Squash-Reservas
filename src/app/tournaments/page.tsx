@@ -301,6 +301,48 @@ function getTournamentDistance(
   return calculateDistanceKm(userCoordinates, coords);
 }
 
+function TournamentFlyerPoster({
+  flyerUrl,
+  title,
+  size = "card",
+  dark = false
+}: {
+  flyerUrl: string;
+  title: string;
+  size?: "card" | "hero";
+  dark?: boolean;
+}) {
+  const containerClass =
+    size === "hero"
+      ? "mx-auto w-full max-w-[240px] lg:mx-0"
+      : "mx-auto w-full max-w-[210px] lg:mx-0 lg:max-w-[180px]";
+
+  return (
+    <div className={containerClass}>
+      <div
+        className={`overflow-hidden rounded-[1.4rem] border p-3 shadow-[0_20px_50px_-34px_rgba(15,23,42,0.45)] ${
+          dark
+            ? "border-orange-300/60 bg-slate-950/75"
+            : "border-orange-200 bg-orange-50/70"
+        }`}
+      >
+        <div
+          role="img"
+          aria-label={`Flyer promocional de ${title}`}
+          className="aspect-[4/5] rounded-[1rem]"
+          style={{
+            backgroundColor: dark ? "rgba(15,23,42,0.18)" : "rgba(255,255,255,0.92)",
+            backgroundImage: `url("${flyerUrl}")`,
+            backgroundPosition: "center",
+            backgroundRepeat: "no-repeat",
+            backgroundSize: "contain"
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 function TournamentCard({
   tournament,
   userCoordinates,
@@ -325,8 +367,17 @@ function TournamentCard({
           : ""
       }`}
     >
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex gap-4">
+      <div className={`flex flex-col gap-4 ${tournament.flyer_url ? "lg:flex-row lg:items-start" : "md:flex-row md:items-start md:justify-between"}`}>
+        {tournament.flyer_url ? (
+          <TournamentFlyerPoster
+            flyerUrl={tournament.flyer_url}
+            title={tournament.title}
+            dark={emphasized}
+          />
+        ) : null}
+
+        <div className="flex flex-1 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="flex gap-4">
           <div
             className={`flex h-20 w-20 shrink-0 flex-col items-center justify-center rounded-2xl text-center ${
               emphasized
@@ -390,24 +441,25 @@ function TournamentCard({
             ) : null}
 
           </div>
-        </div>
-
-        {realLink ? (
-          <div className="flex shrink-0 flex-col gap-2 md:min-w-[168px]">
-            <a
-              href={tournament.url}
-              target="_blank"
-              rel="noreferrer"
-              className={`justify-center whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                emphasized
-                  ? "bg-orange-500 text-white shadow-[0_12px_30px_-18px_rgba(249,115,22,0.9)] hover:bg-orange-400"
-                  : "btn-primary"
-              }`}
-            >
-              {emphasized ? "Inscribirme ahora" : "Ver torneo"}
-            </a>
           </div>
-        ) : null}
+
+          {realLink ? (
+            <div className="flex shrink-0 flex-col gap-2 md:min-w-[168px]">
+              <a
+                href={tournament.url}
+                target="_blank"
+                rel="noreferrer"
+                className={`justify-center whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                  emphasized
+                    ? "bg-orange-500 text-white shadow-[0_12px_30px_-18px_rgba(249,115,22,0.9)] hover:bg-orange-400"
+                    : "btn-primary"
+                }`}
+              >
+                {emphasized ? "Inscribirme ahora" : "Ver torneo"}
+              </a>
+            </div>
+          ) : null}
+        </div>
       </div>
     </article>
   );
@@ -655,7 +707,7 @@ export default function TournamentsPage() {
                   : "border-orange-200 bg-gradient-to-br from-orange-50 to-white"
               }`}
             >
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
                 <div className="space-y-3">
                   <p
                     className={`text-xs font-semibold uppercase tracking-[0.22em] ${
@@ -724,19 +776,32 @@ export default function TournamentsPage() {
                   )}
                 </div>
 
-                {featuredTournament && hasFeaturedTournamentLink(featuredTournament) ? (
-                  <a
-                    href={featuredTournament.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={`justify-center whitespace-nowrap rounded-xl px-5 py-3 text-sm font-semibold transition ${
-                      spotlightTournament
-                        ? "bg-orange-500 text-white shadow-[0_20px_40px_-24px_rgba(249,115,22,0.95)] hover:bg-orange-400"
-                        : "btn-primary"
-                    }`}
-                  >
-                    {spotlightTournament ? "Entrar al sitio oficial" : "Ver torneo"}
-                  </a>
+                {featuredTournament ? (
+                  <div className="flex w-full flex-col gap-3 xl:max-w-[260px] xl:items-stretch">
+                    {featuredTournament.flyer_url ? (
+                      <TournamentFlyerPoster
+                        flyerUrl={featuredTournament.flyer_url}
+                        title={featuredTournament.title}
+                        size="hero"
+                        dark={Boolean(spotlightTournament)}
+                      />
+                    ) : null}
+
+                    {hasFeaturedTournamentLink(featuredTournament) ? (
+                      <a
+                        href={featuredTournament.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className={`justify-center whitespace-nowrap rounded-xl px-5 py-3 text-sm font-semibold transition ${
+                          spotlightTournament
+                            ? "bg-orange-500 text-white shadow-[0_20px_40px_-24px_rgba(249,115,22,0.95)] hover:bg-orange-400"
+                            : "btn-primary"
+                        }`}
+                      >
+                        {spotlightTournament ? "Entrar al sitio oficial" : "Ver torneo"}
+                      </a>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
             </section>

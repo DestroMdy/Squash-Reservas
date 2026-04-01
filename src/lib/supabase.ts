@@ -1621,9 +1621,22 @@ export async function markConversationAsRead(
 }
 
 export async function fetchExternalTournaments() {
-  return rest<any[]>(
-    "external_tournaments?select=id,title,platform,event_date,location,url,notes,is_active,created_at&is_active=eq.true&order=event_date.asc.nullslast,created_at.desc"
-  );
+  const response = await fetch("/api/external-tournaments", {
+    method: "GET",
+    cache: "no-store"
+  });
+
+  const payload = await parseJsonPayload<any[] | { error?: string }>(response);
+
+  if (!response.ok) {
+    const error =
+      !Array.isArray(payload) && payload?.error
+        ? payload.error
+        : "No se pudieron cargar los torneos.";
+    throw new Error(error);
+  }
+
+  return Array.isArray(payload) ? payload : [];
 }
 
 export async function fetchLiveStream() {
@@ -1903,6 +1916,73 @@ export async function createExternalTournament(
   }
 
   return data.tournament;
+}
+
+export async function uploadExternalTournamentFlyerAsAdmin(
+  tournamentId: string,
+  token: string,
+  file: File
+) {
+  const extension = AVATAR_ALLOWED_MIME_TYPES.get(file.type);
+
+  if (!extension) {
+    throw new Error("El flyer debe ser JPG, PNG o WebP.");
+  }
+
+  if (file.size > 8 * 1024 * 1024) {
+    throw new Error("El flyer no puede superar los 8 MB.");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file, `${tournamentId}/flyer.${extension}`);
+
+  const response = await authedRouteRequest(
+    `/api/admin/external-tournaments/${tournamentId}/flyer`,
+    {
+      method: "POST",
+      token,
+      body: formData
+    }
+  );
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    flyer_url?: string | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo subir el flyer.");
+  }
+
+  return {
+    flyerUrl: result?.flyer_url || null
+  };
+}
+
+export async function deleteExternalTournamentFlyerAsAdmin(
+  tournamentId: string,
+  token: string
+) {
+  const response = await authedRouteRequest(
+    `/api/admin/external-tournaments/${tournamentId}/flyer`,
+    {
+      method: "DELETE",
+      token
+    }
+  );
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    flyer_url?: string | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(result?.error || "No se pudo borrar el flyer.");
+  }
+
+  return {
+    flyerUrl: result?.flyer_url || null
+  };
 }
 
 export async function updateExternalTournament(

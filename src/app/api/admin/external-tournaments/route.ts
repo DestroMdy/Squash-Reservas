@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
+import { attachExternalTournamentFlyers } from "@/lib/external-tournament-flyers-store";
 import { adminHeaders, requireAdminRequest } from "@/lib/server-auth";
 
 export async function GET(request: NextRequest) {
@@ -27,7 +28,9 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  return NextResponse.json(payload);
+  const tournaments = await attachExternalTournamentFlyers(payload);
+
+  return NextResponse.json(tournaments);
 }
 
 export async function POST(request: NextRequest) {
