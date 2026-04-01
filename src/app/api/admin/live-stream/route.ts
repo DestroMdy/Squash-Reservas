@@ -45,7 +45,7 @@ function responseHeaders() {
 
 function buildSquorePostUrl(request: NextRequest, courtId: string, token: string) {
   const origin = new URL(request.url).origin;
-  return `${origin}/api/live-stream/squore?courtId=${courtId}&token=${token}`;
+  return `${origin}/api/live-stream/squore/${courtId}/${token}`;
 }
 
 function normalizeScoreboardDelaySeconds(value: number | string | null | undefined) {
