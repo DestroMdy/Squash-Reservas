@@ -24,6 +24,97 @@ function formatStartsAt(value: string | null) {
   }).format(new Date(value));
 }
 
+function LiveScoreOverlay({
+  courtLabel,
+  delaySeconds,
+  scoreboard,
+  expanded
+}: {
+  courtLabel: string;
+  delaySeconds: number;
+  scoreboard: LiveScoreboard;
+  expanded: boolean;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 sm:p-4">
+      <div className="mx-auto max-w-5xl">
+        <div
+          className={`rounded-2xl border border-white/15 bg-slate-950/68 text-white shadow-2xl backdrop-blur-md ${
+            expanded
+              ? "mx-auto max-w-3xl px-4 py-3"
+              : "ml-0 mr-auto max-w-xl px-3 py-2.5"
+          }`}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">
+                Marcador en vivo
+              </p>
+              <p className="mt-1 text-[11px] text-white/65">
+                {courtLabel} - demora configurada {delaySeconds}s
+              </p>
+            </div>
+            {scoreboard.result ? (
+              <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+                {scoreboard.result}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <AvatarImage
+                src={scoreboard.player_one_avatar_url}
+                alt={scoreboard.player_one_name}
+                size={expanded ? 44 : 34}
+                className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold sm:text-base">
+                  {scoreboard.player_one_name}
+                </p>
+                {scoreboard.winner_side === 1 ? (
+                  <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                    Ganador
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-white/60">
+                Games
+              </p>
+              <p className="mt-1 text-sm font-bold text-white sm:text-base">
+                {scoreboard.game_scores || "-"}
+              </p>
+            </div>
+
+            <div className="flex min-w-0 items-center justify-end gap-2.5">
+              <div className="min-w-0 text-right">
+                <p className="truncate text-sm font-semibold sm:text-base">
+                  {scoreboard.player_two_name}
+                </p>
+                {scoreboard.winner_side === 2 ? (
+                  <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                    Ganador
+                  </p>
+                ) : null}
+              </div>
+              <AvatarImage
+                src={scoreboard.player_two_avatar_url}
+                alt={scoreboard.player_two_name}
+                size={expanded ? 44 : 34}
+                className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
   const stream = court.stream;
   const scoreboard = court.scoreboard;
@@ -32,10 +123,11 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
     0,
     (stream?.scoreboard_delay_seconds ?? 5) * 1000
   );
-  const [visibleScoreboard, setVisibleScoreboard] = useState<LiveScoreboard | null>(
-    scoreboard
-  );
+  const [visibleScoreboard, setVisibleScoreboard] =
+    useState<LiveScoreboard | null>(scoreboard);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isFocusMode, setIsFocusMode] = useState(false);
+  const isExpanded = isFullscreen || isFocusMode;
 
   useEffect(() => {
     if (!scoreboard) {
@@ -69,19 +161,44 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
     };
   }, []);
 
-  async function handleEnterFullscreen() {
-    if (!fullscreenContainerRef.current || !document.fullscreenEnabled) {
+  useEffect(() => {
+    if (!isFocusMode) {
       return;
     }
 
-    try {
-      await fullscreenContainerRef.current.requestFullscreen();
-    } catch {
-      setIsFullscreen(false);
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isFocusMode]);
+
+  async function handleEnterExpandedMode() {
+    const container = fullscreenContainerRef.current;
+
+    if (container && document.fullscreenEnabled && container.requestFullscreen) {
+      try {
+        await container.requestFullscreen();
+        return;
+      } catch {
+        setIsFullscreen(false);
+      }
     }
+
+    setIsFocusMode(true);
   }
 
-  async function handleExitFullscreen() {
+  async function handleExitExpandedMode() {
+    if (isFocusMode) {
+      setIsFocusMode(false);
+      return;
+    }
+
     if (!document.fullscreenElement) {
       return;
     }
@@ -119,284 +236,273 @@ function LiveCourtBroadcastCard({ court }: { court: LiveCourtState }) {
   }
 
   return (
-    <article className="card overflow-hidden rounded-3xl p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            {court.label}
-          </p>
-          <h2 className="mt-2 text-2xl font-bold text-slate-950">{stream.title}</h2>
+    <>
+      <article className="card overflow-hidden rounded-3xl p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              {court.label}
+            </p>
+            <h2 className="mt-2 text-2xl font-bold text-slate-950">{stream.title}</h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                stream.is_live
+                  ? "bg-red-100 text-red-700"
+                  : "bg-orange-100 text-orange-700"
+              }`}
+            >
+              {stream.is_live ? "En vivo ahora" : "Programada"}
+            </span>
+            <span className="text-sm text-slate-500">
+              {formatStartsAt(stream.starts_at)}
+            </span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-              stream.is_live
-                ? "bg-red-100 text-red-700"
-                : "bg-orange-100 text-orange-700"
-            }`}
-          >
-            {stream.is_live ? "En vivo ahora" : "Programada"}
-          </span>
-          <span className="text-sm text-slate-500">
-            {formatStartsAt(stream.starts_at)}
-          </span>
-        </div>
-      </div>
 
-      {stream.description ? (
-        <p className="mt-4 text-sm leading-6 text-slate-600">{stream.description}</p>
-      ) : null}
+        {stream.description ? (
+          <p className="mt-4 text-sm leading-6 text-slate-600">{stream.description}</p>
+        ) : null}
 
-      {stream.banner_url ? (
-        <div className="mt-5 overflow-hidden rounded-3xl border border-orange-200 bg-slate-100 shadow-sm">
-          <div
-            className="h-44 w-full bg-cover bg-center bg-no-repeat sm:h-56"
-            style={{ backgroundImage: `url("${stream.banner_url}")` }}
-          />
-        </div>
-      ) : null}
-
-      <div className="mt-5 space-y-3">
-        <div
-          ref={fullscreenContainerRef}
-          className={`group relative overflow-hidden rounded-3xl border border-slate-200 bg-black shadow-sm ${
-            isFullscreen ? "h-screen w-screen rounded-none border-none" : ""
-          }`}
-        >
-          <div className={isFullscreen ? "h-full w-full" : "aspect-video"}>
-            <iframe
-              className="h-full w-full"
-              src={stream.embed_url}
-              title={`${court.label} - ${stream.title}`}
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              referrerPolicy="strict-origin-when-cross-origin"
-              allowFullScreen
+        {stream.banner_url ? (
+          <div className="mt-5 overflow-hidden rounded-3xl border border-orange-200 bg-slate-100 shadow-sm">
+            <div
+              className="h-44 w-full bg-cover bg-center bg-no-repeat sm:h-56"
+              style={{ backgroundImage: `url("${stream.banner_url}")` }}
             />
           </div>
+        ) : null}
 
-          {visibleScoreboard ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 sm:p-4">
-              <div className="mx-auto max-w-5xl">
-                <div
-                  className={`rounded-2xl border border-white/15 bg-slate-950/68 text-white shadow-2xl backdrop-blur-md ${
-                    isFullscreen
-                      ? "mx-auto max-w-3xl px-4 py-3"
-                      : "ml-0 mr-auto max-w-xl px-3 py-2.5"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">
-                        Marcador en vivo
-                      </p>
-                      <p className="mt-1 text-[11px] text-white/65">
-                        {court.label} · demora configurada {stream.scoreboard_delay_seconds}s
-                      </p>
-                    </div>
-                    {visibleScoreboard.result ? (
-                      <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-                        {visibleScoreboard.result}
-                      </span>
-                    ) : null}
-                  </div>
+        <div className="mt-5 space-y-3">
+          <div
+            ref={fullscreenContainerRef}
+            className={`group relative overflow-hidden rounded-3xl border border-slate-200 bg-black shadow-sm ${
+              isFullscreen ? "h-screen w-screen rounded-none border-none" : ""
+            }`}
+          >
+            <div className={isFullscreen ? "h-full w-full" : "aspect-video"}>
+              <iframe
+                className="h-full w-full"
+                src={stream.embed_url}
+                title={`${court.label} - ${stream.title}`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
 
-                  <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <AvatarImage
-                        src={visibleScoreboard.player_one_avatar_url}
-                        alt={visibleScoreboard.player_one_name}
-                        size={isFullscreen ? 44 : 34}
-                        className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold sm:text-base">
-                          {visibleScoreboard.player_one_name}
-                        </p>
-                        {visibleScoreboard.winner_side === 1 ? (
-                          <p className="mt-1 text-[11px] font-medium text-emerald-300">
-                            Ganador
-                          </p>
-                        ) : null}
-                      </div>
-                    </div>
-                    <div className="shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
-                      <p className="text-[10px] uppercase tracking-[0.16em] text-white/60">
-                        Games
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-white sm:text-base">
-                        {visibleScoreboard.game_scores || "-"}
-                      </p>
-                    </div>
-                    <div className="flex min-w-0 items-center justify-end gap-2.5">
-                      <div className="min-w-0 text-right">
-                        <p className="truncate text-sm font-semibold sm:text-base">
-                          {visibleScoreboard.player_two_name}
-                        </p>
-                        {visibleScoreboard.winner_side === 2 ? (
-                          <p className="mt-1 text-[11px] font-medium text-emerald-300">
-                            Ganador
-                          </p>
-                        ) : null}
-                      </div>
-                      <AvatarImage
-                        src={visibleScoreboard.player_two_avatar_url}
-                        alt={visibleScoreboard.player_two_name}
-                        size={isFullscreen ? 44 : 34}
-                        className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
-                      />
-                    </div>
-                  </div>
-                </div>
+            {visibleScoreboard ? (
+              <LiveScoreOverlay
+                courtLabel={court.label}
+                delaySeconds={stream.scoreboard_delay_seconds}
+                scoreboard={visibleScoreboard}
+                expanded={isExpanded}
+              />
+            ) : null}
+
+            <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
+              <div className="mx-auto flex max-w-5xl items-start justify-between gap-3">
+                <span className="rounded-full bg-slate-950/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+                  {court.label}
+                </span>
+                {isFullscreen ? (
+                  <button
+                    type="button"
+                    onClick={handleExitExpandedMode}
+                    className="pointer-events-auto rounded-full border border-white/15 bg-slate-950/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-slate-950/85"
+                  >
+                    Cerrar pantalla completa
+                  </button>
+                ) : null}
               </div>
             </div>
-          ) : null}
+          </div>
 
-          <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
-            <div className="mx-auto flex max-w-5xl items-start justify-between gap-3">
-              <span className="rounded-full bg-slate-950/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
-                {court.label}
-              </span>
-              {isFullscreen ? (
-                <button
-                  type="button"
-                  onClick={handleExitFullscreen}
-                  className="pointer-events-auto rounded-full border border-white/15 bg-slate-950/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-slate-950/85"
-                >
-                  Cerrar pantalla completa
-                </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={isExpanded ? handleExitExpandedMode : handleEnterExpandedMode}
+              className="btn-secondary"
+            >
+              {isExpanded
+                ? "Salir de pantalla completa"
+                : "Pantalla completa con marcador"}
+            </button>
+            <a
+              href={stream.youtube_url}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-accent"
+            >
+              Abrir en YouTube
+            </a>
+          </div>
+        </div>
+
+        {visibleScoreboard ? (
+          <section className="mt-5 rounded-3xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">
+                  Marcador automatico
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Actualizado:{" "}
+                  {new Date(visibleScoreboard.updated_at).toLocaleString("es-AR")}
+                </p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Sincronizado con la transmision con una demora de{" "}
+                  {stream.scoreboard_delay_seconds} s para acompanar el vivo.
+                </p>
+              </div>
+              {visibleScoreboard.result ? (
+                <span className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
+                  {visibleScoreboard.result}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <article className="rounded-2xl bg-white px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <AvatarImage
+                    src={visibleScoreboard.player_one_avatar_url}
+                    alt={visibleScoreboard.player_one_name}
+                    size={52}
+                    className="h-[52px] w-[52px] rounded-full border border-slate-200 object-cover shadow-sm"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                      Jugador 1
+                    </p>
+                    <h3 className="mt-2 text-2xl font-bold text-slate-950">
+                      {visibleScoreboard.player_one_name}
+                    </h3>
+                    {visibleScoreboard.winner_side === 1 ? (
+                      <p className="mt-2 text-sm font-medium text-emerald-700">
+                        Ganador
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+
+              <article className="rounded-2xl bg-white px-4 py-4 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <AvatarImage
+                    src={visibleScoreboard.player_two_avatar_url}
+                    alt={visibleScoreboard.player_two_name}
+                    size={52}
+                    className="h-[52px] w-[52px] rounded-full border border-slate-200 object-cover shadow-sm"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                      Jugador 2
+                    </p>
+                    <h3 className="mt-2 text-2xl font-bold text-slate-950">
+                      {visibleScoreboard.player_two_name}
+                    </h3>
+                    {visibleScoreboard.winner_side === 2 ? (
+                      <p className="mt-2 text-sm font-medium text-emerald-700">
+                        Ganador
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {visibleScoreboard.game_scores ? (
+                <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                    Games
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-slate-900">
+                    {visibleScoreboard.game_scores}
+                  </p>
+                </div>
+              ) : null}
+
+              {(visibleScoreboard.event_name ||
+                visibleScoreboard.round_name ||
+                visibleScoreboard.location) ? (
+                <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                    Partido
+                  </p>
+                  {visibleScoreboard.event_name ? (
+                    <p className="mt-2 text-sm font-semibold text-slate-900">
+                      {visibleScoreboard.event_name}
+                    </p>
+                  ) : null}
+                  {visibleScoreboard.round_name ? (
+                    <p className="mt-1 text-sm text-slate-600">
+                      {visibleScoreboard.round_name}
+                    </p>
+                  ) : null}
+                  {visibleScoreboard.location ? (
+                    <p className="mt-1 text-sm text-slate-500">
+                      {visibleScoreboard.location}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          </section>
+        ) : (
+          <div className="mt-5 rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+            El marcador de Squore va a aparecer aca apenas la tablet de{" "}
+            {court.label.toLowerCase()} empiece a postear.
+          </div>
+        )}
+      </article>
+
+      {isFocusMode ? (
+        <div className="fixed inset-0 z-[80] bg-slate-950">
+          <div className="flex h-full flex-col">
+            <div className="flex items-center justify-between gap-3 px-3 py-3 text-white sm:px-4">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">
+                  {court.label}
+                </p>
+                <p className="truncate text-sm font-semibold text-white">
+                  {stream.title}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleExitExpandedMode}
+                className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/15"
+              >
+                Cerrar
+              </button>
+            </div>
+
+            <div className="relative flex-1 overflow-hidden bg-black">
+              <iframe
+                className="h-full w-full"
+                src={stream.embed_url}
+                title={`${court.label} - ${stream.title} ampliado`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+
+              {visibleScoreboard ? (
+                <LiveScoreOverlay
+                  courtLabel={court.label}
+                  delaySeconds={stream.scoreboard_delay_seconds}
+                  scoreboard={visibleScoreboard}
+                  expanded
+                />
               ) : null}
             </div>
           </div>
         </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={isFullscreen ? handleExitFullscreen : handleEnterFullscreen}
-            className="btn-secondary"
-          >
-            {isFullscreen ? "Salir de pantalla completa" : "Pantalla completa con marcador"}
-          </button>
-          <a
-            href={stream.youtube_url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn-accent"
-          >
-            Abrir en YouTube
-          </a>
-        </div>
-      </div>
-
-      {visibleScoreboard ? (
-        <section className="mt-5 rounded-3xl border border-orange-200 bg-orange-50 p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-700">
-                Marcador automatico
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Actualizado: {new Date(visibleScoreboard.updated_at).toLocaleString("es-AR")}
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Sincronizado con la transmision con una demora de {stream.scoreboard_delay_seconds} s para acompaÃ±ar el vivo.
-              </p>
-            </div>
-            {visibleScoreboard.result ? (
-              <span className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
-                {visibleScoreboard.result}
-              </span>
-            ) : null}
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <article className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <AvatarImage
-                  src={visibleScoreboard.player_one_avatar_url}
-                  alt={visibleScoreboard.player_one_name}
-                  size={52}
-                  className="h-[52px] w-[52px] rounded-full border border-slate-200 object-cover shadow-sm"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                    Jugador 1
-                  </p>
-                  <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                    {visibleScoreboard.player_one_name}
-                  </h3>
-                  {visibleScoreboard.winner_side === 1 ? (
-                    <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
-                  ) : null}
-                </div>
-              </div>
-            </article>
-
-            <article className="rounded-2xl bg-white px-4 py-4 shadow-sm">
-              <div className="flex items-center gap-3">
-                <AvatarImage
-                  src={visibleScoreboard.player_two_avatar_url}
-                  alt={visibleScoreboard.player_two_name}
-                  size={52}
-                  className="h-[52px] w-[52px] rounded-full border border-slate-200 object-cover shadow-sm"
-                />
-                <div className="min-w-0">
-                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                    Jugador 2
-                  </p>
-                  <h3 className="mt-2 text-2xl font-bold text-slate-950">
-                    {visibleScoreboard.player_two_name}
-                  </h3>
-                  {visibleScoreboard.winner_side === 2 ? (
-                    <p className="mt-2 text-sm font-medium text-emerald-700">Ganador</p>
-                  ) : null}
-                </div>
-              </div>
-            </article>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {visibleScoreboard.game_scores ? (
-              <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                  Games
-                </p>
-                <p className="mt-2 text-base font-semibold text-slate-900">
-                  {visibleScoreboard.game_scores}
-                </p>
-              </div>
-            ) : null}
-
-            {(visibleScoreboard.event_name ||
-              visibleScoreboard.round_name ||
-              visibleScoreboard.location) ? (
-              <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
-                  Partido
-                </p>
-                {visibleScoreboard.event_name ? (
-                  <p className="mt-2 text-sm font-semibold text-slate-900">
-                    {visibleScoreboard.event_name}
-                  </p>
-                ) : null}
-                {visibleScoreboard.round_name ? (
-                  <p className="mt-1 text-sm text-slate-600">
-                    {visibleScoreboard.round_name}
-                  </p>
-                ) : null}
-                {visibleScoreboard.location ? (
-                  <p className="mt-1 text-sm text-slate-500">{visibleScoreboard.location}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        </section>
-      ) : (
-        <div className="mt-5 rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
-          El marcador de Squore va a aparecer aca apenas la tablet de {court.label.toLowerCase()} empiece a postear.
-        </div>
-      )}
-    </article>
+      ) : null}
+    </>
   );
 }
 
