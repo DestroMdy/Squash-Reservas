@@ -143,84 +143,101 @@ function LiveScoreOverlay({
   scoreboard: LiveScoreboard;
   expanded: boolean;
 }) {
-  const hasCurrentGamePoints =
+  const currentPointsLabel =
     scoreboard.current_game_points_player_one !== null &&
     scoreboard.current_game_points_player_one !== undefined &&
     scoreboard.current_game_points_player_two !== null &&
-    scoreboard.current_game_points_player_two !== undefined &&
-    !scoreboard.winner_side;
+    scoreboard.current_game_points_player_two !== undefined
+      ? `${scoreboard.current_game_points_player_one}-${scoreboard.current_game_points_player_two}`
+      : null;
+  const hasCurrentGamePoints = currentPointsLabel !== null && !scoreboard.winner_side;
+  const parsedGames = parseGameScores(
+    scoreboard.game_scores || null,
+    scoreboard.player_one_name,
+    scoreboard.player_two_name
+  );
+  const gamesToDisplay =
+    hasCurrentGamePoints &&
+    currentPointsLabel &&
+    parsedGames.at(-1)?.score === currentPointsLabel
+      ? parsedGames.slice(0, -1)
+      : parsedGames;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 p-2 sm:p-3">
-      <div className="mx-auto max-w-5xl">
+    <div
+      className={`pointer-events-none absolute z-10 ${
+        expanded
+          ? "left-3 top-3 sm:left-4 sm:top-4"
+          : "inset-x-0 bottom-0 p-2 sm:p-3"
+      }`}
+    >
+      <div className={expanded ? "" : "mx-auto max-w-5xl"}>
         <div
           className={`rounded-2xl border border-white/10 bg-slate-950/58 text-white shadow-2xl backdrop-blur-md ${
             expanded
-              ? "mx-auto max-w-2xl px-3 py-2.5"
+              ? "w-[min(18.5rem,calc(100vw-1.5rem))] px-2.5 py-2"
               : "ml-0 mr-auto max-w-md px-2.5 py-2"
           }`}
         >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-orange-300">
+            <p className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-orange-300">
               En vivo
             </p>
             {scoreboard.result ? (
-              <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white">
+              <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white">
                 {hasCurrentGamePoints ? `Games ${scoreboard.result}` : scoreboard.result}
               </span>
             ) : null}
           </div>
 
-          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
-            <div className="flex min-w-0 items-center gap-2">
+          <div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
+            <div className="flex min-w-0 items-center gap-1.5">
               <AvatarImage
                 src={scoreboard.player_one_avatar_url}
                 alt={scoreboard.player_one_name}
-                size={expanded ? 36 : 28}
-                className="h-7 w-7 shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-9 sm:w-9"
+                size={expanded ? 24 : 28}
+                className="h-6 w-6 shrink-0 rounded-full border border-white/20 object-cover shadow-md"
               />
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold sm:text-sm">
-                  {scoreboard.player_one_name}
-                </p>
-                {scoreboard.winner_side === 1 ? (
-                  <p className="mt-0.5 text-[10px] font-medium text-emerald-300">
-                    Ganador
-                  </p>
-                ) : null}
-              </div>
+              <p className="truncate text-[13px] font-semibold leading-tight">
+                {getCompactPlayerName(scoreboard.player_one_name)}
+              </p>
             </div>
 
-            <div className="shrink-0 rounded-xl bg-white/10 px-2.5 py-1.5 text-center">
-              <p className="text-[9px] uppercase tracking-[0.14em] text-white/55">
+            <div className="min-w-[3.85rem] shrink-0 rounded-xl bg-white/10 px-2 py-1 text-center">
+              <p className="text-[8px] uppercase tracking-[0.12em] text-white/55">
                 {hasCurrentGamePoints ? "Punto" : "Games"}
               </p>
-              <p className="mt-0.5 text-sm font-bold text-white sm:text-base">
-                {hasCurrentGamePoints
-                  ? `${scoreboard.current_game_points_player_one}-${scoreboard.current_game_points_player_two}`
-                  : scoreboard.game_scores || "-"}
+              <p className="mt-0.5 text-base font-bold leading-none text-white">
+                {hasCurrentGamePoints ? currentPointsLabel : scoreboard.game_scores || "-"}
               </p>
             </div>
 
-            <div className="flex min-w-0 items-center justify-end gap-2">
-              <div className="min-w-0 text-right">
-                <p className="truncate text-xs font-semibold sm:text-sm">
-                  {scoreboard.player_two_name}
-                </p>
-                {scoreboard.winner_side === 2 ? (
-                  <p className="mt-0.5 text-[10px] font-medium text-emerald-300">
-                    Ganador
-                  </p>
-                ) : null}
-              </div>
+            <div className="flex min-w-0 items-center justify-end gap-1.5">
+              <p className="truncate text-[13px] font-semibold leading-tight">
+                {getCompactPlayerName(scoreboard.player_two_name)}
+              </p>
               <AvatarImage
                 src={scoreboard.player_two_avatar_url}
                 alt={scoreboard.player_two_name}
-                size={expanded ? 36 : 28}
-                className="h-7 w-7 shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-9 sm:w-9"
+                size={expanded ? 24 : 28}
+                className="h-6 w-6 shrink-0 rounded-full border border-white/20 object-cover shadow-md"
               />
             </div>
           </div>
+
+          {gamesToDisplay.length ? (
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {gamesToDisplay.map((game) => (
+                <span
+                  key={game.key}
+                  className="rounded-md bg-white/10 px-1.5 py-1 text-[10px] font-medium leading-none text-white/90"
+                >
+                  <span className="text-white/55">{game.label}</span>{" "}
+                  <span className="font-semibold">{game.score}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>
@@ -671,9 +688,13 @@ function LiveCourtBroadcastCard({
 
             <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
               <div className="mx-auto flex max-w-5xl items-start justify-between gap-3">
-                <span className="rounded-full bg-slate-950/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
-                  {court.label}
-                </span>
+                {!isExpanded ? (
+                  <span className="rounded-full bg-slate-950/70 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-white backdrop-blur-sm">
+                    {court.label}
+                  </span>
+                ) : (
+                  <span />
+                )}
                 {isFullscreen ? (
                   <button
                     type="button"
@@ -910,41 +931,33 @@ function LiveCourtBroadcastCard({
 
       {isFocusMode ? (
         <div className="fixed inset-0 z-[80] bg-slate-950">
-          <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between gap-3 px-3 py-3 text-white sm:px-4">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-orange-300">
-                  {court.label}
-                </p>
-                <p className="truncate text-sm font-semibold text-white">
-                  {stream.title}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleExitExpandedMode}
-                className="rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/15"
-              >
-                Cerrar
-              </button>
-            </div>
+          <div className="relative h-full overflow-hidden bg-black">
+            <iframe
+              className="h-full w-full"
+              src={stream.embed_url}
+              title={`${court.label} - ${stream.title} ampliado`}
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              referrerPolicy="strict-origin-when-cross-origin"
+              allowFullScreen
+            />
 
-            <div className="relative flex-1 overflow-hidden bg-black">
-              <iframe
-                className="h-full w-full"
-                src={stream.embed_url}
-                title={`${court.label} - ${stream.title} ampliado`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
+            {visibleScoreboard ? (
+              <LiveScoreOverlay
+                scoreboard={visibleScoreboard}
+                expanded
               />
+            ) : null}
 
-              {visibleScoreboard ? (
-                <LiveScoreOverlay
-                  scoreboard={visibleScoreboard}
-                  expanded
-                />
-              ) : null}
+            <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
+              <div className="mx-auto flex max-w-5xl justify-end">
+                <button
+                  type="button"
+                  onClick={handleExitExpandedMode}
+                  className="pointer-events-auto rounded-full border border-white/15 bg-slate-950/70 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-sm transition hover:bg-slate-950/85"
+                >
+                  Cerrar
+                </button>
+              </div>
             </div>
           </div>
         </div>
