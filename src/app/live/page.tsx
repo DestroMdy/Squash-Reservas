@@ -4,14 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
-import {
-  getGoogleCastSession,
-  initializeGoogleCast,
-  isGoogleCastSessionReady,
-  requestGoogleCastSession,
-  sendLiveCourtToCastSession,
-  subscribeToGoogleCastSessionChanges
-} from "@/lib/live-cast";
 import { startSquoreMqttLiveSync } from "@/lib/live-squore-mqtt";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import {
@@ -59,14 +51,6 @@ function formatCommentTime(value: string) {
   }).format(new Date(value));
 }
 
-function isAndroidDevice() {
-  if (typeof navigator === "undefined") {
-    return false;
-  }
-
-  return /Android/i.test(navigator.userAgent);
-}
-
 async function lockLandscapeOrientation() {
   if (typeof screen === "undefined" || !screen.orientation) {
     return;
@@ -104,16 +88,6 @@ function unlockScreenOrientation() {
     orientation.unlock();
   } catch {
     // Ignore unlock failures on browsers that partially implement the API.
-  }
-}
-
-function buildChromeIntentUrl(targetUrl: string) {
-  try {
-    const parsedUrl = new URL(targetUrl);
-    const path = `${parsedUrl.pathname}${parsedUrl.search}`;
-    return `intent://${parsedUrl.host}${path}#Intent;scheme=${parsedUrl.protocol.replace(":", "")};package=com.android.chrome;end`;
-  } catch {
-    return targetUrl;
   }
 }
 
@@ -571,36 +545,14 @@ function LiveCommentsSection({
   );
 }
 
-function TvCastGlyph() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 24 24"
-      className="h-4 w-4 text-slate-500"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v7A2.5 2.5 0 0 1 18.5 17H15" />
-      <path d="M3 14v3h3" />
-      <path d="M3 10.75A6.25 6.25 0 0 1 9.25 17" />
-      <path d="M3 7.5A9.5 9.5 0 0 1 12.5 17" />
-    </svg>
-  );
-}
-
 function LiveCourtBroadcastCard({
   court,
   authenticatedUserId,
-  onRefresh,
-  googleCastAppId
+  onRefresh
 }: {
   court: LiveCourtState;
   authenticatedUserId: string | null;
   onRefresh: () => Promise<void>;
-  googleCastAppId: string | null;
 }) {
   const stream = court.stream;
   const scoreboard = court.scoreboard;
@@ -613,12 +565,7 @@ function LiveCourtBroadcastCard({
     useState<LiveScoreboard | null>(scoreboard);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
-  const [castFeedback, setCastFeedback] = useState<string | null>(null);
-  const [castReady, setCastReady] = useState(false);
-  const [showChromeFallback, setShowChromeFallback] = useState(false);
-  const pendingCastLoadRef = useRef(false);
   const isExpanded = isFullscreen || isFocusMode;
-  const tvModeUrl = `https://squashreservas.vercel.app/cast/live-receiver.html?courtId=${court.id}`;
   const parsedGames = useMemo(
     () =>
       parseGameScores(
@@ -701,65 +648,6 @@ function LiveCourtBroadcastCard({
     };
   }, [isFocusMode, isFullscreen]);
 
-  useEffect(() => {
-    setShowChromeFallback(isAndroidDevice());
-  }, []);
-
-  const pushCourtToTv = useCallback(async () => {
-    try {
-      await sendLiveCourtToCastSession({
-        courtId: court.id,
-        courtLabel: court.label,
-        title: stream?.title || court.label
-      });
-      pendingCastLoadRef.current = false;
-      setCastFeedback(`${court.label} enviada a la TV.`);
-    } catch (error) {
-      setCastFeedback(
-        error instanceof Error
-          ? error.message
-          : "No se pudo iniciar Google Cast."
-      );
-    }
-  }, [court.id, court.label, stream?.title]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let unsubscribe = () => {};
-
-    async function setupCast() {
-      if (!googleCastAppId) {
-        setCastReady(false);
-        return;
-      }
-
-      try {
-        await initializeGoogleCast(googleCastAppId);
-        if (!cancelled) {
-          setCastReady(true);
-        }
-        unsubscribe = subscribeToGoogleCastSessionChanges((event) => {
-          if (!pendingCastLoadRef.current || !isGoogleCastSessionReady(event)) {
-            return;
-          }
-
-          void pushCourtToTv();
-        });
-      } catch {
-        if (!cancelled) {
-          setCastReady(false);
-        }
-      }
-    }
-
-    void setupCast();
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [googleCastAppId, pushCourtToTv]);
-
   async function handleEnterExpandedMode() {
     const container = fullscreenContainerRef.current;
 
@@ -787,32 +675,11 @@ function LiveCourtBroadcastCard({
       return;
     }
 
-    try {
+  try {
       await document.exitFullscreen();
     } catch {
       unlockScreenOrientation();
       setIsFullscreen(false);
-    }
-  }
-
-  async function handlePrepareCast() {
-    pendingCastLoadRef.current = true;
-    setCastFeedback(null);
-
-    try {
-      if (getGoogleCastSession()) {
-        await pushCourtToTv();
-        return;
-      }
-
-      await requestGoogleCastSession();
-    } catch (error) {
-      pendingCastLoadRef.current = false;
-      setCastFeedback(
-        error instanceof Error
-          ? error.message
-          : "No se pudo iniciar Google Cast."
-      );
     }
   }
 
@@ -945,49 +812,7 @@ function LiveCourtBroadcastCard({
             >
               Abrir en YouTube
             </a>
-            <a
-              href={`/cast/live-receiver.html?courtId=${court.id}`}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-secondary"
-            >
-              Abrir modo TV
-            </a>
-            {showChromeFallback ? (
-              <a
-                href={buildChromeIntentUrl(tvModeUrl)}
-                className="btn-secondary"
-              >
-                Abrir modo TV en Chrome
-              </a>
-            ) : null}
-            {!googleCastAppId ? (
-              <button type="button" className="btn-secondary" disabled>
-                Cast sin configurar
-              </button>
-            ) : !castReady ? (
-              <button type="button" className="btn-secondary" disabled>
-                Preparando Cast...
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  void handlePrepareCast();
-                }}
-                className="btn-secondary flex items-center justify-between gap-3"
-              >
-                <span>Transmitir a TV</span>
-                <TvCastGlyph />
-              </button>
-            )}
           </div>
-          {castFeedback ? (
-            <p className="text-sm text-slate-500">{castFeedback}</p>
-          ) : null}
-          <p className="text-xs text-slate-400">
-            Si tu Chromecast no aparece aca, abre <span className="font-semibold text-slate-500">Modo TV</span> y transmite esa pestaña desde Chrome.
-          </p>
         </div>
 
         {visibleScoreboard ? (
@@ -1191,7 +1016,6 @@ export default function LivePage() {
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(
     null
   );
-  const [googleCastAppId, setGoogleCastAppId] = useState<string | null>(null);
   const courtsRef = useRef<LiveCourtState[]>([]);
   const realtimeScoreboardsRef = useRef<
     Partial<Record<LiveCourtState["id"], LiveScoreboard>>
@@ -1204,7 +1028,6 @@ export default function LivePage() {
   const loadStream = useCallback(async () => {
     const current = await fetchLiveCenterStatus();
     const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
-    setGoogleCastAppId(current.google_cast_app_id || null);
     setCourts(
       hydratedCourts.map((court) => ({
         ...court,
@@ -1235,7 +1058,6 @@ export default function LivePage() {
         const current = await fetchLiveCenterStatus();
         const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
         if (!cancelled) {
-          setGoogleCastAppId(current.google_cast_app_id || null);
           setCourts(
             hydratedCourts.map((court) => ({
               ...court,
@@ -1395,14 +1217,13 @@ export default function LivePage() {
 
           <div className="grid gap-6 xl:grid-cols-2">
             {courts.map((court) => (
-              <LiveCourtBroadcastCard
-                key={court.id}
-                court={court}
-                authenticatedUserId={authenticatedUserId}
-                onRefresh={loadStream}
-                googleCastAppId={googleCastAppId}
-              />
-            ))}
+                <LiveCourtBroadcastCard
+                  key={court.id}
+                  court={court}
+                  authenticatedUserId={authenticatedUserId}
+                  onRefresh={loadStream}
+                />
+              ))}
           </div>
         </>
       ) : (
