@@ -11,6 +11,13 @@ declare global {
     __onGCastApiAvailable?: (isAvailable: boolean) => void;
     cast?: {
       framework?: {
+        CastContextEventType?: {
+          SESSION_STATE_CHANGED?: string;
+        };
+        SessionState?: {
+          SESSION_STARTED?: string;
+          SESSION_RESUMED?: string;
+        };
         CastContext: {
           getInstance(): {
             setOptions(options: {
@@ -24,7 +31,14 @@ declare global {
                 data: Record<string, unknown>
               ): Promise<void>;
             } | null;
-            requestSession(): Promise<void>;
+            addEventListener(
+              eventType: string,
+              listener: (event: { sessionState?: string }) => void
+            ): void;
+            removeEventListener?: (
+              eventType: string,
+              listener: (event: { sessionState?: string }) => void
+            ) => void;
           };
         };
       };
@@ -124,41 +138,63 @@ export async function initializeGoogleCast(appId: string) {
   return true;
 }
 
-export async function castLiveCourtToTv({
-  appId,
+export function getGoogleCastContext() {
+  return window.cast?.framework?.CastContext.getInstance() || null;
+}
+
+export function getGoogleCastSession() {
+  return getGoogleCastContext()?.getCurrentSession() || null;
+}
+
+export function subscribeToGoogleCastSessionChanges(
+  listener: (event: { sessionState?: string; hasActiveSession: boolean }) => void
+) {
+  const castContext = getGoogleCastContext();
+  const eventType =
+    window.cast?.framework?.CastContextEventType?.SESSION_STATE_CHANGED;
+
+  if (!castContext || !eventType) {
+    return () => {};
+  }
+
+  const handler = (event: { sessionState?: string }) => {
+    listener({
+      sessionState: event?.sessionState,
+      hasActiveSession: Boolean(castContext.getCurrentSession())
+    });
+  };
+
+  castContext.addEventListener(eventType, handler);
+
+  return () => {
+    castContext.removeEventListener?.(eventType, handler);
+  };
+}
+
+export function isGoogleCastSessionReady(event?: { sessionState?: string }) {
+  const sessionState = event?.sessionState;
+  const startedState = window.cast?.framework?.SessionState?.SESSION_STARTED;
+  const resumedState = window.cast?.framework?.SessionState?.SESSION_RESUMED;
+
+  return sessionState === startedState || sessionState === resumedState;
+}
+
+export async function sendLiveCourtToCastSession({
   courtId,
   courtLabel,
   title
 }: {
-  appId: string;
   courtId: LiveCourtId;
   courtLabel: string;
   title: string;
 }) {
-  if (!appId.trim()) {
-    throw new Error(
-      "Falta el App ID de Google Cast. Configuralo en Admin > Centro en vivo."
-    );
-  }
-
   try {
-    const castContext = window.cast?.framework?.CastContext.getInstance();
+    const session = getGoogleCastSession();
 
-    if (!castContext) {
+    if (!session) {
       throw new Error(
-        "Google Cast todavia no termino de inicializarse. Espera un segundo y vuelve a intentar."
+        "No hay una sesion activa de Google Cast."
       );
-    }
-
-    let session = castContext.getCurrentSession();
-
-    if (!session) {
-      await castContext.requestSession();
-      session = castContext.getCurrentSession();
-    }
-
-    if (!session) {
-      throw new Error("No se pudo iniciar la sesion de Google Cast.");
     }
 
     await session.sendMessage(GOOGLE_CAST_NAMESPACE, {

@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
-import { castLiveCourtToTv, initializeGoogleCast } from "@/lib/live-cast";
+import {
+  getGoogleCastSession,
+  initializeGoogleCast,
+  isGoogleCastSessionReady,
+  sendLiveCourtToCastSession,
+  subscribeToGoogleCastSessionChanges
+} from "@/lib/live-cast";
 import { startSquoreMqttLiveSync } from "@/lib/live-squore-mqtt";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import {
@@ -326,6 +332,53 @@ function LiveCommentsSection({
   );
 }
 
+function TvCastGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-4 w-4 text-slate-500"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h13A2.5 2.5 0 0 1 21 7.5v7A2.5 2.5 0 0 1 18.5 17H15" />
+      <path d="M3 14v3h3" />
+      <path d="M3 10.75A6.25 6.25 0 0 1 9.25 17" />
+      <path d="M3 7.5A9.5 9.5 0 0 1 12.5 17" />
+    </svg>
+  );
+}
+
+function LiveCastLauncherButton({
+  label,
+  onPrepare
+}: {
+  label: string;
+  onPrepare: () => void;
+}) {
+  return (
+    <div className="relative inline-flex min-w-[210px]">
+      <div className="btn-secondary flex w-full items-center justify-between gap-3 pr-4">
+        <span>{label}</span>
+        <TvCastGlyph />
+      </div>
+      <google-cast-launcher
+        className="absolute inset-0 z-10 block h-full w-full cursor-pointer opacity-0"
+        aria-label={label}
+        onPointerDownCapture={onPrepare}
+        onKeyDownCapture={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            onPrepare();
+          }
+        }}
+      />
+    </div>
+  );
+}
+
 function LiveCourtBroadcastCard({
   court,
   authenticatedUserId,
@@ -348,9 +401,9 @@ function LiveCourtBroadcastCard({
     useState<LiveScoreboard | null>(scoreboard);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
-  const [isCasting, setIsCasting] = useState(false);
   const [castFeedback, setCastFeedback] = useState<string | null>(null);
   const [castReady, setCastReady] = useState(false);
+  const pendingCastLoadRef = useRef(false);
   const isExpanded = isFullscreen || isFocusMode;
   const parsedGames = useMemo(
     () =>
@@ -421,8 +474,27 @@ function LiveCourtBroadcastCard({
     };
   }, [isFocusMode]);
 
+  const pushCourtToTv = useCallback(async () => {
+    try {
+      await sendLiveCourtToCastSession({
+        courtId: court.id,
+        courtLabel: court.label,
+        title: stream?.title || court.label
+      });
+      pendingCastLoadRef.current = false;
+      setCastFeedback(`${court.label} enviada a la TV.`);
+    } catch (error) {
+      setCastFeedback(
+        error instanceof Error
+          ? error.message
+          : "No se pudo iniciar Google Cast."
+      );
+    }
+  }, [court.id, court.label, stream?.title]);
+
   useEffect(() => {
     let cancelled = false;
+    let unsubscribe = () => {};
 
     async function setupCast() {
       if (!googleCastAppId) {
@@ -435,6 +507,13 @@ function LiveCourtBroadcastCard({
         if (!cancelled) {
           setCastReady(true);
         }
+        unsubscribe = subscribeToGoogleCastSessionChanges((event) => {
+          if (!pendingCastLoadRef.current || !isGoogleCastSessionReady(event)) {
+            return;
+          }
+
+          void pushCourtToTv();
+        });
       } catch {
         if (!cancelled) {
           setCastReady(false);
@@ -446,8 +525,9 @@ function LiveCourtBroadcastCard({
 
     return () => {
       cancelled = true;
+      unsubscribe();
     };
-  }, [googleCastAppId]);
+  }, [googleCastAppId, pushCourtToTv]);
 
   async function handleEnterExpandedMode() {
     const container = fullscreenContainerRef.current;
@@ -481,25 +561,12 @@ function LiveCourtBroadcastCard({
     }
   }
 
-  async function handleCastToTv() {
-    try {
-      setIsCasting(true);
-      setCastFeedback(null);
-      await castLiveCourtToTv({
-        appId: googleCastAppId || "",
-        courtId: court.id,
-        courtLabel: court.label,
-        title: stream?.title || court.label
-      });
-      setCastFeedback(`${court.label} enviada a la TV.`);
-    } catch (error) {
-      setCastFeedback(
-        error instanceof Error
-          ? error.message
-          : "No se pudo iniciar Google Cast."
-      );
-    } finally {
-      setIsCasting(false);
+  function handlePrepareCast() {
+    pendingCastLoadRef.current = true;
+    setCastFeedback(null);
+
+    if (getGoogleCastSession()) {
+      void pushCourtToTv();
     }
   }
 
@@ -628,20 +695,20 @@ function LiveCourtBroadcastCard({
             >
               Abrir en YouTube
             </a>
-            <button
-              type="button"
-              onClick={handleCastToTv}
-              className="btn-secondary"
-              disabled={isCasting || !googleCastAppId || !castReady}
-            >
-              {isCasting
-                ? "Conectando TV..."
-                : !googleCastAppId
-                  ? "Cast sin configurar"
-                  : !castReady
-                    ? "Preparando Cast..."
-                    : "Transmitir a TV"}
-            </button>
+            {!googleCastAppId ? (
+              <button type="button" className="btn-secondary" disabled>
+                Cast sin configurar
+              </button>
+            ) : !castReady ? (
+              <button type="button" className="btn-secondary" disabled>
+                Preparando Cast...
+              </button>
+            ) : (
+              <LiveCastLauncherButton
+                label="Transmitir a TV"
+                onPrepare={handlePrepareCast}
+              />
+            )}
           </div>
           {castFeedback ? (
             <p className="text-sm text-slate-500">{castFeedback}</p>
