@@ -15,7 +15,12 @@ import { LiveComment, LiveCourtState, LiveScoreboard } from "@/types/db";
 
 const LIVE_REFRESH_MS = 3_000;
 const DEFAULT_SCOREBOARD_DELAY_MS = 5_000;
-type SupportedOrientationLock = "landscape" | "portrait" | "natural";
+type SupportedOrientationLock =
+  | "landscape"
+  | "landscape-primary"
+  | "landscape-secondary"
+  | "portrait"
+  | "natural";
 
 function mergeRealtimeScoreboard(
   currentScoreboard: LiveScoreboard | null,
@@ -64,10 +69,17 @@ async function lockLandscapeOrientation() {
     return;
   }
 
-  try {
-    await orientation.lock("landscape");
-  } catch {
-    // Some browsers/apps reject orientation lock outside supported fullscreen contexts.
+  for (const mode of [
+    "landscape",
+    "landscape-primary",
+    "landscape-secondary"
+  ] as SupportedOrientationLock[]) {
+    try {
+      await orientation.lock(mode);
+      return;
+    } catch {
+      // Try the next supported landscape mode when browsers are picky about lock values.
+    }
   }
 }
 
