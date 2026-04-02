@@ -33,21 +33,32 @@ describe("live-stream helpers", () => {
     expect(config?.youtube_video_id).toBe("dQw4w9WgXcQ");
     expect(config?.embed_url).toBe(buildYouTubeEmbedUrl("dQw4w9WgXcQ"));
     expect(config?.squore_device_id).toBeNull();
+    expect(config?.squore_mqtt_broker_url).toBeNull();
+    expect(config?.squore_mqtt_match_topic).toBeNull();
+    expect(config?.squore_mqtt_change_topic).toBeNull();
     expect(config?.is_live).toBe(true);
   });
 
-  it("keeps the optional Tournament Software URL and Squore device id on admin config", () => {
+  it("keeps the optional Tournament Software URL, Squore device id and MQTT fields on admin config", () => {
     const config = normalizeAdminLiveStreamConfig({
       title: "Cancha 1",
       youtube_url: "https://www.youtube.com/live/dQw4w9WgXcQ",
       tournament_software_post_url: "https://example.com/post-result",
-      squore_device_id: "XFQE3A"
+      squore_device_id: "XFQE3A",
+      squore_mqtt_broker_url: "wss://broker.emqx.io:8084/mqtt",
+      squore_mqtt_match_topic: "doubleyellow/court-1/match",
+      squore_mqtt_change_topic: "doubleyellow/court-1/change"
     });
 
     expect(config?.tournament_software_post_url).toBe(
       "https://example.com/post-result"
     );
     expect(config?.squore_device_id).toBe("XFQE3A");
+    expect(config?.squore_mqtt_broker_url).toBe(
+      "wss://broker.emqx.io:8084/mqtt"
+    );
+    expect(config?.squore_mqtt_match_topic).toBe("doubleyellow/court-1/match");
+    expect(config?.squore_mqtt_change_topic).toBe("doubleyellow/court-1/change");
   });
 
   it("prefers the first active live court over scheduled courts", () => {
@@ -63,6 +74,9 @@ describe("live-stream helpers", () => {
           youtube_video_id: "dQw4w9WgXcQ",
           embed_url: buildYouTubeEmbedUrl("dQw4w9WgXcQ"),
           squore_device_id: null,
+          squore_mqtt_broker_url: null,
+          squore_mqtt_match_topic: null,
+          squore_mqtt_change_topic: null,
           scoreboard_delay_seconds: 5,
           is_live: false,
           starts_at: null,
@@ -82,6 +96,9 @@ describe("live-stream helpers", () => {
           youtube_video_id: "3JZ_D3ELwOQ",
           embed_url: buildYouTubeEmbedUrl("3JZ_D3ELwOQ"),
           squore_device_id: null,
+          squore_mqtt_broker_url: null,
+          squore_mqtt_match_topic: null,
+          squore_mqtt_change_topic: null,
           scoreboard_delay_seconds: 5,
           is_live: true,
           starts_at: null,

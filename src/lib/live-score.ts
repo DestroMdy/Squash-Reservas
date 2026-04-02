@@ -69,6 +69,61 @@ function normalizeSquoreAssetUrl(value: string | null) {
   }
 }
 
+function getNestedStringValue(
+  payload: RawScorePayload,
+  parentKey: string,
+  childKey: string
+) {
+  const parent = payload[parentKey];
+
+  if (!parent || typeof parent !== "object") {
+    return null;
+  }
+
+  const value = (parent as Record<string, unknown>)[childKey];
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function getCurrentGamePoints(gameScores: string | null) {
+  if (!gameScores) {
+    return {
+      playerOne: null,
+      playerTwo: null
+    };
+  }
+
+  const segments = gameScores
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  const lastSegment = segments[segments.length - 1];
+
+  if (!lastSegment) {
+    return {
+      playerOne: null,
+      playerTwo: null
+    };
+  }
+
+  const match = lastSegment.match(/(-?\d+)\s*-\s*(-?\d+)/);
+  if (!match) {
+    return {
+      playerOne: null,
+      playerTwo: null
+    };
+  }
+
+  return {
+    playerOne: Number(match[1]),
+    playerTwo: Number(match[2])
+  };
+}
+
 export function normalizeSquoreScoreboard(payload: RawScorePayload) {
   const playerOneName = getStringValue(payload, "player1");
   const playerTwoName = getStringValue(payload, "player2");
@@ -76,6 +131,8 @@ export function normalizeSquoreScoreboard(payload: RawScorePayload) {
   if (!playerOneName || !playerTwoName) {
     return null;
   }
+
+  const currentGamePoints = getCurrentGamePoints(getStringValue(payload, "gamescores"));
 
   return {
     source: "squore",
@@ -94,6 +151,8 @@ export function normalizeSquoreScoreboard(payload: RawScorePayload) {
     duration_minutes: getNumberValue(payload, "duration"),
     total_points_player_one: getNumberValue(payload, "totalpointsplayer1"),
     total_points_player_two: getNumberValue(payload, "totalpointsplayer2"),
+    current_game_points_player_one: currentGamePoints.playerOne,
+    current_game_points_player_two: currentGamePoints.playerTwo,
     played_on: getStringValue(payload, "whendate"),
     played_time: getStringValue(payload, "whentime"),
     updated_at: new Date().toISOString()
@@ -112,6 +171,9 @@ export function normalizeSquoreRecentMatch(payload: RawScorePayload) {
   const winnerSide = winner === "A" ? 1 : winner === "B" ? 2 : null;
   const durationSeconds = getNumberValue(payload, "duration");
 
+  const gameScores = getStringValue(payload, "gamescores");
+  const currentGamePoints = getCurrentGamePoints(gameScores);
+
   return {
     source: "squore",
     event_name: getStringValue(payload, "event"),
@@ -123,7 +185,7 @@ export function normalizeSquoreRecentMatch(payload: RawScorePayload) {
     player_two_name: playerTwoName,
     player_two_avatar_url: normalizeSquoreAssetUrl(getStringValue(payload, "avtB")),
     result: getStringValue(payload, "result"),
-    game_scores: getStringValue(payload, "gamescores"),
+    game_scores: gameScores,
     winner_name:
       winnerSide === 1
         ? playerOneName
@@ -135,8 +197,76 @@ export function normalizeSquoreRecentMatch(payload: RawScorePayload) {
       durationSeconds !== null ? Math.max(0, Math.round(durationSeconds / 60)) : null,
     total_points_player_one: null,
     total_points_player_two: null,
+    current_game_points_player_one: currentGamePoints.playerOne,
+    current_game_points_player_two: currentGamePoints.playerTwo,
     played_on: getStringValue(payload, "date"),
     played_time: getStringValue(payload, "time"),
+    updated_at: new Date().toISOString()
+  } satisfies LiveScoreboard;
+}
+
+export function normalizeSquoreMqttMatch(payload: RawScorePayload) {
+  const playerOneName =
+    getNestedStringValue(payload, "players", "A") || getStringValue(payload, "A");
+  const playerTwoName =
+    getNestedStringValue(payload, "players", "B") || getStringValue(payload, "B");
+
+  if (!playerOneName || !playerTwoName) {
+    return null;
+  }
+
+  const gameScores = getStringValue(payload, "gamescores");
+  const currentGamePoints = getCurrentGamePoints(gameScores);
+  const winner = getStringValue(payload, "isVictoryFor");
+  const winnerSide = winner === "A" ? 1 : winner === "B" ? 2 : null;
+
+  return {
+    source: "squore",
+    event_name:
+      getNestedStringValue(payload, "event", "name") ||
+      getStringValue(payload, "eventname") ||
+      getStringValue(payload, "event"),
+    division_name:
+      getNestedStringValue(payload, "event", "division") ||
+      getStringValue(payload, "eventdivision") ||
+      getStringValue(payload, "division"),
+    round_name: getStringValue(payload, "round") || getStringValue(payload, "eventround"),
+    location:
+      getNestedStringValue(payload, "event", "location") ||
+      getStringValue(payload, "location") ||
+      getStringValue(payload, "court"),
+    player_one_name: playerOneName,
+    player_one_avatar_url: normalizeSquoreAssetUrl(
+      getNestedStringValue(payload, "avatars", "A") ||
+        getStringValue(payload, "avtA")
+    ),
+    player_two_name: playerTwoName,
+    player_two_avatar_url: normalizeSquoreAssetUrl(
+      getNestedStringValue(payload, "avatars", "B") ||
+        getStringValue(payload, "avtB")
+    ),
+    result: getStringValue(payload, "result"),
+    game_scores: gameScores,
+    winner_name:
+      winnerSide === 1
+        ? playerOneName
+        : winnerSide === 2
+          ? playerTwoName
+          : null,
+    winner_side: winnerSide,
+    duration_minutes: getNumberValue(payload, "duration"),
+    total_points_player_one: null,
+    total_points_player_two: null,
+    current_game_points_player_one: currentGamePoints.playerOne,
+    current_game_points_player_two: currentGamePoints.playerTwo,
+    played_on:
+      getNestedStringValue(payload, "when", "date") ||
+      getStringValue(payload, "whendate") ||
+      getStringValue(payload, "date"),
+    played_time:
+      getNestedStringValue(payload, "when", "time") ||
+      getStringValue(payload, "whentime") ||
+      getStringValue(payload, "time"),
     updated_at: new Date().toISOString()
   } satisfies LiveScoreboard;
 }

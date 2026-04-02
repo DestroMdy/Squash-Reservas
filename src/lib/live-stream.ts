@@ -17,6 +17,9 @@ type RawLiveStreamConfig = Partial<LiveStreamConfig> & {
   youtube_url?: string | null;
   youtube_video_id?: string | null;
   squore_device_id?: string | null;
+  squore_mqtt_broker_url?: string | null;
+  squore_mqtt_match_topic?: string | null;
+  squore_mqtt_change_topic?: string | null;
   scoreboard_delay_seconds?: number | string | null;
   is_live?: boolean | null;
   starts_at?: string | null;
@@ -118,6 +121,31 @@ function normalizeSquoreDeviceId(value: string | null | undefined) {
   return /^[A-Za-z0-9_-]{3,40}$/.test(normalized) ? normalized : null;
 }
 
+function normalizeMqttBrokerUrl(value: string | null | undefined) {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(trimmed);
+
+    if (parsedUrl.protocol !== "ws:" && parsedUrl.protocol !== "wss:") {
+      return null;
+    }
+
+    return parsedUrl.toString();
+  } catch {
+    return null;
+  }
+}
+
+function normalizeMqttTopic(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+}
+
 export function normalizeLiveStreamConfig(
   raw: RawLiveStreamConfig | null | undefined
 ) {
@@ -142,6 +170,9 @@ export function normalizeLiveStreamConfig(
     youtube_video_id: videoId,
     embed_url: buildYouTubeEmbedUrl(videoId),
     squore_device_id: normalizeSquoreDeviceId(raw.squore_device_id),
+    squore_mqtt_broker_url: normalizeMqttBrokerUrl(raw.squore_mqtt_broker_url),
+    squore_mqtt_match_topic: normalizeMqttTopic(raw.squore_mqtt_match_topic),
+    squore_mqtt_change_topic: normalizeMqttTopic(raw.squore_mqtt_change_topic),
     scoreboard_delay_seconds: normalizeScoreboardDelaySeconds(
       raw.scoreboard_delay_seconds
     ),

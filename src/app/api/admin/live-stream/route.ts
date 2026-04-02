@@ -30,6 +30,9 @@ type LiveStreamBody = {
   banner_url?: string | null;
   youtube_url?: string;
   squore_device_id?: string | null;
+  squore_mqtt_broker_url?: string | null;
+  squore_mqtt_match_topic?: string | null;
+  squore_mqtt_change_topic?: string | null;
   starts_at?: string | null;
   scoreboard_delay_seconds?: number | string | null;
   is_live?: boolean;
@@ -218,6 +221,9 @@ export async function PATCH(request: NextRequest) {
       youtube_url: body.youtube_url.trim(),
       youtube_video_id: videoId,
       squore_device_id: body.squore_device_id?.trim() || null,
+      squore_mqtt_broker_url: body.squore_mqtt_broker_url?.trim() || null,
+      squore_mqtt_match_topic: body.squore_mqtt_match_topic?.trim() || null,
+      squore_mqtt_change_topic: body.squore_mqtt_change_topic?.trim() || null,
       scoreboard_delay_seconds: normalizedScoreboardDelaySeconds,
       is_live: Boolean(body.is_live),
       starts_at: body.starts_at?.trim() || null,
@@ -239,6 +245,9 @@ export async function PATCH(request: NextRequest) {
         banner_url: stream.banner_url,
         youtube_url: stream.youtube_url,
         squore_device_id: stream.squore_device_id,
+        squore_mqtt_broker_url: stream.squore_mqtt_broker_url,
+        squore_mqtt_match_topic: stream.squore_mqtt_match_topic,
+        squore_mqtt_change_topic: stream.squore_mqtt_change_topic,
         scoreboard_delay_seconds: stream.scoreboard_delay_seconds,
         tournament_software_post_url: stream.tournament_software_post_url,
         is_live: stream.is_live,

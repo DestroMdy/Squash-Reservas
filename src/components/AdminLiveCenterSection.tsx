@@ -27,6 +27,9 @@ type LiveCourtFormState = {
   banner_url: string;
   youtube_url: string;
   squore_device_id: string;
+  squore_mqtt_broker_url: string;
+  squore_mqtt_match_topic: string;
+  squore_mqtt_change_topic: string;
   starts_at: string;
   scoreboard_delay_seconds: string;
   is_live: boolean;
@@ -45,6 +48,9 @@ function getEmptyLiveCourtForm(): LiveCourtFormState {
     banner_url: "",
     youtube_url: "",
     squore_device_id: "",
+    squore_mqtt_broker_url: "wss://broker.emqx.io:8084/mqtt",
+    squore_mqtt_match_topic: "",
+    squore_mqtt_change_topic: "",
     starts_at: "",
     scoreboard_delay_seconds: "5",
     is_live: false,
@@ -87,6 +93,10 @@ function mapStreamToForm(
     banner_url: stream.banner_url || "",
     youtube_url: stream.youtube_url,
     squore_device_id: stream.squore_device_id || "",
+    squore_mqtt_broker_url:
+      stream.squore_mqtt_broker_url || "wss://broker.emqx.io:8084/mqtt",
+    squore_mqtt_match_topic: stream.squore_mqtt_match_topic || "",
+    squore_mqtt_change_topic: stream.squore_mqtt_change_topic || "",
     starts_at: formatDateTimeLocalValue(stream.starts_at),
     scoreboard_delay_seconds: String(stream.scoreboard_delay_seconds ?? 5),
     is_live: stream.is_live,
@@ -273,7 +283,10 @@ export function AdminLiveCenterSection() {
         scoreboard_delay_seconds: Number(form.scoreboard_delay_seconds || 5),
         is_live: form.is_live,
         tournament_software_post_url: form.tournament_software_post_url || null,
-        squore_device_id: form.squore_device_id || null
+        squore_device_id: form.squore_device_id || null,
+        squore_mqtt_broker_url: form.squore_mqtt_broker_url || null,
+        squore_mqtt_match_topic: form.squore_mqtt_match_topic || null,
+        squore_mqtt_change_topic: form.squore_mqtt_change_topic || null
       });
 
       const hydratedCourts = await hydrateCourtsWithSquoreFeed(result.courts);
@@ -618,6 +631,69 @@ export function AdminLiveCenterSection() {
                     <p className="mt-1 text-xs text-slate-500">
                       Opcional. Si lo cargas, el vivo puede leer el partido actual directo desde el feed de esa tablet, aunque el PostResult automatico no dispare.
                     </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Broker MQTT de Squore
+                    </label>
+                    <input
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={form.squore_mqtt_broker_url}
+                      onChange={(event) =>
+                        setForms((current) => ({
+                          ...current,
+                          [court.id]: {
+                            ...current[court.id],
+                            squore_mqtt_broker_url: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="wss://broker.emqx.io:8084/mqtt"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">
+                      Opcional. Si configuras MQTT, el vivo puede actualizar el score punto a punto.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Topic MQTT del partido
+                    </label>
+                    <input
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={form.squore_mqtt_match_topic}
+                      onChange={(event) =>
+                        setForms((current) => ({
+                          ...current,
+                          [court.id]: {
+                            ...current[court.id],
+                            squore_mqtt_match_topic: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Pega el Publish Match Topic de la tablet"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-sm font-medium text-slate-700">
+                      Topic MQTT de cambios
+                    </label>
+                    <input
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                      value={form.squore_mqtt_change_topic}
+                      onChange={(event) =>
+                        setForms((current) => ({
+                          ...current,
+                          [court.id]: {
+                            ...current[court.id],
+                            squore_mqtt_change_topic: event.target.value
+                          }
+                        }))
+                      }
+                      placeholder="Pega el Publish Change Topic de la tablet"
+                    />
                   </div>
 
                   <div>

@@ -1733,6 +1733,9 @@ export async function updateLiveStream(
     banner_url?: string | null;
     youtube_url: string;
     squore_device_id?: string | null;
+    squore_mqtt_broker_url?: string | null;
+    squore_mqtt_match_topic?: string | null;
+    squore_mqtt_change_topic?: string | null;
     starts_at?: string | null;
     scoreboard_delay_seconds?: number;
     is_live: boolean;

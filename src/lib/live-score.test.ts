@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   attachLiveScoreboardAvatars,
+  normalizeSquoreMqttMatch,
   normalizeSquoreRecentMatch,
   normalizeSquoreScoreboard
 } from "@/lib/live-score";
@@ -29,6 +30,8 @@ describe("live-score helpers", () => {
     expect(score?.player_two_name).toBe("Nicolas Asmus");
     expect(score?.winner_side).toBe(1);
     expect(score?.result).toBe("3-1");
+    expect(score?.current_game_points_player_one).toBe(11);
+    expect(score?.current_game_points_player_two).toBe(7);
   });
 
   it("prioritizes manual Squore mappings for avatar and display name", () => {
@@ -106,6 +109,42 @@ describe("live-score helpers", () => {
     expect(score?.winner_side).toBe(1);
     expect(score?.player_one_avatar_url).toBe(
       "https://squore.double-yellow.be/images/a.png"
+    );
+    expect(score?.current_game_points_player_one).toBe(11);
+    expect(score?.current_game_points_player_two).toBe(7);
+  });
+
+  it("normalizes a Squore MQTT payload into the live scoreboard shape", () => {
+    const score = normalizeSquoreMqttMatch({
+      players: {
+        A: "Agustin Rivero",
+        B: "Federico Vera"
+      },
+      avatars: {
+        A: "/images/agustin.png",
+        B: "/images/fede.png"
+      },
+      event: {
+        name: "Circuito Patagonico",
+        location: "Cancha 1",
+        division: "Primera"
+      },
+      round: "Final",
+      result: "1-1",
+      gamescores: "11-8,8-11,4-2",
+      when: {
+        date: "2026-04-01",
+        time: "18:10:00-03:00"
+      }
+    });
+
+    expect(score).not.toBeNull();
+    expect(score?.player_one_name).toBe("Agustin Rivero");
+    expect(score?.player_two_name).toBe("Federico Vera");
+    expect(score?.current_game_points_player_one).toBe(4);
+    expect(score?.current_game_points_player_two).toBe(2);
+    expect(score?.player_one_avatar_url).toBe(
+      "https://squore.double-yellow.be/images/agustin.png"
     );
   });
 

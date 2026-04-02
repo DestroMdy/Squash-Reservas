@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
+import { startSquoreMqttLiveSync } from "@/lib/live-squore-mqtt";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import {
   fetchLiveCenterStatus,
@@ -14,6 +15,17 @@ import { LiveComment, LiveCourtState, LiveScoreboard } from "@/types/db";
 
 const LIVE_REFRESH_MS = 3_000;
 const DEFAULT_SCOREBOARD_DELAY_MS = 5_000;
+
+function mergeRealtimeScoreboard(
+  currentScoreboard: LiveScoreboard | null,
+  realtimeScoreboard: LiveScoreboard | null | undefined
+) {
+  if (!realtimeScoreboard) {
+    return currentScoreboard;
+  }
+
+  return realtimeScoreboard;
+}
 
 function formatStartsAt(value: string | null) {
   if (!value) {
@@ -49,6 +61,13 @@ function LiveScoreOverlay({
   scoreboard: LiveScoreboard;
   expanded: boolean;
 }) {
+  const hasCurrentGamePoints =
+    scoreboard.current_game_points_player_one !== null &&
+    scoreboard.current_game_points_player_one !== undefined &&
+    scoreboard.current_game_points_player_two !== null &&
+    scoreboard.current_game_points_player_two !== undefined &&
+    !scoreboard.winner_side;
+
   return (
     <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 sm:p-4">
       <div className="mx-auto max-w-5xl">
@@ -70,7 +89,7 @@ function LiveScoreOverlay({
             </div>
             {scoreboard.result ? (
               <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
-                {scoreboard.result}
+                {hasCurrentGamePoints ? `Games ${scoreboard.result}` : scoreboard.result}
               </span>
             ) : null}
           </div>
@@ -97,10 +116,12 @@ function LiveScoreOverlay({
 
             <div className="shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
               <p className="text-[10px] uppercase tracking-[0.16em] text-white/60">
-                Games
+                {hasCurrentGamePoints ? "Punto actual" : "Games"}
               </p>
               <p className="mt-1 text-sm font-bold text-white sm:text-base">
-                {scoreboard.game_scores || "-"}
+                {hasCurrentGamePoints
+                  ? `${scoreboard.current_game_points_player_one}-${scoreboard.current_game_points_player_two}`
+                  : scoreboard.game_scores || "-"}
               </p>
             </div>
 
@@ -518,7 +539,13 @@ function LiveCourtBroadcastCard({
               </div>
               {visibleScoreboard.result ? (
                 <span className="rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white">
-                  {visibleScoreboard.result}
+                  {visibleScoreboard.current_game_points_player_one !== null &&
+                  visibleScoreboard.current_game_points_player_one !== undefined &&
+                  visibleScoreboard.current_game_points_player_two !== null &&
+                  visibleScoreboard.current_game_points_player_two !== undefined &&
+                  !visibleScoreboard.winner_side
+                    ? `Games ${visibleScoreboard.result}`
+                    : visibleScoreboard.result}
                 </span>
               ) : null}
             </div>
@@ -574,6 +601,22 @@ function LiveCourtBroadcastCard({
             </div>
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {visibleScoreboard.current_game_points_player_one !== null &&
+              visibleScoreboard.current_game_points_player_one !== undefined &&
+              visibleScoreboard.current_game_points_player_two !== null &&
+              visibleScoreboard.current_game_points_player_two !== undefined &&
+              !visibleScoreboard.winner_side ? (
+                <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4 md:col-span-2">
+                  <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
+                    Punto actual
+                  </p>
+                  <p className="mt-2 text-2xl font-bold text-slate-950">
+                    {visibleScoreboard.current_game_points_player_one} -{" "}
+                    {visibleScoreboard.current_game_points_player_two}
+                  </p>
+                </div>
+              ) : null}
+
               {visibleScoreboard.game_scores ? (
                 <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
@@ -678,11 +721,27 @@ export default function LivePage() {
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(
     null
   );
+  const courtsRef = useRef<LiveCourtState[]>([]);
+  const realtimeScoreboardsRef = useRef<
+    Partial<Record<LiveCourtState["id"], LiveScoreboard>>
+  >({});
+
+  useEffect(() => {
+    courtsRef.current = courts;
+  }, [courts]);
 
   const loadStream = useCallback(async () => {
     const current = await fetchLiveCenterStatus();
     const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
-    setCourts(hydratedCourts);
+    setCourts(
+      hydratedCourts.map((court) => ({
+        ...court,
+        scoreboard: mergeRealtimeScoreboard(
+          court.scoreboard,
+          realtimeScoreboardsRef.current[court.id]
+        )
+      }))
+    );
   }, []);
 
   useEffect(() => {
@@ -704,7 +763,15 @@ export default function LivePage() {
         const current = await fetchLiveCenterStatus();
         const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
         if (!cancelled) {
-          setCourts(hydratedCourts);
+          setCourts(
+            hydratedCourts.map((court) => ({
+              ...court,
+              scoreboard: mergeRealtimeScoreboard(
+                court.scoreboard,
+                realtimeScoreboardsRef.current[court.id]
+              )
+            }))
+          );
         }
       } catch {
         if (!cancelled) {
@@ -751,6 +818,73 @@ export default function LivePage() {
     () => courts.filter((court) => court.stream),
     [courts]
   );
+
+  const mqttConfigSignature = useMemo(
+    () =>
+      configuredCourts
+        .map((court) =>
+          [
+            court.id,
+            court.stream?.squore_mqtt_broker_url || "",
+            court.stream?.squore_mqtt_match_topic || "",
+            court.stream?.squore_mqtt_change_topic || ""
+          ].join("|")
+        )
+        .join("||"),
+    [configuredCourts]
+  );
+
+  useEffect(() => {
+    let disposed = false;
+    let stop: () => void = () => {};
+    const subscriptionCourts = courtsRef.current
+      .filter((court) => court.stream)
+      .map((court) => ({
+        id: court.id,
+        label: court.label,
+        stream: court.stream,
+        scoreboard: null,
+        comments: []
+      }));
+
+    async function connectRealtime() {
+      const nextStop = await startSquoreMqttLiveSync(
+        subscriptionCourts,
+        (courtId, scoreboard) => {
+          realtimeScoreboardsRef.current[courtId] = scoreboard;
+
+          if (disposed) {
+            return;
+          }
+
+          setCourts((currentCourts) =>
+            currentCourts.map((court) =>
+              court.id === courtId
+                ? {
+                    ...court,
+                    scoreboard
+                  }
+                : court
+            )
+          );
+        }
+      );
+
+      if (disposed) {
+        nextStop();
+        return;
+      }
+
+      stop = nextStop;
+    }
+
+    void connectRealtime();
+
+    return () => {
+      disposed = true;
+      stop();
+    };
+  }, [mqttConfigSignature]);
 
   const activeCount = useMemo(
     () => courts.filter((court) => court.stream?.is_live).length,

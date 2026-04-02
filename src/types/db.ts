@@ -29,6 +29,9 @@ export interface LiveStreamConfig {
   youtube_video_id: string;
   embed_url: string;
   squore_device_id: string | null;
+  squore_mqtt_broker_url: string | null;
+  squore_mqtt_match_topic: string | null;
+  squore_mqtt_change_topic: string | null;
   scoreboard_delay_seconds: number;
   is_live: boolean;
   starts_at: string | null;
@@ -57,6 +60,8 @@ export interface LiveScoreboard {
   duration_minutes: number | null;
   total_points_player_one: number | null;
   total_points_player_two: number | null;
+  current_game_points_player_one?: number | null;
+  current_game_points_player_two?: number | null;
   played_on: string | null;
   played_time: string | null;
   updated_at: string;
