@@ -245,23 +245,9 @@ function LiveCommentsSection({
   }
 
   return (
-    <section className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Chat del vivo
-          </p>
-          <h3 className="mt-2 text-lg font-bold text-slate-950">
-            Comentarios de {court.label}
-          </h3>
-        </div>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
-          {comments.length} comentario{comments.length === 1 ? "" : "s"}
-        </span>
-      </div>
-
+    <section className="mt-5 rounded-3xl border border-slate-200 bg-slate-50 p-4 shadow-sm sm:p-5">
       {authenticatedUserId ? (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4">
           <label className="mb-2 block text-sm font-medium text-slate-700">
             Deja tu comentario
           </label>
@@ -287,7 +273,7 @@ function LiveCommentsSection({
           ) : null}
         </div>
       ) : (
-        <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4">
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-4">
           <p className="text-sm text-slate-600">
             Inicia sesion y completa tu perfil para comentar el vivo.
           </p>
