@@ -1796,6 +1796,7 @@ export async function updateLiveStream(
     squore_mqtt_change_topic?: string | null;
     starts_at?: string | null;
     scoreboard_delay_seconds?: number;
+    is_enabled: boolean;
     is_live: boolean;
     tournament_software_post_url?: string | null;
   }

@@ -21,6 +21,7 @@ type RawLiveStreamConfig = Partial<LiveStreamConfig> & {
   squore_mqtt_match_topic?: string | null;
   squore_mqtt_change_topic?: string | null;
   scoreboard_delay_seconds?: number | string | null;
+  is_enabled?: boolean | null;
   is_live?: boolean | null;
   starts_at?: string | null;
   updated_at?: string | null;
@@ -176,7 +177,8 @@ export function normalizeLiveStreamConfig(
     scoreboard_delay_seconds: normalizeScoreboardDelaySeconds(
       raw.scoreboard_delay_seconds
     ),
-    is_live: Boolean(raw.is_live),
+    is_enabled: raw.is_enabled !== false,
+    is_live: raw.is_enabled === false ? false : Boolean(raw.is_live),
     starts_at: raw.starts_at?.trim() || null,
     updated_at: updatedAt,
     updated_by: raw.updated_by?.trim() || null
@@ -213,12 +215,18 @@ export function toPublicLiveStreamConfig(
   return publicStream as LiveStreamConfig;
 }
 
+export function isLiveStreamEnabled(
+  stream: Pick<LiveStreamConfig, "is_enabled"> | null | undefined
+) {
+  return Boolean(stream && stream.is_enabled !== false);
+}
+
 export function getPrimaryLiveCourt<T extends Pick<LiveCourtState, "stream">>(
   courts: T[]
 ) {
   return (
-    courts.find((court) => court.stream?.is_live) ||
-    courts.find((court) => court.stream) ||
+    courts.find((court) => isLiveStreamEnabled(court.stream) && court.stream?.is_live) ||
+    courts.find((court) => isLiveStreamEnabled(court.stream)) ||
     null
   );
 }

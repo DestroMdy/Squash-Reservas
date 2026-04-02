@@ -35,6 +35,7 @@ type LiveStreamBody = {
   squore_mqtt_change_topic?: string | null;
   starts_at?: string | null;
   scoreboard_delay_seconds?: number | string | null;
+  is_enabled?: boolean;
   is_live?: boolean;
   tournament_software_post_url?: string | null;
 };
@@ -225,7 +226,8 @@ export async function PATCH(request: NextRequest) {
       squore_mqtt_match_topic: body.squore_mqtt_match_topic?.trim() || null,
       squore_mqtt_change_topic: body.squore_mqtt_change_topic?.trim() || null,
       scoreboard_delay_seconds: normalizedScoreboardDelaySeconds,
-      is_live: Boolean(body.is_live),
+      is_enabled: body.is_enabled !== false,
+      is_live: body.is_enabled === false ? false : Boolean(body.is_live),
       starts_at: body.starts_at?.trim() || null,
       updated_at: new Date().toISOString(),
       updated_by: auth.user.id,
@@ -250,6 +252,7 @@ export async function PATCH(request: NextRequest) {
         squore_mqtt_change_topic: stream.squore_mqtt_change_topic,
         scoreboard_delay_seconds: stream.scoreboard_delay_seconds,
         tournament_software_post_url: stream.tournament_software_post_url,
+        is_enabled: stream.is_enabled,
         is_live: stream.is_live,
         starts_at: stream.starts_at
       }

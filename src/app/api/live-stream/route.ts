@@ -9,7 +9,11 @@ import {
   getStoredLivePlayerMappings,
   isLiveStreamStoreConfigured
 } from "@/lib/live-stream-store";
-import { getPrimaryLiveCourt, toPublicLiveStreamConfig } from "@/lib/live-stream";
+import {
+  getPrimaryLiveCourt,
+  isLiveStreamEnabled,
+  toPublicLiveStreamConfig
+} from "@/lib/live-stream";
 
 function responseHeaders() {
   return {
@@ -54,7 +58,9 @@ export async function GET(request: Request) {
 
     const courts = storedCourts.map((court, index) => ({
       ...court,
-      stream: toPublicLiveStreamConfig(court.stream),
+      stream: isLiveStreamEnabled(court.stream)
+        ? toPublicLiveStreamConfig(court.stream)
+        : null,
       scoreboard: mqttSnapshots[index]
         ? attachLiveScoreboardAvatars(mqttSnapshots[index], profiles, mappings)
         : court.scoreboard

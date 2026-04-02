@@ -5,7 +5,6 @@ import { AvatarImage } from "@/components/AvatarImage";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import { LIVE_COURTS } from "@/lib/live-stream";
 import {
-  clearLiveStream,
   fetchAdminLiveCastSettings,
   deleteLivePlayerMapping,
   fetchAdminLiveStream,
@@ -35,6 +34,7 @@ type LiveCourtFormState = {
   squore_mqtt_change_topic: string;
   starts_at: string;
   scoreboard_delay_seconds: string;
+  is_enabled: boolean;
   is_live: boolean;
   tournament_software_post_url: string;
 };
@@ -56,6 +56,7 @@ function getEmptyLiveCourtForm(): LiveCourtFormState {
     squore_mqtt_change_topic: "",
     starts_at: "",
     scoreboard_delay_seconds: "5",
+    is_enabled: true,
     is_live: false,
     tournament_software_post_url: ""
   };
@@ -102,6 +103,7 @@ function mapStreamToForm(
     squore_mqtt_change_topic: stream.squore_mqtt_change_topic || "",
     starts_at: formatDateTimeLocalValue(stream.starts_at),
     scoreboard_delay_seconds: String(stream.scoreboard_delay_seconds ?? 5),
+    is_enabled: stream.is_enabled !== false,
     is_live: stream.is_live,
     tournament_software_post_url: stream.tournament_software_post_url || ""
   };
@@ -175,7 +177,10 @@ export function AdminLiveCenterSection() {
   const [savingCastSettings, setSavingCastSettings] = useState(false);
 
   const liveCount = useMemo(
-    () => courts.filter((court) => court.stream?.is_live).length,
+    () =>
+      courts.filter(
+        (court) => court.stream?.is_enabled !== false && court.stream?.is_live
+      ).length,
     [courts]
   );
 
@@ -285,17 +290,18 @@ export function AdminLiveCenterSection() {
       setMessage(null);
       setError(null);
 
-      const result = await updateLiveStream(token, {
-        court_id: courtId,
-        title: form.title,
-        description: form.description || null,
-        banner_url: form.banner_url || null,
-        youtube_url: form.youtube_url,
-        starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
-        scoreboard_delay_seconds: Number(form.scoreboard_delay_seconds || 5),
-        is_live: form.is_live,
-        tournament_software_post_url: form.tournament_software_post_url || null,
-        squore_device_id: form.squore_device_id || null,
+        const result = await updateLiveStream(token, {
+          court_id: courtId,
+          title: form.title,
+          description: form.description || null,
+          banner_url: form.banner_url || null,
+          youtube_url: form.youtube_url,
+          starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
+          scoreboard_delay_seconds: Number(form.scoreboard_delay_seconds || 5),
+          is_enabled: form.is_enabled,
+          is_live: form.is_live,
+          tournament_software_post_url: form.tournament_software_post_url || null,
+          squore_device_id: form.squore_device_id || null,
         squore_mqtt_broker_url: form.squore_mqtt_broker_url || null,
         squore_mqtt_match_topic: form.squore_mqtt_match_topic || null,
         squore_mqtt_change_topic: form.squore_mqtt_change_topic || null
@@ -316,9 +322,10 @@ export function AdminLiveCenterSection() {
   }
 
   async function handleClear(courtId: LiveCourtId) {
-    const courtLabel = courts.find((court) => court.id === courtId)?.label || "esta cancha";
+    const court = courts.find((currentCourt) => currentCourt.id === courtId) || null;
+    const courtLabel = court?.label || "esta cancha";
     const confirmed = window.confirm(
-      `Vas a desactivar ${courtLabel}. Los usuarios dejaran de verla en el centro en vivo.`
+      `Vas a desactivar ${courtLabel}. Dejara de mostrarse al publico, pero la configuracion va a quedar guardada.`
     );
 
     if (!confirmed) {
@@ -331,21 +338,46 @@ export function AdminLiveCenterSection() {
         throw new Error("Debes iniciar sesion");
       }
 
-      setClearingCourtId(courtId);
-      setMessage(null);
-      setError(null);
+        setClearingCourtId(courtId);
+        setMessage(null);
+        setError(null);
 
-      const result = await clearLiveStream(token, courtId);
-      applyCourts(result.courts);
-      setMessage(`${courtLabel} desactivada.`);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "No se pudo limpiar la cancha del centro en vivo"
-      );
-    } finally {
-      setClearingCourtId(null);
+        if (!court?.stream) {
+          throw new Error("No hay configuracion guardada para esta cancha.");
+        }
+
+        const savedForm = mapStreamToForm(court.stream);
+        const result = await updateLiveStream(token, {
+          court_id: courtId,
+          title: savedForm.title,
+          description: savedForm.description || null,
+          banner_url: savedForm.banner_url || null,
+          youtube_url: savedForm.youtube_url,
+          starts_at: savedForm.starts_at
+            ? new Date(savedForm.starts_at).toISOString()
+            : null,
+          scoreboard_delay_seconds: Number(savedForm.scoreboard_delay_seconds || 5),
+          is_enabled: false,
+          is_live: false,
+          tournament_software_post_url:
+            savedForm.tournament_software_post_url || null,
+          squore_device_id: savedForm.squore_device_id || null,
+          squore_mqtt_broker_url: savedForm.squore_mqtt_broker_url || null,
+          squore_mqtt_match_topic: savedForm.squore_mqtt_match_topic || null,
+          squore_mqtt_change_topic: savedForm.squore_mqtt_change_topic || null
+        });
+
+        const hydratedCourts = await hydrateCourtsWithSquoreFeed(result.courts);
+        applyCourts(hydratedCourts);
+        setMessage(`${courtLabel} desactivada.`);
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "No se pudo desactivar la cancha del centro en vivo"
+        );
+      } finally {
+        setClearingCourtId(null);
     }
   }
 
@@ -561,18 +593,22 @@ export function AdminLiveCenterSection() {
                   </h3>
                 </div>
                 <span
-                  className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-                    court.stream?.is_live
-                      ? "bg-red-100 text-red-700"
+                    className={`rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
+                      court.stream?.is_enabled === false
+                        ? "bg-slate-200 text-slate-700"
+                        : court.stream?.is_live
+                        ? "bg-red-100 text-red-700"
+                        : court.stream
+                          ? "bg-orange-100 text-orange-700"
+                          : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {court.stream?.is_enabled === false
+                      ? "Desactivada"
+                      : court.stream?.is_live
+                      ? "En vivo ahora"
                       : court.stream
-                        ? "bg-orange-100 text-orange-700"
-                        : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  {court.stream?.is_live
-                    ? "En vivo ahora"
-                    : court.stream
-                      ? "Programada"
+                        ? "Programada"
                       : "Off"}
                 </span>
               </div>
@@ -924,22 +960,43 @@ export function AdminLiveCenterSection() {
                     />
                   </div>
 
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={form.is_live}
-                      onChange={(event) =>
-                        setForms((current) => ({
-                          ...current,
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={form.is_enabled}
+                        onChange={(event) =>
+                          setForms((current) => ({
+                            ...current,
+                            [court.id]: {
+                              ...current[court.id],
+                              is_enabled: event.target.checked,
+                              is_live: event.target.checked
+                                ? current[court.id].is_live
+                                : false
+                            }
+                          }))
+                        }
+                      />
+                      Mostrar {court.label.toLowerCase()} en la app
+                    </label>
+
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={form.is_live}
+                        disabled={!form.is_enabled}
+                        onChange={(event) =>
+                          setForms((current) => ({
+                            ...current,
                           [court.id]: {
                             ...current[court.id],
                             is_live: event.target.checked
                           }
                         }))
                       }
-                    />
-                    Marcar {court.label.toLowerCase()} como en vivo ahora
-                  </label>
+                      />
+                      Marcar {court.label.toLowerCase()} como en vivo ahora
+                    </label>
 
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -963,6 +1020,24 @@ export function AdminLiveCenterSection() {
                     >
                       Limpiar formulario
                     </button>
+                    {court.stream?.is_enabled === false ? (
+                      <button
+                        type="button"
+                        className="rounded-xl border border-emerald-300 px-4 py-2 text-sm font-medium text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() =>
+                          setForms((current) => ({
+                            ...current,
+                            [court.id]: {
+                              ...current[court.id],
+                              is_enabled: true
+                            }
+                          }))
+                        }
+                        disabled={isSaving || isClearing}
+                      >
+                        Reactivar en formulario
+                      </button>
+                    ) : null}
                     {court.stream ? (
                       <button
                         type="button"

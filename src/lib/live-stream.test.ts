@@ -36,6 +36,7 @@ describe("live-stream helpers", () => {
     expect(config?.squore_mqtt_broker_url).toBeNull();
     expect(config?.squore_mqtt_match_topic).toBeNull();
     expect(config?.squore_mqtt_change_topic).toBeNull();
+    expect(config?.is_enabled).toBe(true);
     expect(config?.is_live).toBe(true);
   });
 
@@ -78,6 +79,7 @@ describe("live-stream helpers", () => {
           squore_mqtt_match_topic: null,
           squore_mqtt_change_topic: null,
           scoreboard_delay_seconds: 5,
+          is_enabled: true,
           is_live: false,
           starts_at: null,
           updated_at: new Date().toISOString(),
@@ -100,7 +102,61 @@ describe("live-stream helpers", () => {
           squore_mqtt_match_topic: null,
           squore_mqtt_change_topic: null,
           scoreboard_delay_seconds: 5,
+          is_enabled: true,
           is_live: true,
+          starts_at: null,
+          updated_at: new Date().toISOString(),
+          updated_by: null
+        },
+        scoreboard: null
+      }
+    ]);
+
+    expect(primaryCourt?.id).toBe("court-2");
+  });
+
+  it("ignores disabled courts when choosing the primary live court", () => {
+    const primaryCourt = getPrimaryLiveCourt([
+      {
+        id: "court-1",
+        label: "Cancha 1",
+        stream: {
+          title: "Cancha 1",
+          description: null,
+          banner_url: null,
+          youtube_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+          youtube_video_id: "dQw4w9WgXcQ",
+          embed_url: buildYouTubeEmbedUrl("dQw4w9WgXcQ"),
+          squore_device_id: null,
+          squore_mqtt_broker_url: null,
+          squore_mqtt_match_topic: null,
+          squore_mqtt_change_topic: null,
+          scoreboard_delay_seconds: 5,
+          is_enabled: false,
+          is_live: false,
+          starts_at: null,
+          updated_at: new Date().toISOString(),
+          updated_by: null
+        },
+        scoreboard: null
+      },
+      {
+        id: "court-2",
+        label: "Cancha 2",
+        stream: {
+          title: "Cancha 2",
+          description: null,
+          banner_url: null,
+          youtube_url: "https://www.youtube.com/watch?v=3JZ_D3ELwOQ",
+          youtube_video_id: "3JZ_D3ELwOQ",
+          embed_url: buildYouTubeEmbedUrl("3JZ_D3ELwOQ"),
+          squore_device_id: null,
+          squore_mqtt_broker_url: null,
+          squore_mqtt_match_topic: null,
+          squore_mqtt_change_topic: null,
+          scoreboard_delay_seconds: 5,
+          is_enabled: true,
+          is_live: false,
           starts_at: null,
           updated_at: new Date().toISOString(),
           updated_by: null

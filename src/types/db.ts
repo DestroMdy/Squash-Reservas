@@ -33,6 +33,7 @@ export interface LiveStreamConfig {
   squore_mqtt_match_topic: string | null;
   squore_mqtt_change_topic: string | null;
   scoreboard_delay_seconds: number;
+  is_enabled: boolean;
   is_live: boolean;
   starts_at: string | null;
   updated_at: string;

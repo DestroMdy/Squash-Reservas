@@ -18,6 +18,7 @@ const court: LiveCourtState = {
     squore_mqtt_match_topic: "double-yellow/${FeedName}/${Brand}/${DeviceId}/match",
     squore_mqtt_change_topic: "double-yellow/${Brand}/${DeviceId}/change",
     scoreboard_delay_seconds: 5,
+    is_enabled: true,
     is_live: true,
     starts_at: null,
     updated_at: null,
