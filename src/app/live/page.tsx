@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
@@ -9,7 +10,8 @@ import {
   initializeGoogleCast,
   isGoogleCastSessionReady,
   sendLiveCourtToCastSession,
-  subscribeToGoogleCastSessionChanges
+  subscribeToGoogleCastSessionChanges,
+  waitForGoogleCastLauncher
 } from "@/lib/live-cast";
 import { startSquoreMqttLiveSync } from "@/lib/live-squore-mqtt";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
@@ -361,20 +363,26 @@ function LiveCastLauncherButton({
 }) {
   return (
     <div className="relative inline-flex min-w-[210px]">
-      <div className="btn-secondary flex w-full items-center justify-between gap-3 pr-4">
-        <span>{label}</span>
-        <TvCastGlyph />
-      </div>
       <google-cast-launcher
-        className="absolute inset-0 z-10 block h-full w-full cursor-pointer opacity-0"
+        className="relative z-10 block min-h-[46px] w-full rounded-2xl border border-slate-200 bg-white"
         aria-label={label}
-        onPointerDownCapture={onPrepare}
+        style={
+          {
+            "--connected-color": "#0f172a",
+            "--disconnected-color": "#475569"
+          } as CSSProperties
+        }
+        onClickCapture={onPrepare}
         onKeyDownCapture={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             onPrepare();
           }
         }}
       />
+      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-between gap-3 px-4">
+        <span className="text-sm font-medium text-slate-700">{label}</span>
+        <TvCastGlyph />
+      </div>
     </div>
   );
 }
@@ -504,6 +512,7 @@ function LiveCourtBroadcastCard({
 
       try {
         await initializeGoogleCast(googleCastAppId);
+        await waitForGoogleCastLauncher();
         if (!cancelled) {
           setCastReady(true);
         }

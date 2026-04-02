@@ -109,6 +109,18 @@ export async function loadGoogleCastSdk() {
   return castSdkPromise;
 }
 
+export async function waitForGoogleCastLauncher() {
+  if (typeof window === "undefined" || !window.customElements) {
+    return;
+  }
+
+  if (window.customElements.get("google-cast-launcher")) {
+    return;
+  }
+
+  await window.customElements.whenDefined("google-cast-launcher");
+}
+
 export async function initializeGoogleCast(appId: string) {
   if (!appId.trim()) {
     return false;
