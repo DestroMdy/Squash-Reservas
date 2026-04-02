@@ -362,12 +362,19 @@ function LiveCastLauncherButton({
   onPrepare: () => void;
 }) {
   return (
-    <div className="relative inline-flex min-w-[210px]">
+    <div className="relative inline-flex h-[46px] min-w-[210px]">
+      <div className="btn-secondary flex h-full w-full items-center justify-between gap-3 pr-4">
+        <span>{label}</span>
+        <TvCastGlyph />
+      </div>
       <google-cast-launcher
-        className="relative z-10 block min-h-[46px] w-full rounded-2xl border border-slate-200 bg-white"
+        className="absolute inset-0 z-10 block h-full w-full cursor-pointer opacity-[0.01]"
         aria-label={label}
         style={
           {
+            display: "block",
+            width: "100%",
+            height: "100%",
             "--connected-color": "#0f172a",
             "--disconnected-color": "#475569"
           } as CSSProperties
@@ -379,10 +386,6 @@ function LiveCastLauncherButton({
           }
         }}
       />
-      <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-between gap-3 px-4">
-        <span className="text-sm font-medium text-slate-700">{label}</span>
-        <TvCastGlyph />
-      </div>
     </div>
   );
 }
