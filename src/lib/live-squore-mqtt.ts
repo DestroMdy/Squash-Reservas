@@ -5,7 +5,12 @@ import { LiveCourtId, LiveCourtState, LiveScoreboard } from "@/types/db";
 
 type RealtimeCallback = (courtId: LiveCourtId, scoreboard: LiveScoreboard) => void;
 
-type TopicCourtMap = Map<string, LiveCourtId>;
+type TopicSubscription = {
+  filter: string;
+  courtId: LiveCourtId;
+};
+
+type BrokerSubscriptionsMap = Map<string, TopicSubscription[]>;
 
 function normalizeTopic(value: string | null | undefined) {
   const trimmed = value?.trim();
@@ -16,15 +21,26 @@ function getBrokerUrl(court: LiveCourtState) {
   return court.stream?.squore_mqtt_broker_url?.trim() || null;
 }
 
+export function toMqttSubscriptionFilter(court: LiveCourtState, topic: string) {
+  const deviceId = court.stream?.squore_device_id?.trim() || "+";
+
+  return topic
+    .replace(/\$\{DeviceId\}/g, deviceId)
+    .replace(/\$\{[^}]+\}/g, "+")
+    .replace(/\/{2,}/g, "/");
+}
+
 function getCourtTopics(court: LiveCourtState) {
   return [
     normalizeTopic(court.stream?.squore_mqtt_match_topic),
     normalizeTopic(court.stream?.squore_mqtt_change_topic)
-  ].filter(Boolean) as string[];
+  ]
+    .filter(Boolean)
+    .map((topic) => toMqttSubscriptionFilter(court, topic as string));
 }
 
 function buildBrokerTopicMap(courts: LiveCourtState[]) {
-  const brokerTopicMap = new Map<string, TopicCourtMap>();
+  const brokerTopicMap: BrokerSubscriptionsMap = new Map();
 
   for (const court of courts) {
     const brokerUrl = getBrokerUrl(court);
@@ -37,14 +53,48 @@ function buildBrokerTopicMap(courts: LiveCourtState[]) {
       continue;
     }
 
-    const topicCourtMap = brokerTopicMap.get(brokerUrl) || new Map<string, LiveCourtId>();
-    for (const topic of topics) {
-      topicCourtMap.set(topic, court.id);
+    const subscriptions = brokerTopicMap.get(brokerUrl) || [];
+    for (const filter of topics) {
+      if (!subscriptions.some((subscription) => subscription.filter === filter && subscription.courtId === court.id)) {
+        subscriptions.push({ filter, courtId: court.id });
+      }
     }
-    brokerTopicMap.set(brokerUrl, topicCourtMap);
+    brokerTopicMap.set(brokerUrl, subscriptions);
   }
 
   return brokerTopicMap;
+}
+
+export function matchesMqttTopicFilter(filter: string, topic: string) {
+  if (filter === topic) {
+    return true;
+  }
+
+  const filterParts = filter.split("/");
+  const topicParts = topic.split("/");
+
+  for (let index = 0; index < filterParts.length; index += 1) {
+    const filterPart = filterParts[index];
+    const topicPart = topicParts[index];
+
+    if (filterPart === "#") {
+      return true;
+    }
+
+    if (topicPart === undefined) {
+      return false;
+    }
+
+    if (filterPart === "+") {
+      continue;
+    }
+
+    if (filterPart !== topicPart) {
+      return false;
+    }
+  }
+
+  return filterParts.length === topicParts.length;
 }
 
 function parseMqttScoreboard(rawPayload: Uint8Array | Buffer | string) {
@@ -85,7 +135,7 @@ export async function startSquoreMqttLiveSync(
       keepalive: 30
     });
 
-    const topics = [...topicCourtMap.keys()];
+    const topics = [...new Set(topicCourtMap.map((subscription) => subscription.filter))];
 
     const handleConnect = () => {
       if (topics.length) {
@@ -94,8 +144,10 @@ export async function startSquoreMqttLiveSync(
     };
 
     const handleMessage = (topic: string, payload: Uint8Array) => {
-      const courtId = topicCourtMap.get(topic);
-      if (!courtId) {
+      const subscription = topicCourtMap.find((entry) =>
+        matchesMqttTopicFilter(entry.filter, topic)
+      );
+      if (!subscription) {
         return;
       }
 
@@ -104,7 +156,7 @@ export async function startSquoreMqttLiveSync(
         return;
       }
 
-      onRealtimeScoreboard(courtId, scoreboard);
+      onRealtimeScoreboard(subscription.courtId, scoreboard);
     };
 
     client.on("connect", handleConnect);
