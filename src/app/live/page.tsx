@@ -50,6 +50,66 @@ function formatCommentTime(value: string) {
   }).format(new Date(value));
 }
 
+function getCompactPlayerName(value: string) {
+  const parts = value.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) {
+    return value;
+  }
+
+  const preferred = parts[0] || value;
+  return preferred.length > 12 ? `${preferred.slice(0, 12)}…` : preferred;
+}
+
+function parseGameScores(
+  gameScores: string | null,
+  playerOneName: string,
+  playerTwoName: string
+) {
+  if (!gameScores) {
+    return [];
+  }
+
+  return gameScores
+    .split(",")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map((segment, index) => {
+      const match = segment.match(/(-?\d+)\s*-\s*(-?\d+)/);
+      if (!match) {
+        return null;
+      }
+
+      const playerOneScore = Number(match[1]);
+      const playerTwoScore = Number(match[2]);
+      const winnerSide =
+        playerOneScore === playerTwoScore
+          ? null
+          : playerOneScore > playerTwoScore
+            ? 1
+            : 2;
+
+      return {
+        key: `game-${index + 1}`,
+        label: `G${index + 1}`,
+        score: `${playerOneScore}-${playerTwoScore}`,
+        winnerSide,
+        winnerLabel:
+          winnerSide === 1
+            ? getCompactPlayerName(playerOneName)
+            : winnerSide === 2
+              ? getCompactPlayerName(playerTwoName)
+              : "Igualado"
+      };
+    })
+    .filter(Boolean) as Array<{
+    key: string;
+    label: string;
+    score: string;
+    winnerSide: 1 | 2 | null;
+    winnerLabel: string;
+  }>;
+}
+
 function LiveScoreOverlay({
   scoreboard,
   expanded
@@ -300,6 +360,19 @@ function LiveCourtBroadcastCard({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const isExpanded = isFullscreen || isFocusMode;
+  const parsedGames = useMemo(
+    () =>
+      parseGameScores(
+        visibleScoreboard?.game_scores || null,
+        visibleScoreboard?.player_one_name || "",
+        visibleScoreboard?.player_two_name || ""
+      ),
+    [
+      visibleScoreboard?.game_scores,
+      visibleScoreboard?.player_one_name,
+      visibleScoreboard?.player_two_name
+    ]
+  );
 
   useEffect(() => {
     if (!scoreboard) {
@@ -606,14 +679,37 @@ function LiveCourtBroadcastCard({
                 </div>
               ) : null}
 
-              {visibleScoreboard.game_scores ? (
+              {parsedGames.length ? (
                 <div className="rounded-2xl border border-orange-200 bg-white px-4 py-4">
                   <p className="text-xs uppercase tracking-[0.16em] text-slate-400">
                     Games
                   </p>
-                  <p className="mt-2 text-base font-semibold text-slate-900">
-                    {visibleScoreboard.game_scores}
-                  </p>
+                  <div className="mt-3 space-y-2">
+                    {parsedGames.map((game) => (
+                      <div
+                        key={game.key}
+                        className="grid grid-cols-[auto_auto_1fr] items-center gap-2"
+                      >
+                        <span className="rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">
+                          {game.label}
+                        </span>
+                        <span className="text-sm font-semibold text-slate-900">
+                          {game.score}
+                        </span>
+                        <span
+                          className={`justify-self-end rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                            game.winnerSide === 1
+                              ? "bg-slate-900 text-white"
+                              : game.winnerSide === 2
+                                ? "bg-orange-100 text-orange-700"
+                                : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          Gana {game.winnerLabel}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : null}
 
