@@ -216,62 +216,62 @@ function LiveScoreOverlay({
         <div
           className={`rounded-2xl border border-white/10 bg-slate-950/58 text-white shadow-2xl backdrop-blur-md ${
             expanded
-              ? "w-[min(18.5rem,calc(100vw-1.5rem))] px-2.5 py-2"
+              ? "w-[min(13.5rem,calc(100vw-1rem))] px-2 py-1.5 sm:w-[15rem]"
               : "ml-0 mr-auto max-w-md px-2.5 py-2"
           }`}
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="rounded-full bg-orange-500/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-orange-300">
+          <div className="flex items-center justify-between gap-1.5">
+            <p className="rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-orange-300">
               En vivo
             </p>
             {scoreboard.result ? (
-              <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white">
+              <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white">
                 {hasCurrentGamePoints ? `Games ${scoreboard.result}` : scoreboard.result}
               </span>
             ) : null}
           </div>
 
-          <div className="mt-1.5 grid grid-cols-[1fr_auto_1fr] items-center gap-1.5">
-            <div className="flex min-w-0 items-center gap-1.5">
+          <div className="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-1">
+            <div className="flex min-w-0 items-center gap-1">
               <AvatarImage
                 src={scoreboard.player_one_avatar_url}
                 alt={scoreboard.player_one_name}
-                size={expanded ? 24 : 28}
-                className="h-6 w-6 shrink-0 rounded-full border border-white/20 object-cover shadow-md"
+                size={expanded ? 18 : 28}
+                className="h-[18px] w-[18px] shrink-0 rounded-full border border-white/20 object-cover shadow-md"
               />
-              <p className="truncate text-[13px] font-semibold leading-tight">
+              <p className="truncate text-[10px] font-semibold leading-tight sm:text-[11px]">
                 {getCompactPlayerName(scoreboard.player_one_name)}
               </p>
             </div>
 
-            <div className="min-w-[3.85rem] shrink-0 rounded-xl bg-white/10 px-2 py-1 text-center">
-              <p className="text-[8px] uppercase tracking-[0.12em] text-white/55">
+            <div className="min-w-[2.95rem] shrink-0 rounded-lg bg-white/10 px-1.5 py-0.5 text-center">
+              <p className="text-[7px] uppercase tracking-[0.1em] text-white/55">
                 {hasCurrentGamePoints ? "Punto" : "Games"}
               </p>
-              <p className="mt-0.5 text-base font-bold leading-none text-white">
+              <p className="mt-0.5 text-[11px] font-bold leading-none text-white sm:text-xs">
                 {hasCurrentGamePoints ? currentPointsLabel : scoreboard.game_scores || "-"}
               </p>
             </div>
 
-            <div className="flex min-w-0 items-center justify-end gap-1.5">
-              <p className="truncate text-[13px] font-semibold leading-tight">
+            <div className="flex min-w-0 items-center justify-end gap-1">
+              <p className="truncate text-[10px] font-semibold leading-tight sm:text-[11px]">
                 {getCompactPlayerName(scoreboard.player_two_name)}
               </p>
               <AvatarImage
                 src={scoreboard.player_two_avatar_url}
                 alt={scoreboard.player_two_name}
-                size={expanded ? 24 : 28}
-                className="h-6 w-6 shrink-0 rounded-full border border-white/20 object-cover shadow-md"
+                size={expanded ? 18 : 28}
+                className="h-[18px] w-[18px] shrink-0 rounded-full border border-white/20 object-cover shadow-md"
               />
             </div>
           </div>
 
           {gamesToDisplay.length ? (
-            <div className="mt-1.5 flex flex-wrap gap-1">
+            <div className="mt-1 flex flex-wrap gap-1">
               {gamesToDisplay.map((game) => (
                 <span
                   key={game.key}
-                  className="rounded-md bg-white/10 px-1.5 py-1 text-[10px] font-medium leading-none text-white/90"
+                  className="rounded-md bg-white/10 px-1 py-0.5 text-[8px] font-medium leading-none text-white/90 sm:text-[9px]"
                 >
                   <span className="text-white/55">{game.label}</span>{" "}
                   <span className="font-semibold">{game.score}</span>
