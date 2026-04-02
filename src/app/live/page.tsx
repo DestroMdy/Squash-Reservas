@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
+import { castLiveCourtToTv } from "@/lib/live-cast";
 import { startSquoreMqttLiveSync } from "@/lib/live-squore-mqtt";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import {
@@ -328,11 +329,13 @@ function LiveCommentsSection({
 function LiveCourtBroadcastCard({
   court,
   authenticatedUserId,
-  onRefresh
+  onRefresh,
+  googleCastAppId
 }: {
   court: LiveCourtState;
   authenticatedUserId: string | null;
   onRefresh: () => Promise<void>;
+  googleCastAppId: string | null;
 }) {
   const stream = court.stream;
   const scoreboard = court.scoreboard;
@@ -345,6 +348,8 @@ function LiveCourtBroadcastCard({
     useState<LiveScoreboard | null>(scoreboard);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
+  const [isCasting, setIsCasting] = useState(false);
+  const [castFeedback, setCastFeedback] = useState<string | null>(null);
   const isExpanded = isFullscreen || isFocusMode;
   const parsedGames = useMemo(
     () =>
@@ -444,6 +449,28 @@ function LiveCourtBroadcastCard({
       await document.exitFullscreen();
     } catch {
       setIsFullscreen(false);
+    }
+  }
+
+  async function handleCastToTv() {
+    try {
+      setIsCasting(true);
+      setCastFeedback(null);
+      await castLiveCourtToTv({
+        appId: googleCastAppId || "",
+        courtId: court.id,
+        courtLabel: court.label,
+        title: stream?.title || court.label
+      });
+      setCastFeedback(`${court.label} enviada a la TV.`);
+    } catch (error) {
+      setCastFeedback(
+        error instanceof Error
+          ? error.message
+          : "No se pudo iniciar Google Cast."
+      );
+    } finally {
+      setIsCasting(false);
     }
   }
 
@@ -572,7 +599,18 @@ function LiveCourtBroadcastCard({
             >
               Abrir en YouTube
             </a>
+            <button
+              type="button"
+              onClick={handleCastToTv}
+              className="btn-secondary"
+              disabled={isCasting}
+            >
+              {isCasting ? "Conectando TV..." : "Transmitir a TV"}
+            </button>
           </div>
+          {castFeedback ? (
+            <p className="text-sm text-slate-500">{castFeedback}</p>
+          ) : null}
         </div>
 
         {visibleScoreboard ? (
@@ -784,6 +822,7 @@ export default function LivePage() {
   const [authenticatedUserId, setAuthenticatedUserId] = useState<string | null>(
     null
   );
+  const [googleCastAppId, setGoogleCastAppId] = useState<string | null>(null);
   const courtsRef = useRef<LiveCourtState[]>([]);
   const realtimeScoreboardsRef = useRef<
     Partial<Record<LiveCourtState["id"], LiveScoreboard>>
@@ -796,6 +835,7 @@ export default function LivePage() {
   const loadStream = useCallback(async () => {
     const current = await fetchLiveCenterStatus();
     const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
+    setGoogleCastAppId(current.google_cast_app_id || null);
     setCourts(
       hydratedCourts.map((court) => ({
         ...court,
@@ -826,6 +866,7 @@ export default function LivePage() {
         const current = await fetchLiveCenterStatus();
         const hydratedCourts = await hydrateCourtsWithSquoreFeed(current.courts);
         if (!cancelled) {
+          setGoogleCastAppId(current.google_cast_app_id || null);
           setCourts(
             hydratedCourts.map((court) => ({
               ...court,
@@ -990,6 +1031,7 @@ export default function LivePage() {
                 court={court}
                 authenticatedUserId={authenticatedUserId}
                 onRefresh={loadStream}
+                googleCastAppId={googleCastAppId}
               />
             ))}
           </div>

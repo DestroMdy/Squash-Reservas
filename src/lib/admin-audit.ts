@@ -14,6 +14,7 @@ export type AdminAuditAction =
   | "schedule.override.cleared"
   | "booking.availability.updated"
   | "live_stream.updated"
+  | "live_stream.cast_settings.updated"
   | "live_stream.deleted"
   | "live_stream.player_mapping_upserted"
   | "live_stream.player_mapping_deleted";

@@ -6,16 +6,19 @@ import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import { LIVE_COURTS } from "@/lib/live-stream";
 import {
   clearLiveStream,
+  fetchAdminLiveCastSettings,
   deleteLivePlayerMapping,
   fetchAdminLiveStream,
   fetchLivePlayerMappings,
   fetchPlayers,
   getSession,
   upsertLivePlayerMapping,
+  updateAdminLiveCastSettings,
   updateLiveStream
 } from "@/lib/supabase";
 import {
   AdminLiveCourtState,
+  LiveCastSettings,
   LiveCourtId,
   LivePlayerMapping,
   Profile
@@ -164,6 +167,12 @@ export function AdminLiveCenterSection() {
   );
   const [savingMapping, setSavingMapping] = useState(false);
   const [deletingMappingId, setDeletingMappingId] = useState<string | null>(null);
+  const [castSettings, setCastSettings] = useState<LiveCastSettings>({
+    google_cast_app_id: null,
+    receiver_url: null
+  });
+  const [castAppIdInput, setCastAppIdInput] = useState("");
+  const [savingCastSettings, setSavingCastSettings] = useState(false);
 
   const liveCount = useMemo(
     () => courts.filter((court) => court.stream?.is_live).length,
@@ -230,15 +239,18 @@ export function AdminLiveCenterSection() {
       throw new Error("Debes iniciar sesion");
     }
 
-    const [result, players, mappings] = await Promise.all([
+    const [result, players, mappings, castConfig] = await Promise.all([
       fetchAdminLiveStream(token),
       fetchPlayers(token),
-      fetchLivePlayerMappings(token)
+      fetchLivePlayerMappings(token),
+      fetchAdminLiveCastSettings(token)
     ]);
     const hydratedCourts = await hydrateCourtsWithSquoreFeed(result.courts);
     applyCourts(hydratedCourts);
     setAvailablePlayers(players || []);
     setPlayerMappings(mappings || []);
+    setCastSettings(castConfig);
+    setCastAppIdInput(castConfig.google_cast_app_id || "");
   }, []);
 
   useEffect(() => {
@@ -411,6 +423,39 @@ export function AdminLiveCenterSection() {
     }
   }
 
+  async function handleSaveCastSettings() {
+    try {
+      const token = getSession()?.access_token;
+      if (!token) {
+        throw new Error("Debes iniciar sesion");
+      }
+
+      setSavingCastSettings(true);
+      setMessage(null);
+      setError(null);
+
+      const result = await updateAdminLiveCastSettings(token, {
+        google_cast_app_id: castAppIdInput || null
+      });
+
+      setCastSettings(result);
+      setCastAppIdInput(result.google_cast_app_id || "");
+      setMessage(
+        result.google_cast_app_id
+          ? "Google Cast configurado."
+          : "Google Cast limpiado."
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo guardar la configuracion de Google Cast"
+      );
+    } finally {
+      setSavingCastSettings(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -441,6 +486,59 @@ export function AdminLiveCenterSection() {
       {loading ? (
         <p className="text-sm text-slate-500">Cargando centro en vivo...</p>
       ) : null}
+
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Google Cast / TV
+            </p>
+            <h3 className="mt-2 text-lg font-bold text-slate-950">
+              Receiver propio con video y marcador
+            </h3>
+            <p className="mt-1 text-sm text-slate-600">
+              Registra esta URL en Google Cast Console como Custom Web Receiver y pega
+              abajo el App ID para habilitar el boton de TV en la pagina publica.
+            </p>
+          </div>
+          <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-600">
+            {castSettings.google_cast_app_id ? "Configurado" : "Pendiente"}
+          </span>
+        </div>
+
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px_auto] lg:items-end">
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">URL del receiver</span>
+            <input
+              type="text"
+              value={castSettings.receiver_url || ""}
+              readOnly
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-600"
+            />
+          </label>
+          <label className="space-y-2">
+            <span className="text-sm font-medium text-slate-700">App ID de Google Cast</span>
+            <input
+              type="text"
+              maxLength={8}
+              value={castAppIdInput}
+              onChange={(event) =>
+                setCastAppIdInput(event.target.value.toUpperCase())
+              }
+              placeholder="Ej. A1B2C3D4"
+              className="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-slate-500"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={handleSaveCastSettings}
+            disabled={savingCastSettings}
+            className="btn-secondary whitespace-nowrap"
+          >
+            {savingCastSettings ? "Guardando..." : "Guardar Cast"}
+          </button>
+        </div>
+      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {courts.map((court) => {

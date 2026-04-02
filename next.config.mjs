@@ -17,7 +17,7 @@ function buildCsp() {
     "object-src 'none'",
     "manifest-src 'self'",
     "worker-src 'self' blob:",
-    "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://squore.double-yellow.be",
+    "script-src 'self' 'unsafe-inline' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/ https://www.gstatic.com https://squore.double-yellow.be",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https://www.google.com https://www.gstatic.com https://*.supabase.co https://squore.double-yellow.be http://squore.double-yellow.be" +
       (supabaseOrigin ? ` ${supabaseOrigin}` : ""),

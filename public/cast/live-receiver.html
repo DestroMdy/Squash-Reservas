@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>La Martineta Live Receiver</title>
+    <link rel="stylesheet" href="/cast/live-receiver.css" />
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <script defer src="/cast/live-receiver.js"></script>
+  </head>
+  <body>
+    <video class="castMediaElement" muted playsinline aria-hidden="true"></video>
+    <main class="receiver-shell">
+      <section class="receiver-stage">
+        <div id="receiver-video" class="receiver-video">
+          <div class="receiver-empty">
+            <span class="receiver-kicker">Google Cast</span>
+            <h1>Esperando una cancha para transmitir</h1>
+            <p>
+              Cuando envies Cancha 1 o Cancha 2 desde la app, la TV va a mostrar
+              el video y el marcador automaticamente.
+            </p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -5,6 +5,7 @@ import { attachLiveScoreboardAvatars } from "@/lib/live-score";
 import { fetchSquoreMqttSnapshot } from "@/lib/live-squore-mqtt-server";
 import {
   getStoredLiveCenterCourts,
+  getStoredLiveCastSettings,
   getStoredLivePlayerMappings,
   isLiveStreamStoreConfigured
 } from "@/lib/live-stream-store";
@@ -17,7 +18,7 @@ function responseHeaders() {
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   if (!isLiveStreamStoreConfigured()) {
     return NextResponse.json(
       { courts: [], stream: null, scoreboard: null, unavailable: true },
@@ -29,15 +30,17 @@ export async function GET() {
   }
 
   try {
-    const [storedCourts, profiles, mappings, commentsMap] = await Promise.all([
+    const [storedCourts, castSettings, profiles, mappings, commentsMap] =
+      await Promise.all([
       getStoredLiveCenterCourts(),
+      getStoredLiveCastSettings().catch(() => ({ google_cast_app_id: null })),
       fetchProfilesForLiveAvatars().catch(() => []),
       getStoredLivePlayerMappings().catch(() => []),
       getStoredLiveCenterCommentsMap().catch(() => ({
         "court-1": [],
         "court-2": []
       }))
-    ]);
+      ]);
 
     const mqttSnapshots = await Promise.all(
       storedCourts.map(async (court) => {
@@ -66,6 +69,8 @@ export async function GET() {
         courts,
         stream: primaryCourt?.stream || null,
         scoreboard: primaryCourt?.scoreboard || null,
+        google_cast_app_id: castSettings?.google_cast_app_id || null,
+        cast_receiver_url: `${new URL(request.url).origin}/cast/live-receiver.html`,
         unavailable: false
       },
       {

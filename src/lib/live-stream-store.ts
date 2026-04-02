@@ -7,6 +7,7 @@ import {
 } from "@/lib/live-stream";
 import {
   AdminLiveStreamConfig,
+  LiveCastSettings,
   LiveCourtId,
   LivePlayerMapping,
   LiveCourtState,
@@ -17,6 +18,7 @@ const LIVE_CENTER_CONFIG_KV_KEY = "sr:live-center:config";
 const LIVE_CENTER_SCOREBOARDS_KV_KEY = "sr:live-center:scoreboards";
 const LIVE_CENTER_SQUORE_TOKENS_KV_KEY = "sr:live-center:squore-tokens";
 const LIVE_CENTER_PLAYER_MAPPINGS_KV_KEY = "sr:live-center:player-mappings";
+const LIVE_CENTER_CAST_SETTINGS_KV_KEY = "sr:live-center:cast-settings";
 
 const LEGACY_LIVE_STREAM_KV_KEY = "sr:live-stream:config";
 const LEGACY_LIVE_STREAM_SCOREBOARD_KV_KEY = "sr:live-stream:scoreboard";
@@ -25,6 +27,10 @@ const LEGACY_LIVE_STREAM_SQUORE_TOKEN_KV_KEY = "sr:live-stream:squore-token";
 type LiveCenterConfigMap = Record<LiveCourtId, AdminLiveStreamConfig | null>;
 type LiveCenterScoreboardMap = Record<LiveCourtId, LiveScoreboard | null>;
 type LiveCenterTokenMap = Record<LiveCourtId, string | null>;
+
+const DEFAULT_LIVE_CAST_SETTINGS: LiveCastSettings = {
+  google_cast_app_id: null
+};
 
 function getKvConfig() {
   const url = process.env.KV_REST_API_URL;
@@ -161,6 +167,22 @@ function normalizePlayerMappings(raw: unknown) {
     );
 }
 
+function normalizeLiveCastSettings(raw: unknown): LiveCastSettings {
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_LIVE_CAST_SETTINGS };
+  }
+
+  const value = raw as Record<string, unknown>;
+  const googleCastAppId =
+    typeof value.google_cast_app_id === "string" && value.google_cast_app_id.trim()
+      ? value.google_cast_app_id.trim()
+      : null;
+
+  return {
+    google_cast_app_id: googleCastAppId
+  };
+}
+
 function hasAnyValues(values: Record<string, unknown | null>) {
   return Object.values(values).some(Boolean);
 }
@@ -285,6 +307,26 @@ export async function getStoredLivePlayerMappings() {
   return normalizePlayerMappings(
     await getJsonKv<LivePlayerMapping[]>(LIVE_CENTER_PLAYER_MAPPINGS_KV_KEY)
   );
+}
+
+export async function getStoredLiveCastSettings() {
+  return normalizeLiveCastSettings(
+    await getJsonKv<LiveCastSettings>(LIVE_CENTER_CAST_SETTINGS_KV_KEY)
+  );
+}
+
+export async function setStoredLiveCastSettings(
+  value: Partial<LiveCastSettings> | null | undefined
+) {
+  const normalized = normalizeLiveCastSettings(value);
+
+  if (!normalized.google_cast_app_id) {
+    await callKv(["del", LIVE_CENTER_CAST_SETTINGS_KV_KEY]);
+    return normalized;
+  }
+
+  await setJsonKv(LIVE_CENTER_CAST_SETTINGS_KV_KEY, normalized);
+  return normalized;
 }
 
 export async function upsertStoredLivePlayerMapping(

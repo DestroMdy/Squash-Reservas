@@ -6,6 +6,7 @@ import {
 import { buildAvatarPublicUrl } from "@/lib/avatar-url";
 import {
   AdminLiveCourtState,
+  LiveCastSettings,
   BookingAvailabilitySettings,
   LiveComment,
   LiveCourtId,
@@ -1657,22 +1658,26 @@ export async function fetchLiveCenterStatus() {
 
   const payload = await parseJsonPayload<{
     error?: string;
-    courts?: LiveCourtState[];
-    stream?: LiveStreamConfig | null;
-    scoreboard?: LiveScoreboard | null;
-    unavailable?: boolean;
-  }>(response);
+      courts?: LiveCourtState[];
+      stream?: LiveStreamConfig | null;
+      scoreboard?: LiveScoreboard | null;
+      google_cast_app_id?: string | null;
+      cast_receiver_url?: string | null;
+      unavailable?: boolean;
+    }>(response);
 
   if (!response.ok) {
     throw new Error(payload?.error || "No se pudo cargar la transmisión.");
   }
 
-  return {
-    courts: payload?.courts || [],
-    stream: payload?.stream || null,
-    scoreboard: payload?.scoreboard || null,
-    unavailable: payload?.unavailable === true
-  };
+    return {
+      courts: payload?.courts || [],
+      stream: payload?.stream || null,
+      scoreboard: payload?.scoreboard || null,
+      google_cast_app_id: payload?.google_cast_app_id || null,
+      cast_receiver_url: payload?.cast_receiver_url || null,
+      unavailable: payload?.unavailable === true
+    };
 }
 
 export async function sendLiveComment(
@@ -1722,6 +1727,59 @@ export async function fetchAdminLiveStream(token: string) {
   return {
     courts: payload?.courts || []
   };
+}
+
+export async function fetchAdminLiveCastSettings(token: string) {
+  const response = await authedRouteRequest("/api/admin/live-stream/cast-settings", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    google_cast_app_id?: string | null;
+    receiver_url?: string | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      payload?.error || "No se pudo cargar la configuracion de Google Cast."
+    );
+  }
+
+  return {
+    google_cast_app_id: payload?.google_cast_app_id || null,
+    receiver_url: payload?.receiver_url || null
+  } satisfies LiveCastSettings;
+}
+
+export async function updateAdminLiveCastSettings(
+  token: string,
+  payload: { google_cast_app_id?: string | null }
+) {
+  const response = await authedRouteRequest("/api/admin/live-stream/cast-settings", {
+    method: "PATCH",
+    token,
+    requireJsonContentType: true,
+    body: JSON.stringify(payload)
+  });
+
+  const result = await parseJsonPayload<{
+    error?: string;
+    google_cast_app_id?: string | null;
+    receiver_url?: string | null;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(
+      result?.error || "No se pudo guardar la configuracion de Google Cast."
+    );
+  }
+
+  return {
+    google_cast_app_id: result?.google_cast_app_id || null,
+    receiver_url: result?.receiver_url || null
+  } satisfies LiveCastSettings;
 }
 
 export async function updateLiveStream(

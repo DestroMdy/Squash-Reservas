@@ -43,6 +43,11 @@ export interface AdminLiveStreamConfig extends LiveStreamConfig {
   tournament_software_post_url: string | null;
 }
 
+export interface LiveCastSettings {
+  google_cast_app_id: string | null;
+  receiver_url?: string | null;
+}
+
 export interface LiveScoreboard {
   source: "squore";
   event_name: string | null;
