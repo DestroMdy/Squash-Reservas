@@ -31,6 +31,7 @@ declare global {
                 data: Record<string, unknown>
               ): Promise<void>;
             } | null;
+            requestSession(): Promise<void>;
             addEventListener(
               eventType: string,
               listener: (event: { sessionState?: string }) => void
@@ -109,18 +110,6 @@ export async function loadGoogleCastSdk() {
   return castSdkPromise;
 }
 
-export async function waitForGoogleCastLauncher() {
-  if (typeof window === "undefined" || !window.customElements) {
-    return;
-  }
-
-  if (window.customElements.get("google-cast-launcher")) {
-    return;
-  }
-
-  await window.customElements.whenDefined("google-cast-launcher");
-}
-
 export async function initializeGoogleCast(appId: string) {
   if (!appId.trim()) {
     return false;
@@ -156,6 +145,16 @@ export function getGoogleCastContext() {
 
 export function getGoogleCastSession() {
   return getGoogleCastContext()?.getCurrentSession() || null;
+}
+
+export async function requestGoogleCastSession() {
+  const castContext = getGoogleCastContext();
+
+  if (!castContext) {
+    throw new Error("Google Cast no esta disponible en este navegador.");
+  }
+
+  await castContext.requestSession();
 }
 
 export function subscribeToGoogleCastSessionChanges(

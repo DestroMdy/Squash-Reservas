@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import type { CSSProperties } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
@@ -9,9 +8,9 @@ import {
   getGoogleCastSession,
   initializeGoogleCast,
   isGoogleCastSessionReady,
+  requestGoogleCastSession,
   sendLiveCourtToCastSession,
-  subscribeToGoogleCastSessionChanges,
-  waitForGoogleCastLauncher
+  subscribeToGoogleCastSessionChanges
 } from "@/lib/live-cast";
 import { startSquoreMqttLiveSync } from "@/lib/live-squore-mqtt";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
@@ -354,42 +353,6 @@ function TvCastGlyph() {
   );
 }
 
-function LiveCastLauncherButton({
-  label,
-  onPrepare
-}: {
-  label: string;
-  onPrepare: () => void;
-}) {
-  return (
-    <div className="relative inline-flex h-[46px] min-w-[210px]">
-      <div className="btn-secondary flex h-full w-full items-center justify-between gap-3 pr-4">
-        <span>{label}</span>
-        <TvCastGlyph />
-      </div>
-      <google-cast-launcher
-        className="absolute inset-0 z-10 block h-full w-full cursor-pointer opacity-[0.01]"
-        aria-label={label}
-        style={
-          {
-            display: "block",
-            width: "100%",
-            height: "100%",
-            "--connected-color": "#0f172a",
-            "--disconnected-color": "#475569"
-          } as CSSProperties
-        }
-        onClickCapture={onPrepare}
-        onKeyDownCapture={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            onPrepare();
-          }
-        }}
-      />
-    </div>
-  );
-}
-
 function LiveCourtBroadcastCard({
   court,
   authenticatedUserId,
@@ -515,7 +478,6 @@ function LiveCourtBroadcastCard({
 
       try {
         await initializeGoogleCast(googleCastAppId);
-        await waitForGoogleCastLauncher();
         if (!cancelled) {
           setCastReady(true);
         }
@@ -573,12 +535,24 @@ function LiveCourtBroadcastCard({
     }
   }
 
-  function handlePrepareCast() {
+  async function handlePrepareCast() {
     pendingCastLoadRef.current = true;
     setCastFeedback(null);
 
-    if (getGoogleCastSession()) {
-      void pushCourtToTv();
+    try {
+      if (getGoogleCastSession()) {
+        await pushCourtToTv();
+        return;
+      }
+
+      await requestGoogleCastSession();
+    } catch (error) {
+      pendingCastLoadRef.current = false;
+      setCastFeedback(
+        error instanceof Error
+          ? error.message
+          : "No se pudo iniciar Google Cast."
+      );
     }
   }
 
@@ -716,10 +690,16 @@ function LiveCourtBroadcastCard({
                 Preparando Cast...
               </button>
             ) : (
-              <LiveCastLauncherButton
-                label="Transmitir a TV"
-                onPrepare={handlePrepareCast}
-              />
+              <button
+                type="button"
+                onClick={() => {
+                  void handlePrepareCast();
+                }}
+                className="btn-secondary flex items-center justify-between gap-3"
+              >
+                <span>Transmitir a TV</span>
+                <TvCastGlyph />
+              </button>
             )}
           </div>
           {castFeedback ? (
