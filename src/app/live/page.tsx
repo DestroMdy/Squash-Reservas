@@ -127,6 +127,16 @@ function getCompactPlayerName(value: string) {
   return preferred.length > 12 ? `${preferred.slice(0, 12)}…` : preferred;
 }
 
+function normalizeParticipantName(value: string | null | undefined) {
+  return (value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
 function parseGameScores(
   gameScores: string | null,
   playerOneName: string,
@@ -177,6 +187,47 @@ function parseGameScores(
   }>;
 }
 
+function resolveWinnerSide(
+  scoreboard: LiveScoreboard,
+  parsedGames: ReturnType<typeof parseGameScores>
+) {
+  if (scoreboard.winner_side === 1 || scoreboard.winner_side === 2) {
+    return scoreboard.winner_side;
+  }
+
+  const normalizedWinnerName = normalizeParticipantName(scoreboard.winner_name);
+  const normalizedPlayerOne = normalizeParticipantName(scoreboard.player_one_name);
+  const normalizedPlayerTwo = normalizeParticipantName(scoreboard.player_two_name);
+
+  if (normalizedWinnerName) {
+    if (
+      normalizedWinnerName === normalizedPlayerOne ||
+      normalizedWinnerName.includes(normalizedPlayerOne)
+    ) {
+      return 1;
+    }
+
+    if (
+      normalizedWinnerName === normalizedPlayerTwo ||
+      normalizedWinnerName.includes(normalizedPlayerTwo)
+    ) {
+      return 2;
+    }
+  }
+
+  if (
+    scoreboard.current_game_points_player_one == null &&
+    scoreboard.current_game_points_player_two == null
+  ) {
+    const lastCompletedGame = parsedGames.at(-1);
+    if (lastCompletedGame?.winnerSide === 1 || lastCompletedGame?.winnerSide === 2) {
+      return lastCompletedGame.winnerSide;
+    }
+  }
+
+  return null;
+}
+
 function LiveScoreOverlay({
   scoreboard,
   expanded
@@ -191,24 +242,26 @@ function LiveScoreOverlay({
     scoreboard.current_game_points_player_two !== undefined
       ? `${scoreboard.current_game_points_player_one}-${scoreboard.current_game_points_player_two}`
       : null;
-  const hasCurrentGamePoints = currentPointsLabel !== null && !scoreboard.winner_side;
   const parsedGames = parseGameScores(
     scoreboard.game_scores || null,
     scoreboard.player_one_name,
     scoreboard.player_two_name
   );
+  const effectiveWinnerSide = resolveWinnerSide(scoreboard, parsedGames);
   const gamesToDisplay =
-    hasCurrentGamePoints &&
+    currentPointsLabel !== null &&
+    !effectiveWinnerSide &&
     currentPointsLabel &&
     parsedGames.at(-1)?.score === currentPointsLabel
       ? parsedGames.slice(0, -1)
       : parsedGames;
   const winnerLabel =
-    scoreboard.winner_side === 1
+    effectiveWinnerSide === 1
       ? getCompactPlayerName(scoreboard.player_one_name)
-      : scoreboard.winner_side === 2
+      : effectiveWinnerSide === 2
         ? getCompactPlayerName(scoreboard.player_two_name)
         : null;
+  const hasCurrentGamePoints = currentPointsLabel !== null && !effectiveWinnerSide;
   const gameColumns = gamesToDisplay.map((game) => {
     const [playerOneScore = "-", playerTwoScore = "-"] = game.score.split("-");
     return {
@@ -268,14 +321,14 @@ function LiveScoreOverlay({
                 className={`flex h-5 min-w-[2rem] items-center justify-center rounded-md px-1 text-[10px] font-bold leading-none ${
                   hasCurrentGamePoints
                     ? "bg-white/14 text-white"
-                    : scoreboard.winner_side === 1
+                    : effectiveWinnerSide === 1
                       ? "bg-emerald-500/20 text-emerald-200"
                       : "bg-white/8 text-white/45"
                 }`}
               >
                 {hasCurrentGamePoints
                   ? scoreboard.current_game_points_player_one
-                  : scoreboard.winner_side === 1
+                  : effectiveWinnerSide === 1
                     ? "W"
                     : "-"}
               </span>
@@ -297,14 +350,14 @@ function LiveScoreOverlay({
                 className={`flex h-5 min-w-[2rem] items-center justify-center rounded-md px-1 text-[10px] font-bold leading-none ${
                   hasCurrentGamePoints
                     ? "bg-white/14 text-white"
-                    : scoreboard.winner_side === 2
+                    : effectiveWinnerSide === 2
                       ? "bg-emerald-500/20 text-emerald-200"
                       : "bg-white/8 text-white/45"
                 }`}
               >
                 {hasCurrentGamePoints
                   ? scoreboard.current_game_points_player_two
-                  : scoreboard.winner_side === 2
+                  : effectiveWinnerSide === 2
                     ? "W"
                     : "-"}
               </span>
