@@ -203,22 +203,91 @@ function LiveScoreOverlay({
     parsedGames.at(-1)?.score === currentPointsLabel
       ? parsedGames.slice(0, -1)
       : parsedGames;
+  const gameColumns = gamesToDisplay.map((game) => {
+    const [playerOneScore = "-", playerTwoScore = "-"] = game.score.split("-");
+    return {
+      key: game.key,
+      label: game.label,
+      playerOneScore,
+      playerTwoScore
+    };
+  });
+
+  if (expanded) {
+    return (
+      <div className="pointer-events-none absolute left-2.5 top-2.5 z-10 sm:left-4 sm:top-4">
+        <div className="w-[min(18.5rem,calc(100vw-1rem))] rounded-xl border border-white/10 bg-slate-950/58 px-2 py-1.5 text-white shadow-2xl backdrop-blur-md sm:w-[21rem]">
+          <div className="flex items-center justify-end">
+            {scoreboard.result ? (
+              <span className="shrink-0 rounded-full bg-white/10 px-1.5 py-0.5 text-[9px] font-semibold text-white">
+                Games {scoreboard.result}
+              </span>
+            ) : null}
+          </div>
+
+          <div className="mt-1 space-y-1">
+            <div className="flex items-center gap-1 pl-[4.85rem] text-[8px] font-medium uppercase tracking-[0.08em] text-white/45 sm:pl-[5.35rem]">
+              {gameColumns.map((game) => (
+                <span
+                  key={`${game.key}-label`}
+                  className="flex h-4 min-w-[1.7rem] items-center justify-center rounded bg-white/5 px-1"
+                >
+                  {game.label}
+                </span>
+              ))}
+              <span className="flex h-4 min-w-[2rem] items-center justify-center rounded bg-orange-500/15 px-1 text-orange-200">
+                Act
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span className="w-[4.6rem] truncate text-[10px] font-semibold leading-none sm:w-[5.1rem] sm:text-[11px]">
+                {getCompactPlayerName(scoreboard.player_one_name)}
+              </span>
+              {gameColumns.map((game) => (
+                <span
+                  key={`${game.key}-player-one`}
+                  className="flex h-5 min-w-[1.7rem] items-center justify-center rounded-md bg-white/10 px-1 text-[10px] font-semibold leading-none text-white/90"
+                >
+                  {game.playerOneScore}
+                </span>
+              ))}
+              <span className="flex h-5 min-w-[2rem] items-center justify-center rounded-md bg-white/14 px-1 text-[10px] font-bold leading-none text-white">
+                {hasCurrentGamePoints
+                  ? scoreboard.current_game_points_player_one
+                  : "-"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <span className="w-[4.6rem] truncate text-[10px] font-semibold leading-none sm:w-[5.1rem] sm:text-[11px]">
+                {getCompactPlayerName(scoreboard.player_two_name)}
+              </span>
+              {gameColumns.map((game) => (
+                <span
+                  key={`${game.key}-player-two`}
+                  className="flex h-5 min-w-[1.7rem] items-center justify-center rounded-md bg-white/10 px-1 text-[10px] font-semibold leading-none text-white/90"
+                >
+                  {game.playerTwoScore}
+                </span>
+              ))}
+              <span className="flex h-5 min-w-[2rem] items-center justify-center rounded-md bg-white/14 px-1 text-[10px] font-bold leading-none text-white">
+                {hasCurrentGamePoints
+                  ? scoreboard.current_game_points_player_two
+                  : "-"}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={`pointer-events-none absolute z-10 ${
-        expanded
-          ? "left-3 top-3 sm:left-4 sm:top-4"
-          : "inset-x-0 bottom-0 p-2 sm:p-3"
-      }`}
-    >
-      <div className={expanded ? "" : "mx-auto max-w-5xl"}>
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-2 sm:p-3">
+      <div className="mx-auto max-w-5xl">
         <div
-          className={`rounded-2xl border border-white/10 bg-slate-950/58 text-white shadow-2xl backdrop-blur-md ${
-            expanded
-              ? "w-[min(13.5rem,calc(100vw-1rem))] px-2 py-1.5 sm:w-[15rem]"
-              : "ml-0 mr-auto max-w-md px-2.5 py-2"
-          }`}
+          className="ml-0 mr-auto max-w-md rounded-2xl border border-white/10 bg-slate-950/58 px-2.5 py-2 text-white shadow-2xl backdrop-blur-md"
         >
           <div className="flex items-center justify-between gap-1.5">
             <p className="rounded-full bg-orange-500/15 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.14em] text-orange-300">
