@@ -40,6 +40,7 @@ declare global {
 }
 
 let castSdkPromise: Promise<void> | null = null;
+let castConfiguredAppId: string | null = null;
 
 function mapCastError(error: unknown) {
   if (error instanceof Error && error.message) {
@@ -94,6 +95,35 @@ export async function loadGoogleCastSdk() {
   return castSdkPromise;
 }
 
+export async function initializeGoogleCast(appId: string) {
+  if (!appId.trim()) {
+    return false;
+  }
+
+  await loadGoogleCastSdk();
+
+  const castContext = window.cast?.framework?.CastContext.getInstance();
+  const autoJoinPolicy =
+    window.chrome?.cast?.AutoJoinPolicy?.ORIGIN_SCOPED || undefined;
+
+  if (!castContext) {
+    throw new Error("Google Cast no esta disponible en este navegador.");
+  }
+
+  if (castConfiguredAppId === appId.trim()) {
+    return true;
+  }
+
+  castContext.setOptions({
+    receiverApplicationId: appId.trim(),
+    autoJoinPolicy,
+    resumeSavedSession: true
+  });
+
+  castConfiguredAppId = appId.trim();
+  return true;
+}
+
 export async function castLiveCourtToTv({
   appId,
   courtId,
@@ -112,21 +142,13 @@ export async function castLiveCourtToTv({
   }
 
   try {
-    await loadGoogleCastSdk();
-
     const castContext = window.cast?.framework?.CastContext.getInstance();
-    const autoJoinPolicy =
-      window.chrome?.cast?.AutoJoinPolicy?.ORIGIN_SCOPED || undefined;
 
     if (!castContext) {
-      throw new Error("Google Cast no esta disponible en este navegador.");
+      throw new Error(
+        "Google Cast todavia no termino de inicializarse. Espera un segundo y vuelve a intentar."
+      );
     }
-
-    castContext.setOptions({
-      receiverApplicationId: appId.trim(),
-      autoJoinPolicy,
-      resumeSavedSession: true
-    });
 
     let session = castContext.getCurrentSession();
 

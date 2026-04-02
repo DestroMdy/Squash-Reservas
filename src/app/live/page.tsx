@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
-import { castLiveCourtToTv } from "@/lib/live-cast";
+import { castLiveCourtToTv, initializeGoogleCast } from "@/lib/live-cast";
 import { startSquoreMqttLiveSync } from "@/lib/live-squore-mqtt";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import {
@@ -350,6 +350,7 @@ function LiveCourtBroadcastCard({
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [isCasting, setIsCasting] = useState(false);
   const [castFeedback, setCastFeedback] = useState<string | null>(null);
+  const [castReady, setCastReady] = useState(false);
   const isExpanded = isFullscreen || isFocusMode;
   const parsedGames = useMemo(
     () =>
@@ -419,6 +420,34 @@ function LiveCourtBroadcastCard({
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isFocusMode]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function setupCast() {
+      if (!googleCastAppId) {
+        setCastReady(false);
+        return;
+      }
+
+      try {
+        await initializeGoogleCast(googleCastAppId);
+        if (!cancelled) {
+          setCastReady(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setCastReady(false);
+        }
+      }
+    }
+
+    void setupCast();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [googleCastAppId]);
 
   async function handleEnterExpandedMode() {
     const container = fullscreenContainerRef.current;
@@ -603,9 +632,15 @@ function LiveCourtBroadcastCard({
               type="button"
               onClick={handleCastToTv}
               className="btn-secondary"
-              disabled={isCasting}
+              disabled={isCasting || !googleCastAppId || !castReady}
             >
-              {isCasting ? "Conectando TV..." : "Transmitir a TV"}
+              {isCasting
+                ? "Conectando TV..."
+                : !googleCastAppId
+                  ? "Cast sin configurar"
+                  : !castReady
+                    ? "Preparando Cast..."
+                    : "Transmitir a TV"}
             </button>
           </div>
           {castFeedback ? (
