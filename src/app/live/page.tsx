@@ -203,6 +203,12 @@ function LiveScoreOverlay({
     parsedGames.at(-1)?.score === currentPointsLabel
       ? parsedGames.slice(0, -1)
       : parsedGames;
+  const winnerLabel =
+    scoreboard.winner_side === 1
+      ? getCompactPlayerName(scoreboard.player_one_name)
+      : scoreboard.winner_side === 2
+        ? getCompactPlayerName(scoreboard.player_two_name)
+        : null;
   const gameColumns = gamesToDisplay.map((game) => {
     const [playerOneScore = "-", playerTwoScore = "-"] = game.score.split("-");
     return {
@@ -235,8 +241,14 @@ function LiveScoreOverlay({
                   {game.label}
                 </span>
               ))}
-              <span className="flex h-4 min-w-[2rem] items-center justify-center rounded bg-orange-500/15 px-1 text-orange-200">
-                Act
+              <span
+                className={`flex h-4 min-w-[2rem] items-center justify-center rounded px-1 ${
+                  hasCurrentGamePoints
+                    ? "bg-orange-500/15 text-orange-200"
+                    : "bg-emerald-500/15 text-emerald-200"
+                }`}
+              >
+                {hasCurrentGamePoints ? "Act" : "Fin"}
               </span>
             </div>
 
@@ -252,10 +264,20 @@ function LiveScoreOverlay({
                   {game.playerOneScore}
                 </span>
               ))}
-              <span className="flex h-5 min-w-[2rem] items-center justify-center rounded-md bg-white/14 px-1 text-[10px] font-bold leading-none text-white">
+              <span
+                className={`flex h-5 min-w-[2rem] items-center justify-center rounded-md px-1 text-[10px] font-bold leading-none ${
+                  hasCurrentGamePoints
+                    ? "bg-white/14 text-white"
+                    : scoreboard.winner_side === 1
+                      ? "bg-emerald-500/20 text-emerald-200"
+                      : "bg-white/8 text-white/45"
+                }`}
+              >
                 {hasCurrentGamePoints
                   ? scoreboard.current_game_points_player_one
-                  : "-"}
+                  : scoreboard.winner_side === 1
+                    ? "W"
+                    : "-"}
               </span>
             </div>
 
@@ -271,12 +293,30 @@ function LiveScoreOverlay({
                   {game.playerTwoScore}
                 </span>
               ))}
-              <span className="flex h-5 min-w-[2rem] items-center justify-center rounded-md bg-white/14 px-1 text-[10px] font-bold leading-none text-white">
+              <span
+                className={`flex h-5 min-w-[2rem] items-center justify-center rounded-md px-1 text-[10px] font-bold leading-none ${
+                  hasCurrentGamePoints
+                    ? "bg-white/14 text-white"
+                    : scoreboard.winner_side === 2
+                      ? "bg-emerald-500/20 text-emerald-200"
+                      : "bg-white/8 text-white/45"
+                }`}
+              >
                 {hasCurrentGamePoints
                   ? scoreboard.current_game_points_player_two
-                  : "-"}
+                  : scoreboard.winner_side === 2
+                    ? "W"
+                    : "-"}
               </span>
             </div>
+
+            {!hasCurrentGamePoints && winnerLabel ? (
+              <div className="flex justify-end pt-0.5">
+                <span className="rounded-full bg-emerald-500/18 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.08em] text-emerald-200">
+                  Gano {winnerLabel}
+                </span>
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
