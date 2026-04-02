@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { fetchProfilesForLiveAvatars } from "@/lib/live-avatar-profiles";
 import { getStoredLiveCenterCommentsMap } from "@/lib/live-comments-store";
 import { attachLiveScoreboardAvatars } from "@/lib/live-score";
+import { fetchSquoreMqttSnapshot } from "@/lib/live-squore-mqtt-server";
 import {
   getStoredLiveCenterCourts,
   getStoredLivePlayerMappings,
@@ -38,12 +39,24 @@ export async function GET() {
       }))
     ]);
 
-    const courts = storedCourts.map((court) => ({
+    const mqttSnapshots = await Promise.all(
+      storedCourts.map(async (court) => {
+        if (!court.stream) {
+          return null;
+        }
+
+        return fetchSquoreMqttSnapshot(court.stream).catch(() => null);
+      })
+    );
+
+    const courts = storedCourts.map((court, index) => ({
       ...court,
       stream: toPublicLiveStreamConfig(court.stream),
-      scoreboard: court.scoreboard
-        ? attachLiveScoreboardAvatars(court.scoreboard, profiles, mappings)
-        : null,
+      scoreboard: mqttSnapshots[index]
+        ? attachLiveScoreboardAvatars(mqttSnapshots[index], profiles, mappings)
+        : court.scoreboard
+          ? attachLiveScoreboardAvatars(court.scoreboard, profiles, mappings)
+          : null,
       comments: commentsMap[court.id] || []
     }));
     const primaryCourt = getPrimaryLiveCourt(courts);
