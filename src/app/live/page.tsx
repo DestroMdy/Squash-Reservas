@@ -23,6 +23,7 @@ import { LiveComment, LiveCourtState, LiveScoreboard } from "@/types/db";
 
 const LIVE_REFRESH_MS = 3_000;
 const DEFAULT_SCOREBOARD_DELAY_MS = 5_000;
+type SupportedOrientationLock = "landscape" | "portrait" | "natural";
 
 function mergeRealtimeScoreboard(
   currentScoreboard: LiveScoreboard | null,
@@ -64,6 +65,46 @@ function isAndroidDevice() {
   }
 
   return /Android/i.test(navigator.userAgent);
+}
+
+async function lockLandscapeOrientation() {
+  if (typeof screen === "undefined" || !screen.orientation) {
+    return;
+  }
+
+  const orientation = screen.orientation as ScreenOrientation & {
+    lock?: (orientation: SupportedOrientationLock) => Promise<void>;
+  };
+
+  if (typeof orientation.lock !== "function") {
+    return;
+  }
+
+  try {
+    await orientation.lock("landscape");
+  } catch {
+    // Some browsers/apps reject orientation lock outside supported fullscreen contexts.
+  }
+}
+
+function unlockScreenOrientation() {
+  if (typeof screen === "undefined" || !screen.orientation) {
+    return;
+  }
+
+  const orientation = screen.orientation as ScreenOrientation & {
+    unlock?: () => void;
+  };
+
+  if (typeof orientation.unlock !== "function") {
+    return;
+  }
+
+  try {
+    orientation.unlock();
+  } catch {
+    // Ignore unlock failures on browsers that partially implement the API.
+  }
 }
 
 function buildChromeIntentUrl(targetUrl: string) {
@@ -486,6 +527,19 @@ function LiveCourtBroadcastCard({
   }, [isFocusMode]);
 
   useEffect(() => {
+    if (!isFullscreen && !isFocusMode) {
+      unlockScreenOrientation();
+      return;
+    }
+
+    void lockLandscapeOrientation();
+
+    return () => {
+      unlockScreenOrientation();
+    };
+  }, [isFocusMode, isFullscreen]);
+
+  useEffect(() => {
     setShowChromeFallback(isAndroidDevice());
   }, []);
 
@@ -561,17 +615,20 @@ function LiveCourtBroadcastCard({
 
   async function handleExitExpandedMode() {
     if (isFocusMode) {
+      unlockScreenOrientation();
       setIsFocusMode(false);
       return;
     }
 
     if (!document.fullscreenElement) {
+      unlockScreenOrientation();
       return;
     }
 
     try {
       await document.exitFullscreen();
     } catch {
+      unlockScreenOrientation();
       setIsFullscreen(false);
     }
   }
