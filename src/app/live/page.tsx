@@ -681,6 +681,14 @@ function LiveCourtBroadcastCard({
             >
               Abrir en YouTube
             </a>
+            <a
+              href={`/cast/live-receiver.html?courtId=${court.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="btn-secondary"
+            >
+              Abrir modo TV
+            </a>
             {!googleCastAppId ? (
               <button type="button" className="btn-secondary" disabled>
                 Cast sin configurar
@@ -705,6 +713,9 @@ function LiveCourtBroadcastCard({
           {castFeedback ? (
             <p className="text-sm text-slate-500">{castFeedback}</p>
           ) : null}
+          <p className="text-xs text-slate-400">
+            Si tu Chromecast no aparece aca, abre <span className="font-semibold text-slate-500">Modo TV</span> y transmite esa pestaña desde Chrome.
+          </p>
         </div>
 
         {visibleScoreboard ? (
