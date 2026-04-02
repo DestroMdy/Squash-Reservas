@@ -22,7 +22,7 @@ function buildCsp() {
     "img-src 'self' data: blob: https://www.google.com https://www.gstatic.com https://*.supabase.co https://squore.double-yellow.be http://squore.double-yellow.be" +
       (supabaseOrigin ? ` ${supabaseOrigin}` : ""),
     "font-src 'self' data:",
-    "connect-src 'self' https://www.google.com https://www.gstatic.com https://*.supabase.co" +
+    "connect-src 'self' https://www.google.com https://www.gstatic.com https://*.supabase.co wss://broker.emqx.io ws://broker.emqx.io" +
       (supabaseOrigin ? ` ${supabaseOrigin}` : ""),
     "frame-src 'self' https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/ https://www.youtube.com https://youtube.com https://www.youtube-nocookie.com",
     "upgrade-insecure-requests"
