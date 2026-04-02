@@ -51,13 +51,9 @@ function formatCommentTime(value: string) {
 }
 
 function LiveScoreOverlay({
-  courtLabel,
-  delaySeconds,
   scoreboard,
   expanded
 }: {
-  courtLabel: string;
-  delaySeconds: number;
   scoreboard: LiveScoreboard;
   expanded: boolean;
 }) {
@@ -69,69 +65,64 @@ function LiveScoreOverlay({
     !scoreboard.winner_side;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 sm:p-4">
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 p-2 sm:p-3">
       <div className="mx-auto max-w-5xl">
         <div
-          className={`rounded-2xl border border-white/15 bg-slate-950/68 text-white shadow-2xl backdrop-blur-md ${
+          className={`rounded-2xl border border-white/10 bg-slate-950/58 text-white shadow-2xl backdrop-blur-md ${
             expanded
-              ? "mx-auto max-w-3xl px-4 py-3"
-              : "ml-0 mr-auto max-w-xl px-3 py-2.5"
+              ? "mx-auto max-w-2xl px-3 py-2.5"
+              : "ml-0 mr-auto max-w-md px-2.5 py-2"
           }`}
         >
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-orange-300">
-                Marcador en vivo
-              </p>
-              <p className="mt-1 text-[11px] text-white/65">
-                {courtLabel} - demora configurada {delaySeconds}s
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-orange-300">
+              En vivo
+            </p>
             {scoreboard.result ? (
-              <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white">
+              <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold text-white">
                 {hasCurrentGamePoints ? `Games ${scoreboard.result}` : scoreboard.result}
               </span>
             ) : null}
           </div>
 
-          <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <div className="flex min-w-0 items-center gap-2.5">
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               <AvatarImage
                 src={scoreboard.player_one_avatar_url}
                 alt={scoreboard.player_one_name}
-                size={expanded ? 44 : 34}
-                className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
+                size={expanded ? 36 : 28}
+                className="h-7 w-7 shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-9 sm:w-9"
               />
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold sm:text-base">
+                <p className="truncate text-xs font-semibold sm:text-sm">
                   {scoreboard.player_one_name}
                 </p>
                 {scoreboard.winner_side === 1 ? (
-                  <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                  <p className="mt-0.5 text-[10px] font-medium text-emerald-300">
                     Ganador
                   </p>
                 ) : null}
               </div>
             </div>
 
-            <div className="shrink-0 rounded-2xl bg-white/10 px-3 py-2 text-center">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-white/60">
-                {hasCurrentGamePoints ? "Punto actual" : "Games"}
+            <div className="shrink-0 rounded-xl bg-white/10 px-2.5 py-1.5 text-center">
+              <p className="text-[9px] uppercase tracking-[0.14em] text-white/55">
+                {hasCurrentGamePoints ? "Punto" : "Games"}
               </p>
-              <p className="mt-1 text-sm font-bold text-white sm:text-base">
+              <p className="mt-0.5 text-sm font-bold text-white sm:text-base">
                 {hasCurrentGamePoints
                   ? `${scoreboard.current_game_points_player_one}-${scoreboard.current_game_points_player_two}`
                   : scoreboard.game_scores || "-"}
               </p>
             </div>
 
-            <div className="flex min-w-0 items-center justify-end gap-2.5">
+            <div className="flex min-w-0 items-center justify-end gap-2">
               <div className="min-w-0 text-right">
-                <p className="truncate text-sm font-semibold sm:text-base">
+                <p className="truncate text-xs font-semibold sm:text-sm">
                   {scoreboard.player_two_name}
                 </p>
                 {scoreboard.winner_side === 2 ? (
-                  <p className="mt-1 text-[11px] font-medium text-emerald-300">
+                  <p className="mt-0.5 text-[10px] font-medium text-emerald-300">
                     Ganador
                   </p>
                 ) : null}
@@ -139,8 +130,8 @@ function LiveScoreOverlay({
               <AvatarImage
                 src={scoreboard.player_two_avatar_url}
                 alt={scoreboard.player_two_name}
-                size={expanded ? 44 : 34}
-                className="h-[34px] w-[34px] shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-11 sm:w-11"
+                size={expanded ? 36 : 28}
+                className="h-7 w-7 shrink-0 rounded-full border border-white/20 object-cover shadow-md sm:h-9 sm:w-9"
               />
             </div>
           </div>
@@ -473,13 +464,11 @@ function LiveCourtBroadcastCard({
               />
             </div>
 
-            {visibleScoreboard ? (
-              <LiveScoreOverlay
-                courtLabel={court.label}
-                delaySeconds={stream.scoreboard_delay_seconds}
-                scoreboard={visibleScoreboard}
-                expanded={isExpanded}
-              />
+              {visibleScoreboard ? (
+                <LiveScoreOverlay
+                  scoreboard={visibleScoreboard}
+                  expanded={isExpanded}
+                />
             ) : null}
 
             <div className="pointer-events-none absolute inset-x-0 top-0 p-3 sm:p-4">
@@ -701,8 +690,6 @@ function LiveCourtBroadcastCard({
 
               {visibleScoreboard ? (
                 <LiveScoreOverlay
-                  courtLabel={court.label}
-                  delaySeconds={stream.scoreboard_delay_seconds}
                   scoreboard={visibleScoreboard}
                   expanded
                 />
