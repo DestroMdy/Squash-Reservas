@@ -58,6 +58,24 @@ function formatCommentTime(value: string) {
   }).format(new Date(value));
 }
 
+function isAndroidDevice() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+
+  return /Android/i.test(navigator.userAgent);
+}
+
+function buildChromeIntentUrl(targetUrl: string) {
+  try {
+    const parsedUrl = new URL(targetUrl);
+    const path = `${parsedUrl.pathname}${parsedUrl.search}`;
+    return `intent://${parsedUrl.host}${path}#Intent;scheme=${parsedUrl.protocol.replace(":", "")};package=com.android.chrome;end`;
+  } catch {
+    return targetUrl;
+  }
+}
+
 function getCompactPlayerName(value: string) {
   const parts = value.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) {
@@ -377,8 +395,10 @@ function LiveCourtBroadcastCard({
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [castFeedback, setCastFeedback] = useState<string | null>(null);
   const [castReady, setCastReady] = useState(false);
+  const [showChromeFallback, setShowChromeFallback] = useState(false);
   const pendingCastLoadRef = useRef(false);
   const isExpanded = isFullscreen || isFocusMode;
+  const tvModeUrl = `https://squashreservas.vercel.app/cast/live-receiver.html?courtId=${court.id}`;
   const parsedGames = useMemo(
     () =>
       parseGameScores(
@@ -447,6 +467,10 @@ function LiveCourtBroadcastCard({
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isFocusMode]);
+
+  useEffect(() => {
+    setShowChromeFallback(isAndroidDevice());
+  }, []);
 
   const pushCourtToTv = useCallback(async () => {
     try {
@@ -689,6 +713,14 @@ function LiveCourtBroadcastCard({
             >
               Abrir modo TV
             </a>
+            {showChromeFallback ? (
+              <a
+                href={buildChromeIntentUrl(tvModeUrl)}
+                className="btn-secondary"
+              >
+                Abrir modo TV en Chrome
+              </a>
+            ) : null}
             {!googleCastAppId ? (
               <button type="button" className="btn-secondary" disabled>
                 Cast sin configurar
