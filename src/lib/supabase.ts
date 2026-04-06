@@ -1170,7 +1170,7 @@ export async function fetchProfile(userId: string, token: string) {
 
   const payload = await parseJsonPayload<{
     error?: string;
-    profile?: any;
+    profile?: Profile | null;
   }>(response);
 
   if (!response.ok) {
@@ -1192,6 +1192,7 @@ export async function updateProfile(
     phone?: string | null;
     category?: string | null;
     avatar_url?: string | null;
+    whatsapp_waitlist_opt_in?: boolean;
   }
 ) {
   const response = await authedRouteRequest("/api/profile", {
@@ -1203,7 +1204,7 @@ export async function updateProfile(
 
   const result = await parseJsonPayload<{
     error?: string;
-    profile?: { id?: string };
+    profile?: Profile | null;
   }>(response);
 
   if (!response.ok) {
@@ -1217,6 +1218,8 @@ export async function updateProfile(
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event("sr-profile-updated"));
   }
+
+  return result?.profile || null;
 }
 
 export async function fetchBeginnerRulesStatus(token: string) {

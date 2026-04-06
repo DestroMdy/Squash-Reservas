@@ -7,6 +7,7 @@ import { AvatarImage } from "../../components/AvatarImage";
 import { AppNoticeModal } from "../../components/AppNoticeModal";
 import { SectionTitle } from "../../components/SectionTitle";
 import { formatCategoryLabel } from "../../lib/category-labels";
+import { isWhatsAppPhoneValid } from "../../lib/whatsapp-utils";
 import {
   fetchProfile,
   getSession,
@@ -35,6 +36,8 @@ export default function ProfilePage() {
   const [phone, setPhone] = useState("");
   const [category, setCategory] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
+  const [whatsappWaitlistOptIn, setWhatsappWaitlistOptIn] = useState(false);
+  const [whatsappWaitlistAvailable, setWhatsappWaitlistAvailable] = useState(false);
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -44,7 +47,9 @@ export default function ProfilePage() {
       try {
         const session = getSession();
 
-        if (!session?.user?.id || !session?.access_token) return;
+        if (!session?.user?.id || !session?.access_token) {
+          return;
+        }
 
         const profile = await fetchProfile(
           session.user.id,
@@ -56,18 +61,28 @@ export default function ProfilePage() {
           setPhone(profile.phone ?? "");
           setCategory(profile.category ?? "");
           setAvatarUrl(profile.avatar_url ?? "");
+          setWhatsappWaitlistOptIn(
+            profile.whatsapp_waitlist_opt_in === true
+          );
+          setWhatsappWaitlistAvailable(
+            profile.whatsapp_waitlist_available === true
+          );
         }
       } finally {
         setLoading(false);
       }
     }
 
-    load();
+    void load();
   }, []);
 
   const isComplete = useMemo(() => {
     return Boolean(name.trim() && phone.trim() && category.trim());
   }, [name, phone, category]);
+
+  const canUseWhatsAppWaitlist = useMemo(() => {
+    return isWhatsAppPhoneValid(phone);
+  }, [phone]);
 
   const showWelcomeNotice = searchParams.get("welcome") === "1";
 
@@ -118,15 +133,35 @@ export default function ProfilePage() {
         return;
       }
 
-      await updateProfile(session.user.id, session.access_token, {
-        full_name: name || null,
-        phone: phone || null,
-        category: category || null
-      });
+      if (whatsappWaitlistOptIn && !canUseWhatsAppWaitlist) {
+        setNoticeMessage(
+          "Para recibir avisos por WhatsApp, cargá un celular válido. Ejemplo: 2804123456 o +54 9 ..."
+        );
+        return;
+      }
 
+      const updatedProfile = await updateProfile(
+        session.user.id,
+        session.access_token,
+        {
+          full_name: name || null,
+          phone: phone || null,
+          category: category || null,
+          whatsapp_waitlist_opt_in: whatsappWaitlistOptIn
+        }
+      );
+
+      setWhatsappWaitlistOptIn(
+        updatedProfile?.whatsapp_waitlist_opt_in === true
+      );
+      setWhatsappWaitlistAvailable(
+        updatedProfile?.whatsapp_waitlist_available === true
+      );
       setNoticeMessage("Perfil actualizado");
-    } catch {
-      setNoticeMessage("No se pudo guardar el perfil");
+    } catch (error) {
+      setNoticeMessage(
+        error instanceof Error ? error.message : "No se pudo guardar el perfil"
+      );
     } finally {
       setSaving(false);
     }
@@ -135,7 +170,9 @@ export default function ProfilePage() {
   async function handlePasswordChange() {
     try {
       if (!newPassword.trim() || !confirmPassword.trim()) {
-        setNoticeMessage("Debes completar la nueva contraseña y su confirmación.");
+        setNoticeMessage(
+          "Debes completar la nueva contraseña y su confirmación."
+        );
         return;
       }
 
@@ -244,7 +281,7 @@ export default function ProfilePage() {
             <input
               className="w-full rounded-xl border px-3 py-2"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(event) => setName(event.target.value)}
             />
           </div>
 
@@ -253,7 +290,8 @@ export default function ProfilePage() {
             <input
               className="w-full rounded-xl border px-3 py-2"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="Ej: 2804123456 o +54 9 ..."
             />
           </div>
 
@@ -262,7 +300,7 @@ export default function ProfilePage() {
             <select
               className="w-full rounded-xl border px-3 py-2"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(event) => setCategory(event.target.value)}
             >
               <option value="">Seleccionar</option>
               {categories.map((cat) => (
@@ -271,6 +309,44 @@ export default function ProfilePage() {
                 </option>
               ))}
             </select>
+          </div>
+
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-start gap-3">
+              <input
+                id="waitlist-whatsapp-opt-in"
+                type="checkbox"
+                className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                checked={whatsappWaitlistOptIn}
+                disabled={!whatsappWaitlistAvailable}
+                onChange={(event) =>
+                  setWhatsappWaitlistOptIn(event.target.checked)
+                }
+              />
+              <div className="space-y-1">
+                <label
+                  htmlFor="waitlist-whatsapp-opt-in"
+                  className="block text-sm font-semibold text-slate-900"
+                >
+                  Quiero recibir avisos de lista de espera por WhatsApp
+                </label>
+                <p className="text-sm text-slate-700">
+                  Cuando se libere un turno ocupado, te avisamos al número de
+                  este perfil. Si no lo activás, seguimos usando email.
+                </p>
+                {!whatsappWaitlistAvailable ? (
+                  <p className="text-xs font-medium text-slate-600">
+                    El canal de WhatsApp todavía no está activo para esta app.
+                    Mientras tanto, los avisos siguen llegando por email.
+                  </p>
+                ) : null}
+                {!canUseWhatsAppWaitlist ? (
+                  <p className="text-xs font-medium text-amber-700">
+                    Cargá un celular válido para poder activar WhatsApp.
+                  </p>
+                ) : null}
+              </div>
+            </div>
           </div>
 
           <button
@@ -301,7 +377,7 @@ export default function ProfilePage() {
               type="password"
               className="w-full rounded-xl border px-3 py-2"
               value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              onChange={(event) => setNewPassword(event.target.value)}
               minLength={6}
               autoComplete="new-password"
             />
@@ -315,7 +391,7 @@ export default function ProfilePage() {
               type="password"
               className="w-full rounded-xl border px-3 py-2"
               value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              onChange={(event) => setConfirmPassword(event.target.value)}
               minLength={6}
               autoComplete="new-password"
             />

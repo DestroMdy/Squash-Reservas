@@ -1,12 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
-import { canCancelBooking } from "@/lib/time-rules";
-import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import { logAdminAudit } from "@/lib/admin-audit";
 import {
   clearWaitlistForSlot,
   getWaitlistForSlot,
   isBookingWaitlistStoreConfigured
 } from "@/lib/booking-waitlist-store";
+import { getWaitlistWhatsAppPreferences } from "@/lib/whatsapp-notification-preferences-store";
+import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import { canCancelBooking } from "@/lib/time-rules";
+import { isTwilioWhatsAppConfigured, sendWaitlistReleasedWhatsAppNotification } from "@/lib/whatsapp-notifications";
+
+type WaitlistRecipient = {
+  userId: string;
+  fullName: string | null;
+  email: string | null;
+  phone: string | null;
+  whatsappOptIn: boolean;
+};
+
+type NotificationFailure = {
+  userId: string;
+  channel: "whatsapp" | "email" | "none";
+  reason: string;
+};
 
 async function fetchRole(
   supabaseUrl: string,
@@ -53,6 +70,33 @@ async function fetchAuthUserById(
   return payload.user?.email || payload.email || null;
 }
 
+async function fetchProfileContactById(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/profiles?select=id,full_name,phone&id=eq.${userId}&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const rows = (await response.json()) as Array<{
+    id?: string;
+    full_name?: string | null;
+    phone?: string | null;
+  }>;
+
+  return rows[0] ?? null;
+}
+
 function escapeHtml(value: string) {
   return value
     .replaceAll("&", "&amp;")
@@ -73,43 +117,69 @@ function formatSlotDate(value: string) {
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
-async function notifyWaitlistUsers({
+async function fetchWaitlistRecipients({
+  supabaseUrl,
+  serviceRoleKey,
+  waitlistUserIds
+}: {
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  waitlistUserIds: string[];
+}) {
+  const whatsappPreferences = await getWaitlistWhatsAppPreferences(
+    waitlistUserIds
+  ).catch(() => ({} as Record<string, { waitlist_opt_in: boolean } | null>));
+
+  return Promise.all(
+    waitlistUserIds.map(async (userId) => {
+      const [email, profile] = await Promise.all([
+        fetchAuthUserById(supabaseUrl, serviceRoleKey, userId),
+        fetchProfileContactById(supabaseUrl, serviceRoleKey, userId)
+      ]);
+
+      return {
+        userId,
+        email,
+        fullName: profile?.full_name ?? null,
+        phone: profile?.phone ?? null,
+        whatsappOptIn:
+          whatsappPreferences[userId]?.waitlist_opt_in === true
+      } satisfies WaitlistRecipient;
+    })
+  );
+}
+
+async function sendWaitlistEmails({
   resendApiKey,
   fromEmail,
   origin,
-  supabaseUrl,
-  serviceRoleKey,
   slotDate,
   startTime,
   endTime,
-  waitlistUserIds
+  recipients
 }: {
   resendApiKey: string;
   fromEmail: string;
   origin: string;
-  supabaseUrl: string;
-  serviceRoleKey: string;
   slotDate: string;
   startTime: string;
   endTime: string;
-  waitlistUserIds: string[];
+  recipients: WaitlistRecipient[];
 }) {
-  const emails = await Promise.all(
-    waitlistUserIds.map((userId) =>
-      fetchAuthUserById(supabaseUrl, serviceRoleKey, userId)
+  const uniqueEmails = Array.from(
+    new Set(
+      recipients
+        .map((recipient) => recipient.email?.trim() || "")
+        .filter(Boolean)
     )
   );
 
-  const recipients = Array.from(
-    new Set(emails.filter((email): email is string => Boolean(email)))
-  );
-
-  if (!recipients.length) {
-    return;
+  if (!uniqueEmails.length) {
+    return { ok: true as const };
   }
 
-  const primaryRecipient = recipients[0];
-  const bccRecipients = recipients.slice(1);
+  const primaryRecipient = uniqueEmails[0];
+  const bccRecipients = uniqueEmails.slice(1);
   const slotLabel = `${formatSlotDate(slotDate)} de ${startTime.slice(0, 5)} a ${endTime.slice(0, 5)}`;
 
   const response = await fetch("https://api.resend.com/emails", {
@@ -144,9 +214,130 @@ async function notifyWaitlistUsers({
     })
   });
 
-  if (!response.ok) {
-    throw new Error("No se pudo enviar el aviso de lista de espera.");
+  if (response.ok) {
+    return { ok: true as const };
   }
+
+  const errorText = await response.text();
+  return {
+    ok: false as const,
+    error: errorText || "No se pudo enviar el aviso por email."
+  };
+}
+
+async function notifyWaitlistUsers({
+  resendApiKey,
+  fromEmail,
+  origin,
+  supabaseUrl,
+  serviceRoleKey,
+  slotDate,
+  startTime,
+  endTime,
+  waitlistUserIds
+}: {
+  resendApiKey?: string;
+  fromEmail: string;
+  origin: string;
+  supabaseUrl: string;
+  serviceRoleKey: string;
+  slotDate: string;
+  startTime: string;
+  endTime: string;
+  waitlistUserIds: string[];
+}) {
+  const recipients = await fetchWaitlistRecipients({
+    supabaseUrl,
+    serviceRoleKey,
+    waitlistUserIds
+  });
+  const slotLabel = `${formatSlotDate(slotDate)} de ${startTime.slice(0, 5)} a ${endTime.slice(0, 5)}`;
+  const scheduleUrl = `${origin}/schedule?date=${slotDate}`;
+  const emailFallbackRecipients: WaitlistRecipient[] = [];
+  const failures: NotificationFailure[] = [];
+  const whatsappSentTo: string[] = [];
+  const twilioEnabled = isTwilioWhatsAppConfigured();
+
+  for (const recipient of recipients) {
+    const canUseWhatsApp =
+      recipient.whatsappOptIn &&
+      twilioEnabled &&
+      Boolean(recipient.phone?.trim());
+
+    if (canUseWhatsApp) {
+      try {
+        await sendWaitlistReleasedWhatsAppNotification({
+          recipientPhone: recipient.phone as string,
+          recipientName: recipient.fullName,
+          slotLabel,
+          scheduleUrl
+        });
+        whatsappSentTo.push(recipient.userId);
+        continue;
+      } catch (error) {
+        failures.push({
+          userId: recipient.userId,
+          channel: "whatsapp",
+          reason:
+            error instanceof Error
+              ? error.message
+              : "No se pudo enviar el aviso por WhatsApp."
+        });
+      }
+    }
+
+    if (recipient.email?.trim()) {
+      emailFallbackRecipients.push(recipient);
+      continue;
+    }
+
+    failures.push({
+      userId: recipient.userId,
+      channel: "none",
+      reason: recipient.whatsappOptIn
+        ? "El usuario habilito WhatsApp pero no tiene un canal de respaldo disponible."
+        : "El usuario no tiene email ni WhatsApp habilitado para recibir avisos."
+    });
+  }
+
+  const emailedUserIds = emailFallbackRecipients.map((recipient) => recipient.userId);
+
+  if (emailFallbackRecipients.length && resendApiKey) {
+    const emailResult = await sendWaitlistEmails({
+      resendApiKey,
+      fromEmail,
+      origin,
+      slotDate,
+      startTime,
+      endTime,
+      recipients: emailFallbackRecipients
+    });
+
+    if (!emailResult.ok) {
+      failures.push(
+        ...emailFallbackRecipients.map((recipient) => ({
+          userId: recipient.userId,
+          channel: "email" as const,
+          reason: emailResult.error
+        }))
+      );
+    }
+  } else if (emailFallbackRecipients.length) {
+    failures.push(
+      ...emailFallbackRecipients.map((recipient) => ({
+        userId: recipient.userId,
+        channel: "email" as const,
+        reason: "Falta configurar Resend para los avisos por email."
+      }))
+    );
+  }
+
+  return {
+    recipients,
+    whatsappSentTo,
+    emailedUserIds,
+    failures
+  };
 }
 
 export async function POST(
@@ -280,19 +471,50 @@ export async function POST(
     if (waitlistEntries.length) {
       const resendApiKey = process.env.RESEND_API_KEY;
       const fromEmail =
-        process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
+        process.env.RESEND_FROM_EMAIL ||
+        "Squash Reservas <onboarding@resend.dev>";
 
-      if (resendApiKey) {
-        await notifyWaitlistUsers({
-          resendApiKey,
-          fromEmail,
-          origin: request.nextUrl.origin,
-          supabaseUrl: auth.supabaseUrl,
-          serviceRoleKey: auth.serviceRoleKey,
-          slotDate,
-          startTime,
-          endTime,
-          waitlistUserIds: waitlistEntries.map((entry) => entry.user_id)
+      const notificationResult = await notifyWaitlistUsers({
+        resendApiKey,
+        fromEmail,
+        origin: request.nextUrl.origin,
+        supabaseUrl: auth.supabaseUrl,
+        serviceRoleKey: auth.serviceRoleKey,
+        slotDate,
+        startTime,
+        endTime,
+        waitlistUserIds: waitlistEntries.map((entry) => entry.user_id)
+      }).catch((error) => ({
+        recipients: [] as WaitlistRecipient[],
+        whatsappSentTo: [] as string[],
+        emailedUserIds: [] as string[],
+        failures: [
+          {
+            userId: "unknown",
+            channel: "none" as const,
+            reason:
+              error instanceof Error
+                ? error.message
+                : "No se pudieron procesar los avisos de lista de espera."
+          }
+        ]
+      }));
+
+      if (notificationResult.failures.length) {
+        await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
+          actorId: auth.user.id,
+          action: "booking.waitlist_notification_failed",
+          targetType: "booking",
+          targetId: booking.id,
+          details: {
+            time_slot_id: booking.time_slot_id,
+            slot_date: slotDate,
+            start_time: startTime,
+            end_time: endTime,
+            whatsapp_sent_to: notificationResult.whatsappSentTo,
+            email_fallback_user_ids: notificationResult.emailedUserIds,
+            failures: notificationResult.failures
+          }
         }).catch(() => null);
       }
 

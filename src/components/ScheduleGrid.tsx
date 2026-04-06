@@ -226,7 +226,7 @@ export function ScheduleGrid({
       setNoticeMessage(
         joined
           ? "Saliste de la lista de espera de ese turno."
-          : "Listo. Te avisaremos si se libera ese horario."
+          : "Listo. Si se libera ese horario, te avisaremos por WhatsApp o email según tu perfil."
       );
     } catch (error) {
       setNoticeMessage(
@@ -420,7 +420,7 @@ export function ScheduleGrid({
                         ) : null}
                       </div>
                       <p className="mt-1 text-xs text-slate-500">
-                        Si este turno se libera, te mandamos un aviso para que intentes reservarlo.
+                        Si este turno se libera, te avisamos por WhatsApp si lo activaste en tu perfil. Si no, usamos email.
                       </p>
                     </div>
                   ) : null}

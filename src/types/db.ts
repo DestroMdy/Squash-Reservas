@@ -124,6 +124,8 @@ export interface Profile {
   phone: string | null;
   category: string | null;
   avatar_url?: string | null;
+  whatsapp_waitlist_opt_in?: boolean;
+  whatsapp_waitlist_available?: boolean;
   role: Role;
 }
 
