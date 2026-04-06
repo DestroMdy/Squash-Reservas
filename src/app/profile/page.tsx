@@ -133,7 +133,11 @@ export default function ProfilePage() {
         return;
       }
 
-      if (whatsappWaitlistOptIn && !canUseWhatsAppWaitlist) {
+      if (
+        whatsappWaitlistAvailable &&
+        whatsappWaitlistOptIn &&
+        !canUseWhatsAppWaitlist
+      ) {
         setNoticeMessage(
           "Para recibir avisos por WhatsApp, cargá un celular válido. Ejemplo: 2804123456 o +54 9 ..."
         );
@@ -311,43 +315,38 @@ export default function ProfilePage() {
             </select>
           </div>
 
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-            <div className="flex items-start gap-3">
-              <input
-                id="waitlist-whatsapp-opt-in"
-                type="checkbox"
-                className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                checked={whatsappWaitlistOptIn}
-                disabled={!whatsappWaitlistAvailable}
-                onChange={(event) =>
-                  setWhatsappWaitlistOptIn(event.target.checked)
-                }
-              />
-              <div className="space-y-1">
-                <label
-                  htmlFor="waitlist-whatsapp-opt-in"
-                  className="block text-sm font-semibold text-slate-900"
-                >
-                  Quiero recibir avisos de lista de espera por WhatsApp
-                </label>
-                <p className="text-sm text-slate-700">
-                  Cuando se libere un turno ocupado, te avisamos al número de
-                  este perfil. Si no lo activás, seguimos usando email.
-                </p>
-                {!whatsappWaitlistAvailable ? (
-                  <p className="text-xs font-medium text-slate-600">
-                    El canal de WhatsApp todavía no está activo para esta app.
-                    Mientras tanto, los avisos siguen llegando por email.
+          {whatsappWaitlistAvailable ? (
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="flex items-start gap-3">
+                <input
+                  id="waitlist-whatsapp-opt-in"
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  checked={whatsappWaitlistOptIn}
+                  onChange={(event) =>
+                    setWhatsappWaitlistOptIn(event.target.checked)
+                  }
+                />
+                <div className="space-y-1">
+                  <label
+                    htmlFor="waitlist-whatsapp-opt-in"
+                    className="block text-sm font-semibold text-slate-900"
+                  >
+                    Quiero recibir avisos de lista de espera por WhatsApp
+                  </label>
+                  <p className="text-sm text-slate-700">
+                    Cuando se libere un turno ocupado, te avisamos al número de
+                    este perfil. Si no lo activás, seguimos usando email.
                   </p>
-                ) : null}
-                {!canUseWhatsAppWaitlist ? (
-                  <p className="text-xs font-medium text-amber-700">
-                    Cargá un celular válido para poder activar WhatsApp.
-                  </p>
-                ) : null}
+                  {!canUseWhatsAppWaitlist ? (
+                    <p className="text-xs font-medium text-amber-700">
+                      Cargá un celular válido para poder activar WhatsApp.
+                    </p>
+                  ) : null}
+                </div>
               </div>
             </div>
-          </div>
+          ) : null}
 
           <button
             onClick={save}

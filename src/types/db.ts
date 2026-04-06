@@ -209,6 +209,35 @@ export interface BookingWaitlistEntry {
   profiles?: Pick<Profile, "id" | "full_name" | "category" | "avatar_url"> | null;
 }
 
+export interface AdminWaitlistEntry {
+  user_id: string;
+  full_name: string | null;
+  phone: string | null;
+  category: string | null;
+  avatar_url?: string | null;
+  created_at: string;
+  whatsapp_url: string | null;
+}
+
+export interface AdminWaitlistSlot {
+  time_slot_id: string;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  court_id: string;
+  court_name: string | null;
+  current_booking:
+    | {
+        booking_id: string;
+        user_id: string;
+        full_name: string | null;
+        category: string | null;
+        avatar_url?: string | null;
+      }
+    | null;
+  entries: AdminWaitlistEntry[];
+}
+
 export interface AdminAuditLog {
   id: string;
   actor_id: string;

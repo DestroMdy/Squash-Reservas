@@ -90,3 +90,23 @@ export function normalizeWhatsAppPhone(phone: string | null | undefined) {
 export function isWhatsAppPhoneValid(phone: string | null | undefined) {
   return Boolean(normalizeWhatsAppPhone(phone));
 }
+
+export function buildWhatsAppLink(
+  phone: string | null | undefined,
+  message?: string | null
+) {
+  const normalizedPhone = normalizeWhatsAppPhone(phone);
+
+  if (!normalizedPhone) {
+    return null;
+  }
+
+  const digits = normalizedPhone.replace(/\D/g, "");
+  const baseUrl = `https://wa.me/${digits}`;
+
+  if (!message?.trim()) {
+    return baseUrl;
+  }
+
+  return `${baseUrl}?text=${encodeURIComponent(message.trim())}`;
+}

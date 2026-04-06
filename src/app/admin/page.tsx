@@ -18,6 +18,7 @@ import { buildCsv } from "@/lib/csv";
 import {
   createExternalTournament,
   deleteExternalTournamentFlyerAsAdmin,
+  fetchAdminWaitlist,
   fetchAdminBookingAvailability,
   deleteAdminScheduleOverride,
   deletePlayerAvatarAsAdmin,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/supabase";
 import type {
   AdminAuditLog,
+  AdminWaitlistSlot,
   Booking,
   BookingAvailabilitySettings,
   BookingStatus,
@@ -87,6 +89,7 @@ type ScheduleFormMode = "default" | "closed" | "custom_hours";
 type AdminSectionKey =
   | "report"
   | "schedule"
+  | "waitlist"
   | "live"
   | "tournaments"
   | "audit"
@@ -131,6 +134,14 @@ function getEmptyTournamentForm(): TournamentFormState {
     notes: "",
     is_active: true
   };
+}
+
+function formatWaitlistSlotDate(slotDate: string) {
+  return new Intl.DateTimeFormat("es-AR", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit"
+  }).format(new Date(`${slotDate}T12:00:00`));
 }
 
 function AdminAccordionSection({
@@ -196,6 +207,8 @@ export default function AdminPage() {
   const [bookingAvailabilityNote, setBookingAvailabilityNote] = useState("");
   const [scheduleOverrides, setScheduleOverrides] = useState<ScheduleDayOverride[]>([]);
   const [scheduleOverridesEnabled, setScheduleOverridesEnabled] = useState(true);
+  const [waitlistSlots, setWaitlistSlots] = useState<AdminWaitlistSlot[]>([]);
+  const [waitlistEnabled, setWaitlistEnabled] = useState(true);
   const [scheduleDate, setScheduleDate] = useState(getTodayLocalDate());
   const [scheduleMode, setScheduleMode] = useState<ScheduleFormMode>("default");
   const [scheduleOpensAt, setScheduleOpensAt] = useState("10:00");
@@ -230,6 +243,7 @@ export default function AdminPage() {
   const [openSections, setOpenSections] = useState<Record<AdminSectionKey, boolean>>({
     report: true,
     schedule: false,
+    waitlist: false,
     live: false,
     tournaments: false,
     audit: false,
@@ -279,6 +293,7 @@ export default function AdminPage() {
       externalTournaments,
       auditData,
       scheduleData,
+      waitlistData,
       bookingAvailabilityData
     ] =
       await Promise.all([
@@ -288,6 +303,7 @@ export default function AdminPage() {
         fetchAdminExternalTournaments(token),
         fetchAdminAuditLogs(token),
         fetchAdminScheduleOverrides(token),
+        fetchAdminWaitlist(token),
         fetchAdminBookingAvailability(token)
       ]);
 
@@ -299,6 +315,8 @@ export default function AdminPage() {
     setAuditEnabled(auditData.enabled !== false);
     setScheduleOverrides(scheduleData.overrides ?? []);
     setScheduleOverridesEnabled(scheduleData.unavailable !== true);
+    setWaitlistSlots(waitlistData.slots ?? []);
+    setWaitlistEnabled(waitlistData.unavailable !== true);
     setBookingAvailability(bookingAvailabilityData.settings ?? null);
     setBookingAvailabilityStoreEnabled(
       bookingAvailabilityData.unavailable !== true
@@ -408,6 +426,12 @@ export default function AdminPage() {
     scheduleMode,
     scheduleOpensAt
   ]);
+
+  const waitlistEntryCount = useMemo(
+    () =>
+      waitlistSlots.reduce((total, slot) => total + slot.entries.length, 0),
+    [waitlistSlots]
+  );
 
   const monthlyReport = useMemo(() => {
     const monthlyBookings = bookings.filter((booking) =>
@@ -1476,6 +1500,122 @@ export default function AdminPage() {
                   </p>
                 )}
               </div>
+            </div>
+          </AdminAccordionSection>
+
+          <AdminAccordionSection
+            title="Lista de espera"
+            description="Ver quién está esperando por cada turno y abrir WhatsApp manualmente sin sumar plataformas pagas."
+            count={waitlistEntryCount}
+            open={openSections.waitlist}
+            onToggle={() => toggleSection("waitlist")}
+          >
+            <div className="space-y-4">
+              {!waitlistEnabled ? (
+                <p className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  La lista de espera no está disponible porque falta KV.
+                </p>
+              ) : null}
+
+              {waitlistEnabled && !waitlistSlots.length ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600">
+                  No hay jugadores esperando por turnos ocupados en este momento.
+                </div>
+              ) : null}
+
+              {waitlistSlots.map((slot) => {
+                const slotLabel = `${formatWaitlistSlotDate(slot.slot_date)} · ${slot.start_time.slice(0, 5)} - ${slot.end_time.slice(0, 5)}`;
+
+                return (
+                  <article
+                    key={slot.time_slot_id}
+                    className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                  >
+                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-lg font-semibold text-slate-900">
+                            {slot.court_name || "Cancha"}
+                          </p>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+                            {slot.entries.length} en espera
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-600">{slotLabel}</p>
+                        {slot.current_booking ? (
+                          <p className="text-sm text-slate-700">
+                            Ocupado por{" "}
+                            <span className="font-medium">
+                              {slot.current_booking.full_name || "Sin nombre"}
+                            </span>
+                            {" · "}
+                            {formatCategoryLabel(slot.current_booking.category)}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-slate-500">
+                            Este turno ya no tiene una reserva confirmada, pero todavía hay gente en espera.
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-3">
+                      {slot.entries.map((entry, index) => (
+                        <div
+                          key={`${slot.time_slot_id}-${entry.user_id}`}
+                          className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 md:flex-row md:items-center md:justify-between"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-slate-900 px-2 text-xs font-semibold text-white">
+                              #{index + 1}
+                            </span>
+                            <AvatarImage
+                              src={entry.avatar_url || "/icon-192.png"}
+                              alt={entry.full_name || "Jugador"}
+                              size={52}
+                              className="h-[52px] w-[52px] rounded-full border border-slate-200 object-cover"
+                            />
+                            <div>
+                              <p className="font-medium text-slate-900">
+                                {entry.full_name || "Sin nombre"}
+                              </p>
+                              <p className="text-sm text-slate-600">
+                                {formatCategoryLabel(entry.category)}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {entry.phone || "Sin teléfono"}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-xs text-slate-500">
+                              Se sumó {new Intl.DateTimeFormat("es-AR", {
+                                dateStyle: "short",
+                                timeStyle: "short"
+                              }).format(new Date(entry.created_at))}
+                            </span>
+                            {entry.whatsapp_url ? (
+                              <a
+                                href={entry.whatsapp_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-secondary"
+                              >
+                                Abrir WhatsApp
+                              </a>
+                            ) : (
+                              <span className="rounded-full border border-slate-200 px-3 py-2 text-sm text-slate-500">
+                                Sin WhatsApp válido
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           </AdminAccordionSection>
 

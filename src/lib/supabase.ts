@@ -6,6 +6,7 @@ import {
 import { buildAvatarPublicUrl } from "@/lib/avatar-url";
 import {
   AdminLiveCourtState,
+  AdminWaitlistSlot,
   LiveCastSettings,
   BookingAvailabilitySettings,
   LiveComment,
@@ -964,6 +965,28 @@ export async function fetchAdminBookingAvailability(token: string) {
 
   return {
     settings: payload?.settings || null,
+    unavailable: payload?.unavailable === true
+  };
+}
+
+export async function fetchAdminWaitlist(token: string) {
+  const response = await authedRouteRequest("/api/admin/waitlist", {
+    method: "GET",
+    token
+  });
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+    slots?: AdminWaitlistSlot[];
+    unavailable?: boolean;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo cargar la lista de espera.");
+  }
+
+  return {
+    slots: payload?.slots || [],
     unavailable: payload?.unavailable === true
   };
 }

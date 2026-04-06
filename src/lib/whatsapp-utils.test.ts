@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildWhatsAppLink,
   isWhatsAppPhoneValid,
   normalizeWhatsAppPhone
 } from "@/lib/whatsapp-utils";
@@ -24,5 +25,12 @@ describe("whatsapp-utils", () => {
   it("marca como invalido un numero demasiado corto", () => {
     expect(isWhatsAppPhoneValid("12345")).toBe(false);
   });
-});
 
+  it("arma el enlace wa.me con mensaje prellenado", () => {
+    expect(
+      buildWhatsAppLink("2804123456", "Hola, se libero un turno")
+    ).toBe(
+      "https://wa.me/5492804123456?text=Hola%2C%20se%20libero%20un%20turno"
+    );
+  });
+});

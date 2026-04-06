@@ -58,6 +58,10 @@ export async function getWaitlistForSlot(slotId: string) {
   return waitlistMap[slotId] || [];
 }
 
+export async function getAllWaitlists() {
+  return getWaitlistMap();
+}
+
 export async function getWaitlistSnapshot(slotIds: string[], userId?: string | null) {
   const waitlistMap = await getWaitlistMap();
 
