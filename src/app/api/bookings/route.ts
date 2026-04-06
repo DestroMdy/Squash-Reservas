@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { logAdminAudit } from "@/lib/admin-audit";
 import {
   adminHeaders,
   requireAdminRequest,
@@ -52,6 +53,23 @@ function normalizeBookingError(error: unknown) {
   }
 
   return error instanceof Error ? error.message : "Error al reservar";
+}
+
+function serializeBookingError(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message
+    };
+  }
+
+  if (error && typeof error === "object") {
+    return error as Record<string, unknown>;
+  }
+
+  return {
+    message: String(error)
+  };
 }
 
 function publicHeaders(anonKey: string, accessToken?: string) {
@@ -1040,6 +1058,27 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     const message = normalizeBookingError(error);
+
+    await logAdminAudit(auth.supabaseUrl, serviceRoleKey, {
+      actorId: auth.user.id,
+      action: "booking.create_failed",
+      targetType: "booking",
+      targetId: body.slotId,
+      details: {
+        requested_slot_id: body.slotId,
+        selected_slot_id: selectedSlot.id,
+        selected_court_id: selectedSlot.court_id,
+        selected_court_name: selectedSlot.courts?.name ?? null,
+        fallback_court_name: fallbackCourtName,
+        slot_date: selectedSlot.slot_date,
+        start_time: selectedSlot.start_time,
+        end_time: selectedSlot.end_time,
+        user_id: auth.user.id,
+        user_email: auth.user.email || null,
+        error: serializeBookingError(error),
+        normalized_error: message
+      }
+    }).catch(() => null);
 
     return NextResponse.json(
       { error: message },

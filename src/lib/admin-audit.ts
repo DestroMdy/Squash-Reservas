@@ -1,5 +1,6 @@
 export type AdminAuditAction =
   | "booking.updated"
+  | "booking.create_failed"
   | "profile.updated"
   | "profile.avatar.updated"
   | "profile.avatar.deleted"
