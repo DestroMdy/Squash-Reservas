@@ -13,17 +13,36 @@ import { getStoredScheduleOverride } from "@/lib/schedule-overrides-store";
 import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import {
-  createBooking,
-  fetchSlot,
-  findAlternativeOpenSlot,
-  hasConfirmedBooking
-} from "@/lib/supabase";
-import {
   isBookingWaitlistStoreConfigured,
   removeUserFromWaitlist
 } from "@/lib/booking-waitlist-store";
 
 function normalizeBookingError(error: unknown) {
+  if (error && typeof error === "object") {
+    const errorRecord = error as {
+      code?: string | null;
+      message?: string | null;
+      error?: string | null;
+      details?: string | null;
+    };
+    const code = errorRecord.code || "";
+    const message =
+      errorRecord.message ||
+      errorRecord.error ||
+      errorRecord.details ||
+      "Error al reservar";
+
+    if (
+      code === "23505" ||
+      message.includes("bookings_time_slot_id_key") ||
+      message.includes("23505")
+    ) {
+      return "El turno ya fue reservado por otro usuario.";
+    }
+
+    return message;
+  }
+
   if (
     error instanceof Error &&
     (error.message.includes("bookings_time_slot_id_key") ||
@@ -77,6 +96,42 @@ type AgendaSummaryEntry = {
   endTime: string;
   playerName: string;
   category: string | null;
+};
+
+type BookingSlotRecord = {
+  id: string;
+  court_id: string;
+  slot_date: string;
+  start_time: string;
+  end_time: string;
+  status?: string | null;
+  price?: number | null;
+  created_at?: string | null;
+  courts?:
+    | {
+        id?: string | null;
+        name?: string | null;
+        is_active?: boolean | null;
+      }
+    | null;
+  bookings?:
+    | Array<{
+        id?: string | null;
+        status?: string | null;
+      }>
+    | {
+        id?: string | null;
+        status?: string | null;
+      }
+    | null;
+};
+
+type PersistedBookingRecord = {
+  id: string;
+  user_id?: string | null;
+  court_id?: string | null;
+  time_slot_id?: string | null;
+  status?: string | null;
 };
 
 function escapeHtml(value: string) {
@@ -138,6 +193,250 @@ function normalizeSlotBookings(slotBookings: AgendaDaySlotRecord["bookings"]) {
   }
 
   return Array.isArray(slotBookings) ? slotBookings : [slotBookings];
+}
+
+function normalizeBookingSlotStatuses(slotBookings: BookingSlotRecord["bookings"]) {
+  if (!slotBookings) {
+    return [];
+  }
+
+  return Array.isArray(slotBookings) ? slotBookings : [slotBookings];
+}
+
+async function parseRestPayload<T>(response: Response, fallback: T) {
+  if (response.status === 204) {
+    return fallback;
+  }
+
+  const raw = await response.text();
+  if (!raw.trim()) {
+    return fallback;
+  }
+
+  return JSON.parse(raw) as T;
+}
+
+async function readRestErrorMessage(response: Response) {
+  const raw = await response.text();
+
+  if (!raw.trim()) {
+    return "Error al reservar";
+  }
+
+  try {
+    return normalizeBookingError(JSON.parse(raw));
+  } catch {
+    return normalizeBookingError(raw);
+  }
+}
+
+async function fetchSlotByIdAdmin(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  slotId: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at&id=eq.${slotId}&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await readRestErrorMessage(response));
+  }
+
+  const rows = await parseRestPayload<BookingSlotRecord[]>(response, []);
+  return rows[0] || null;
+}
+
+async function hasConfirmedBookingAdmin(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  timeSlotId: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/bookings?select=id&time_slot_id=eq.${timeSlotId}&status=eq.confirmed&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await readRestErrorMessage(response));
+  }
+
+  const rows = await parseRestPayload<Array<{ id?: string | null }>>(
+    response,
+    []
+  );
+  return rows.length > 0;
+}
+
+async function findAlternativeOpenSlotAdmin(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  slot: {
+    id: string;
+    slot_date: string;
+    start_time: string;
+    end_time: string;
+  }
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status)&slot_date=eq.${slot.slot_date}&start_time=eq.${slot.start_time}&end_time=eq.${slot.end_time}&id=neq.${slot.id}&order=created_at.asc`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await readRestErrorMessage(response));
+  }
+
+  const rows = await parseRestPayload<BookingSlotRecord[]>(response, []);
+
+  return (
+    rows.find((candidate) => {
+      const bookings = normalizeBookingSlotStatuses(candidate.bookings);
+      return !bookings.some((booking) => booking.status === "confirmed");
+    }) || null
+  );
+}
+
+async function fetchConfirmedBookingForUserAdmin(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  timeSlotId: string,
+  userId: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/bookings?select=id,user_id,court_id,time_slot_id,status&time_slot_id=eq.${timeSlotId}&user_id=eq.${userId}&status=eq.confirmed&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(await readRestErrorMessage(response));
+  }
+
+  const rows = await parseRestPayload<PersistedBookingRecord[]>(response, []);
+  return rows[0] || null;
+}
+
+async function persistConfirmedBookingAdmin(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  booking: {
+    timeSlotId: string;
+    courtId: string;
+    userId: string;
+  }
+) {
+  const baseHeaders = adminHeaders(serviceRoleKey);
+  const cancelledResponse = await fetch(
+    `${supabaseUrl}/rest/v1/bookings?select=id&time_slot_id=eq.${booking.timeSlotId}&status=eq.cancelled&order=created_at.asc&limit=1`,
+    {
+      method: "GET",
+      headers: baseHeaders,
+      cache: "no-store"
+    }
+  );
+
+  if (!cancelledResponse.ok) {
+    throw new Error(await readRestErrorMessage(cancelledResponse));
+  }
+
+  const cancelledRows = await parseRestPayload<Array<{ id?: string | null }>>(
+    cancelledResponse,
+    []
+  );
+
+  if (cancelledRows[0]?.id) {
+    const updateResponse = await fetch(
+      `${supabaseUrl}/rest/v1/bookings?id=eq.${cancelledRows[0].id}&select=id,user_id,court_id,time_slot_id,status`,
+      {
+        method: "PATCH",
+        headers: {
+          ...baseHeaders,
+          Prefer: "return=representation"
+        },
+        body: JSON.stringify({
+          user_id: booking.userId,
+          court_id: booking.courtId,
+          time_slot_id: booking.timeSlotId,
+          status: "confirmed"
+        }),
+        cache: "no-store"
+      }
+    );
+
+    if (!updateResponse.ok) {
+      throw new Error(await readRestErrorMessage(updateResponse));
+    }
+
+    const updatedRows = await parseRestPayload<PersistedBookingRecord[]>(
+      updateResponse,
+      []
+    );
+
+    if (!updatedRows.length) {
+      throw new Error("No se pudo confirmar la reserva. Intenta nuevamente.");
+    }
+  } else {
+    const insertResponse = await fetch(
+      `${supabaseUrl}/rest/v1/bookings?select=id,user_id,court_id,time_slot_id,status`,
+      {
+        method: "POST",
+        headers: {
+          ...baseHeaders,
+          Prefer: "return=representation"
+        },
+        body: JSON.stringify({
+          user_id: booking.userId,
+          court_id: booking.courtId,
+          time_slot_id: booking.timeSlotId,
+          status: "confirmed"
+        }),
+        cache: "no-store"
+      }
+    );
+
+    if (!insertResponse.ok) {
+      throw new Error(await readRestErrorMessage(insertResponse));
+    }
+
+    const createdRows = await parseRestPayload<PersistedBookingRecord[]>(
+      insertResponse,
+      []
+    );
+
+    if (!createdRows.length) {
+      throw new Error("No se pudo confirmar la reserva. Intenta nuevamente.");
+    }
+  }
+
+  const persistedBooking = await fetchConfirmedBookingForUserAdmin(
+    supabaseUrl,
+    serviceRoleKey,
+    booking.timeSlotId,
+    booking.userId
+  );
+
+  if (!persistedBooking?.id) {
+    throw new Error("No se pudo confirmar la reserva. Intenta nuevamente.");
+  }
+
+  return persistedBooking;
 }
 
 async function fetchAuthUserById(
@@ -542,15 +841,17 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAuthenticatedRequest(request);
+  const auth = await requireAuthenticatedRequest(request, {
+    requireServiceRole: true
+  });
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const resendApiKey = process.env.RESEND_API_KEY;
   const fromEmail =
     process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
+  const serviceRoleKey = auth.serviceRoleKey;
 
   const body = (await request.json()) as { slotId?: string };
   const bookingAvailability = await getStoredBookingAvailabilitySettings().catch(
@@ -568,22 +869,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (serviceRoleKey) {
-    const beginnerRulesStatus = await getBeginnerRulesStatus(
-      auth.supabaseUrl,
-      serviceRoleKey,
-      auth.user.id
-    );
+  const beginnerRulesStatus = await getBeginnerRulesStatus(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    auth.user.id
+  );
 
-    if (beginnerRulesStatus.required) {
-      return NextResponse.json(
-        {
-          error:
-            "Si tu categoria es Principiante, primero debes leer y confirmar las reglas practicas del squash."
-        },
-        { status: 403 }
-      );
-    }
+  if (beginnerRulesStatus.required) {
+    return NextResponse.json(
+      {
+        error:
+          "Si tu categoria es Principiante, primero debes leer y confirmar las reglas practicas del squash."
+      },
+      { status: 403 }
+    );
   }
 
   const ip = getRequestIp(request);
@@ -608,7 +907,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const slot = await fetchSlot(body.slotId, auth.accessToken);
+  const slot = await fetchSlotByIdAdmin(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    body.slotId
+  );
   if (!slot) {
     return NextResponse.json({ error: "Turno no encontrado" }, { status: 404 });
   }
@@ -640,23 +943,26 @@ export async function POST(request: NextRequest) {
 
   let selectedSlot = slot;
   let fallbackCourtName: string | null = null;
-  let alreadyBooked = await hasConfirmedBooking(
-    selectedSlot.id,
-    auth.accessToken
+  let alreadyBooked = await hasConfirmedBookingAdmin(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    selectedSlot.id
   );
 
   if (alreadyBooked) {
-    const alternativeSlot = await findAlternativeOpenSlot(
+    const alternativeSlot = await findAlternativeOpenSlotAdmin(
+      auth.supabaseUrl,
+      serviceRoleKey,
       selectedSlot,
-      auth.accessToken
     );
 
     if (alternativeSlot) {
       selectedSlot = alternativeSlot;
       fallbackCourtName = alternativeSlot.courts?.name ?? null;
-      alreadyBooked = await hasConfirmedBooking(
-        selectedSlot.id,
-        auth.accessToken
+      alreadyBooked = await hasConfirmedBookingAdmin(
+        auth.supabaseUrl,
+        serviceRoleKey,
+        selectedSlot.id
       );
     }
   }
@@ -669,12 +975,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await createBooking(
-      selectedSlot.id,
-      selectedSlot.court_id,
-      auth.user.id,
-      auth.accessToken
-    );
+    await persistConfirmedBookingAdmin(auth.supabaseUrl, serviceRoleKey, {
+      timeSlotId: selectedSlot.id,
+      courtId: selectedSlot.court_id,
+      userId: auth.user.id
+    });
 
     if (isBookingWaitlistStoreConfigured()) {
       const slotsToCleanup = Array.from(
@@ -686,7 +991,7 @@ export async function POST(request: NextRequest) {
       ).catch(() => null);
     }
 
-    if (serviceRoleKey && resendApiKey) {
+    if (resendApiKey) {
       try {
         const [adminEmails, agenda] = await Promise.all([
           fetchAdminEmails(auth.supabaseUrl, serviceRoleKey),
