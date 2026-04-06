@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
+import { formatCategoryLabel } from "@/lib/category-labels";
 import { hydrateCourtsWithSquoreFeed } from "@/lib/live-squore-feed";
 import { LIVE_COURTS } from "@/lib/live-stream";
 import {
@@ -1110,7 +1111,7 @@ export function AdminLiveCenterSection() {
               {selectablePlayers.map((player) => (
                 <option key={player.id} value={player.id}>
                   {player.full_name || "Sin nombre"}
-                  {player.category ? ` · ${player.category}` : ""}
+                  {player.category ? ` · ${formatCategoryLabel(player.category)}` : ""}
                 </option>
               ))}
             </select>

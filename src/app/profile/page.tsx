@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "../../components/AvatarImage";
 import { AppNoticeModal } from "../../components/AppNoticeModal";
 import { SectionTitle } from "../../components/SectionTitle";
+import { formatCategoryLabel } from "../../lib/category-labels";
 import {
   fetchProfile,
   getSession,
@@ -215,7 +216,7 @@ export default function ProfilePage() {
         <div className="card rounded-2xl p-5">
           <p className="text-sm text-slate-500">Categoría actual</p>
           <p className="mt-1 text-2xl font-bold text-slate-900">
-            {category || "Sin categoría"}
+            {formatCategoryLabel(category)}
           </p>
         </div>
 
@@ -266,7 +267,7 @@ export default function ProfilePage() {
               <option value="">Seleccionar</option>
               {categories.map((cat) => (
                 <option key={cat} value={cat}>
-                  {cat}
+                  {formatCategoryLabel(cat)}
                 </option>
               ))}
             </select>

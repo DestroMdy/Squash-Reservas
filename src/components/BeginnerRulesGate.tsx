@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { squashRuleCuriosities, squashRules } from "@/lib/club-content";
+import { BEGINNER_CATEGORY_LABEL } from "@/lib/category-labels";
 import {
   acknowledgeBeginnerRules,
   fetchBeginnerRulesStatus,
@@ -89,15 +90,15 @@ export function BeginnerRulesGate() {
     <div className="fixed inset-0 z-[70] overflow-y-auto bg-slate-950/70 px-4 py-6">
       <div className="mx-auto max-w-3xl rounded-3xl bg-white p-6 shadow-2xl sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-700">
-          Categoria principiante
+          Categoría {BEGINNER_CATEGORY_LABEL}
         </p>
         <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950 sm:text-3xl">
           Antes de usar la app, mira estas reglas practicas del squash
         </h2>
         <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
-          Como elegiste la categoria Principiante, te mostramos primero un resumen
-          corto del deporte para que entiendas lo esencial antes de reservar y
-          empezar a jugar.
+          Como elegiste la categoría {BEGINNER_CATEGORY_LABEL}, te mostramos
+          primero un resumen corto del deporte para que entiendas lo esencial
+          antes de reservar y empezar a jugar.
         </p>
 
         <div className="mt-6 grid gap-3 sm:grid-cols-2">

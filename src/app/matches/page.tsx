@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
+import { formatCategoryLabel } from "@/lib/category-labels";
 import {
   INCOMPLETE_PROFILE_MATCHES_ERROR,
   isProfileCompletionRecordComplete
@@ -616,7 +617,7 @@ export default function MatchesPage() {
                                   {request.profiles?.full_name || "Sin nombre"}
                                 </p>
                                 <p className="text-sm text-slate-500">
-                                  {request.profiles?.category || "Sin categoría"}
+                                  {formatCategoryLabel(request.profiles?.category)}
                                 </p>
                                 <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
                                   Publicado {formatPublishedAt(request.created_at)}
@@ -678,7 +679,7 @@ export default function MatchesPage() {
                           {entry.player.full_name || "Sin nombre"}
                         </p>
                         <p className="text-sm text-slate-500">
-                          {entry.player.category || "Sin categoría"} · {entry.played} partido
+                          {formatCategoryLabel(entry.player.category)} · {entry.played} partido
                           {entry.played === 1 ? "" : "s"}
                         </p>
                       </div>
@@ -749,7 +750,7 @@ export default function MatchesPage() {
                   {players.map((player) => (
                     <option key={player.id} value={player.id}>
                       {player.full_name || "Sin nombre"} ·{" "}
-                      {player.category || "Sin categoría"}
+                      {formatCategoryLabel(player.category)}
                     </option>
                   ))}
                 </select>
@@ -895,7 +896,7 @@ export default function MatchesPage() {
                             </span>
                           </div>
                           <p className="text-sm text-slate-500">
-                            {opponent?.category || "Sin categoría"}
+                            {formatCategoryLabel(opponent?.category)}
                           </p>
                           <p className="mt-1 text-sm text-slate-600">
                             {formatPlayedOn(match.played_on)}

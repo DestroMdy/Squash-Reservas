@@ -13,6 +13,7 @@ import { AdminLiveCenterSection } from "@/components/AdminLiveCenterSection";
 import { AvatarImage } from "@/components/AvatarImage";
 import { SectionTitle } from "@/components/SectionTitle";
 import { getReservationsPausedMessage } from "@/lib/booking-availability";
+import { formatCategoryLabel } from "@/lib/category-labels";
 import { buildCsv } from "@/lib/csv";
 import {
   createExternalTournament,
@@ -1870,7 +1871,7 @@ export default function AdminPage() {
                         <div>
                           <p className="font-medium text-slate-900">{player.full_name || "Sin nombre"}</p>
                           <p className="text-sm text-slate-600">
-                            {player.category || "Sin categoría"} · {player.phone || "Sin teléfono"}
+                            {formatCategoryLabel(player.category)} · {player.phone || "Sin teléfono"}
                           </p>
                           <p className="text-xs uppercase tracking-wide text-slate-400">{player.role}</p>
                         </div>
@@ -1933,7 +1934,7 @@ export default function AdminPage() {
                                   {playerEditState.full_name || "Jugador sin nombre"}
                                 </p>
                                 <p className="text-sm text-slate-500">
-                                  {playerEditState.category || "Sin categoria"}
+                                  {formatCategoryLabel(playerEditState.category)}
                                 </p>
                               </div>
                             </div>
@@ -2018,7 +2019,7 @@ export default function AdminPage() {
                               <option value="">Sin categoria</option>
                               {categoryOptions.map((category) => (
                                 <option key={category} value={category}>
-                                  {category}
+                                  {formatCategoryLabel(category)}
                                 </option>
                               ))}
                             </select>
@@ -2075,7 +2076,9 @@ export default function AdminPage() {
               {filteredBookings.length ? (
                 filteredBookings.map((booking) => {
                   const playerName = booking.profiles?.full_name || "Sin nombre";
-                  const playerCategory = booking.profiles?.category || "Sin categoría";
+                  const playerCategory = formatCategoryLabel(
+                    booking.profiles?.category
+                  );
                   const courtName = booking.time_slots?.courts?.name || booking.courts?.name || "Cancha";
                   const slotDate = booking.time_slots?.slot_date || "Sin fecha";
                   const startTime = booking.time_slots?.start_time?.slice(0, 5) || "--:--";
@@ -2124,7 +2127,7 @@ export default function AdminPage() {
                             >
                               {players.map((player) => (
                                 <option key={player.id} value={player.id}>
-                                  {player.full_name || "Sin nombre"} · {player.category || "Sin categoría"}
+                                  {player.full_name || "Sin nombre"} · {formatCategoryLabel(player.category)}
                                 </option>
                               ))}
                             </select>

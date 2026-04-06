@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
 import { AppNoticeModal } from "@/components/AppNoticeModal";
 import { SectionTitle } from "@/components/SectionTitle";
+import { formatCategoryLabel } from "@/lib/category-labels";
 import {
   INCOMPLETE_PROFILE_MESSAGES_ERROR,
   isProfileCompletionRecordComplete
@@ -584,7 +585,7 @@ export default function MessagesPage() {
                   {player.full_name || "Sin nombre"}
                 </p>
                 <p className="text-sm text-slate-500">
-                  {player.category || "Sin categoría"}
+                  {formatCategoryLabel(player.category)}
                 </p>
               </div>
             </label>
@@ -713,7 +714,7 @@ export default function MessagesPage() {
                         sortedPlayers.map((player) => (
                           <option key={player.id} value={player.id}>
                             {player.full_name || "Sin nombre"} ·{" "}
-                            {player.category || "Sin categoría"}
+                            {formatCategoryLabel(player.category)}
                           </option>
                         ))
                       ) : (
@@ -763,7 +764,7 @@ export default function MessagesPage() {
                                   active ? "text-slate-200" : "text-slate-500"
                                 }`}
                               >
-                                {player.category || "Sin categoría"}
+                                {formatCategoryLabel(player.category)}
                               </p>
                               <p
                                 className={`mt-1 truncate text-xs ${
@@ -985,7 +986,7 @@ export default function MessagesPage() {
                             {selectedPlayer?.full_name || "Elegí un jugador"}
                           </p>
                           <p className="text-sm text-slate-500">
-                            {selectedPlayer?.category || "Sin categoría"}
+                            {formatCategoryLabel(selectedPlayer?.category)}
                           </p>
                         </div>
                       </div>

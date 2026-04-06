@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "../../components/AvatarImage";
+import {
+  formatCategoryLabel,
+  normalizeCategoryKey
+} from "../../lib/category-labels";
 import { isProfileCompletionRecordComplete } from "../../lib/profile-completion";
 import { fetchPlayers, getSession } from "../../lib/supabase";
 import { SectionTitle } from "../../components/SectionTitle";
@@ -61,7 +65,7 @@ export default function PlayersPage() {
     }
 
     for (const player of players) {
-      const category = player.category?.trim() || "Sin categoría";
+      const category = normalizeCategoryKey(player.category) || "Sin categoría";
       if (!groups[category]) {
         groups[category] = [];
       }
@@ -93,7 +97,9 @@ export default function PlayersPage() {
             return (
               <section key={category} className="card rounded-2xl p-5">
                 <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xl font-bold text-slate-900">{category}</h2>
+                  <h2 className="text-xl font-bold text-slate-900">
+                    {formatCategoryLabel(category)}
+                  </h2>
                   <span className="rounded-full bg-slate-100 px-3 py-1 text-sm text-slate-700">
                     {categoryPlayers.length}
                   </span>
@@ -119,7 +125,7 @@ export default function PlayersPage() {
                                 {player.full_name || "Sin nombre"}
                               </p>
                               <p className="mt-1 text-sm text-slate-500">
-                                {player.category || "Sin categoría"}
+                                {formatCategoryLabel(player.category)}
                               </p>
                             </div>
                           </div>

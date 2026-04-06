@@ -14,6 +14,7 @@ import {
   joinBookingWaitlist,
   leaveBookingWaitlist
 } from "../lib/supabase";
+import { formatCategoryLabel } from "../lib/category-labels";
 import {
   canBookSlot,
   canCancelBooking,
@@ -330,7 +331,7 @@ export function ScheduleGrid({
           const playerName =
             confirmedBooking?.profiles?.full_name?.trim() || "Sin nombre";
           const playerCategory =
-            confirmedBooking?.profiles?.category?.trim() || "Sin categoría";
+            formatCategoryLabel(confirmedBooking?.profiles?.category?.trim());
           const playerAvatar =
             confirmedBooking?.profiles?.avatar_url || "/icon-192.png";
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { logAdminAudit } from "@/lib/admin-audit";
+import { BEGINNER_CATEGORY_LABEL } from "@/lib/category-labels";
 import {
   adminHeaders,
   requireAdminRequest,
@@ -897,7 +898,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error:
-          "Si tu categoria es Principiante, primero debes leer y confirmar las reglas practicas del squash."
+          `Si tu categoría es ${BEGINNER_CATEGORY_LABEL}, primero debes leer y confirmar las reglas prácticas del squash.`
       },
       { status: 403 }
     );

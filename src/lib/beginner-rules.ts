@@ -4,10 +4,11 @@ import {
   getBeginnerRulesAcknowledgedAt,
   setBeginnerRulesAcknowledgedAt
 } from "@/lib/beginner-rules-store";
+import { normalizeCategoryKey, BEGINNER_CATEGORY_VALUE } from "@/lib/category-labels";
 import { adminHeaders } from "@/lib/server-auth";
 
 export function isBeginnerCategory(category: string | null | undefined) {
-  return category?.trim().toLowerCase() === "principiante";
+  return normalizeCategoryKey(category) === BEGINNER_CATEGORY_VALUE;
 }
 
 export async function fetchUserProfileStatus(

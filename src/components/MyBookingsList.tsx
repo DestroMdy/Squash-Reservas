@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { AppNoticeModal } from "@/components/AppNoticeModal";
+import { formatCategoryLabel } from "@/lib/category-labels";
 import { cancelBooking, fetchProfile, getSession } from "@/lib/supabase";
 import { canCancelBooking } from "@/lib/time-rules";
 import { Booking, Profile } from "@/types/db";
@@ -210,9 +211,9 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
               {profile.full_name || "Sin nombre"}
             </p>
             <p className="mt-1 text-sm text-slate-600">
-              Categoría:{" "}
+                Categoría:{" "}
               <span className="font-medium">
-                {profile.category || "Sin categoría"}
+                {formatCategoryLabel(profile.category)}
               </span>
             </p>
           </div>
