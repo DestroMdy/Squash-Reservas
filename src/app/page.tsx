@@ -404,13 +404,13 @@ export default function HomePage() {
                       </div>
 
                       {featuredTournament.flyer_url ? (
-                        <div className="w-20 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 sm:w-24">
+                        <div className="flex w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-slate-900 p-1 sm:w-24 sm:p-1.5">
                           <Image
                             src={featuredTournament.flyer_url}
                             alt={`Flyer promocional de ${featuredTournament.title}`}
                             width={192}
                             height={256}
-                            className="h-full w-full object-cover"
+                            className="h-full w-full rounded-xl object-contain"
                             loading="lazy"
                           />
                         </div>
