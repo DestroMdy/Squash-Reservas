@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { AvatarImage } from "@/components/AvatarImage";
@@ -34,6 +35,7 @@ type HomeTournament = {
   title: string;
   event_date?: string | null;
   location?: string | null;
+  flyer_url?: string | null;
 };
 
 function getBookingMarker(booking: NextBooking) {
@@ -379,16 +381,41 @@ export default function HomePage() {
               {featuredTournament ? (
                 <div className="mt-4 space-y-3">
                   <div className="rounded-2xl bg-black px-4 py-4 text-white shadow-sm">
-                    <p className="font-dodger text-xs text-orange-300">La Martineta</p>
-                    <h2 className="mt-3 text-2xl font-bold leading-tight">
-                      {featuredTournament.title}
-                    </h2>
-                    <p className="mt-3 text-sm text-slate-300">
-                      {formatTournamentDate(featuredTournament.event_date)}
-                    </p>
-                    <p className="mt-1 text-sm text-orange-300">
-                      {featuredTournament.location || "Sede a confirmar"}
-                    </p>
+                    <div
+                      className={`flex gap-4 ${
+                        featuredTournament.flyer_url
+                          ? "items-stretch"
+                          : "items-start"
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="font-dodger text-xs text-orange-300">
+                          La Martineta
+                        </p>
+                        <h2 className="mt-3 text-2xl font-bold leading-tight">
+                          {featuredTournament.title}
+                        </h2>
+                        <p className="mt-3 text-sm text-slate-300">
+                          {formatTournamentDate(featuredTournament.event_date)}
+                        </p>
+                        <p className="mt-1 text-sm text-orange-300">
+                          {featuredTournament.location || "Sede a confirmar"}
+                        </p>
+                      </div>
+
+                      {featuredTournament.flyer_url ? (
+                        <div className="w-20 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 sm:w-24">
+                          <Image
+                            src={featuredTournament.flyer_url}
+                            alt={`Flyer promocional de ${featuredTournament.title}`}
+                            width={192}
+                            height={256}
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                   <Link
                     href="/tournaments"
