@@ -7,6 +7,15 @@ import { AvatarImage } from "../../components/AvatarImage";
 import { AppNoticeModal } from "../../components/AppNoticeModal";
 import { SectionTitle } from "../../components/SectionTitle";
 import { formatCategoryLabel } from "../../lib/category-labels";
+import {
+  ensurePushSubscription,
+  getPushStatusFlag,
+  isPushManuallyDisabled,
+  isPushSupported,
+  PUSH_STATUS_EVENT,
+  requestPushPermissionAndSubscribe,
+  unsubscribePushNotifications
+} from "../../lib/push-client";
 import { isWhatsAppPhoneValid } from "../../lib/whatsapp-utils";
 import {
   fetchProfile,
@@ -41,6 +50,13 @@ export default function ProfilePage() {
   const [updatingPassword, setUpdatingPassword] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [pushAvailable, setPushAvailable] = useState(false);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushPermission, setPushPermission] = useState<
+    NotificationPermission | "unsupported"
+  >("unsupported");
+  const [pushManuallyDisabled, setPushManuallyDisabled] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -74,6 +90,62 @@ export default function ProfilePage() {
     }
 
     void load();
+  }, []);
+
+  useEffect(() => {
+    if (!isPushSupported()) {
+      setPushAvailable(false);
+      setPushEnabled(false);
+      setPushPermission("unsupported");
+      setPushManuallyDisabled(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncStatus = () => {
+      if (cancelled) {
+        return;
+      }
+
+      setPushEnabled(getPushStatusFlag());
+      setPushPermission(Notification.permission);
+      setPushManuallyDisabled(isPushManuallyDisabled());
+    };
+
+    async function loadPushStatus() {
+      syncStatus();
+
+      try {
+        const result = await ensurePushSubscription();
+
+        if (cancelled) {
+          return;
+        }
+
+        setPushAvailable(result.available);
+        setPushEnabled(result.enabled);
+        setPushPermission(result.permission);
+        setPushManuallyDisabled(isPushManuallyDisabled());
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        setPushAvailable(false);
+        setPushEnabled(false);
+        setPushPermission(Notification.permission);
+        setPushManuallyDisabled(isPushManuallyDisabled());
+      }
+    }
+
+    void loadPushStatus();
+    window.addEventListener(PUSH_STATUS_EVENT, syncStatus);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PUSH_STATUS_EVENT, syncStatus);
+    };
   }, []);
 
   const isComplete = useMemo(() => {
@@ -198,6 +270,50 @@ export default function ProfilePage() {
       );
     } finally {
       setUpdatingPassword(false);
+    }
+  }
+
+  async function handlePushToggle() {
+    try {
+      setPushLoading(true);
+
+      if (pushEnabled) {
+        const result = await unsubscribePushNotifications();
+        setPushAvailable(result.available);
+        setPushEnabled(result.enabled);
+        setPushPermission(result.permission);
+        setPushManuallyDisabled(true);
+        setNoticeMessage("Notificaciones desactivadas en este dispositivo.");
+        return;
+      }
+
+      const result = await requestPushPermissionAndSubscribe();
+      setPushAvailable(result.available);
+      setPushEnabled(result.enabled);
+      setPushPermission(result.permission);
+      setPushManuallyDisabled(isPushManuallyDisabled());
+
+      if (result.enabled) {
+        setNoticeMessage("Notificaciones activadas en este dispositivo.");
+        return;
+      }
+
+      if (result.permission === "denied") {
+        setNoticeMessage(
+          "Las notificaciones quedaron bloqueadas. Puedes reactivarlas desde la configuracion del navegador o del sistema."
+        );
+        return;
+      }
+
+      setNoticeMessage("No pudimos activar las notificaciones en este dispositivo.");
+    } catch (error) {
+      setNoticeMessage(
+        error instanceof Error
+          ? error.message
+          : "No pudimos actualizar las notificaciones."
+      );
+    } finally {
+      setPushLoading(false);
     }
   }
 
@@ -355,6 +471,63 @@ export default function ProfilePage() {
           >
             {saving ? "Guardando..." : "Guardar cambios"}
           </button>
+        </div>
+
+        <div className="card space-y-4 p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-2">
+              <p className="text-sm text-slate-500">Notificaciones</p>
+              <h2 className="text-xl font-bold text-slate-900">
+                Avisos en el celular
+              </h2>
+              <p className="text-sm text-slate-600">
+                Por defecto intentamos dejarlas activadas en este dispositivo
+                para mensajes, reservas y turnos liberados.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handlePushToggle}
+              disabled={pushLoading || pushPermission === "unsupported"}
+              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
+                pushEnabled
+                  ? "bg-emerald-500 text-white hover:bg-emerald-600"
+                  : "bg-slate-100 text-slate-800 hover:bg-slate-200"
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {pushLoading
+                ? "Guardando..."
+                : pushEnabled
+                  ? "Desactivar"
+                  : "Activar"}
+            </button>
+          </div>
+
+          {pushPermission === "unsupported" ? (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Este dispositivo o navegador no soporta notificaciones push.
+            </p>
+          ) : pushPermission === "denied" ? (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              Estan bloqueadas por el navegador o el sistema. Puedes volver a
+              habilitarlas desde la configuracion del dispositivo.
+            </p>
+          ) : pushEnabled ? (
+            <p className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+              Activadas en este dispositivo.
+            </p>
+          ) : pushAvailable ? (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              {pushManuallyDisabled
+                ? "Las apagaste manualmente en este dispositivo. Puedes volver a activarlas cuando quieras."
+                : "Todavia no quedaron activadas en este dispositivo."}
+            </p>
+          ) : (
+            <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              Las notificaciones push todavia no estan disponibles para esta
+              instalacion.
+            </p>
+          )}
         </div>
 
         <div className="card space-y-4 p-6">

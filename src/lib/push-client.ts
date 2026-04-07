@@ -4,6 +4,7 @@ export const PUSH_STATUS_EVENT = "sr-push-status-change";
 
 const PUSH_STATUS_STORAGE_KEY = "sr_push_notifications_enabled";
 const PUSH_PROMPT_DISMISSED_KEY = "sr_push_notifications_prompt_dismissed";
+const PUSH_MANUALLY_DISABLED_KEY = "sr_push_notifications_manually_disabled";
 const PUSH_SERVICE_WORKER_URL = "/push-sw.js";
 
 type PushAvailabilityResponse = {
@@ -23,6 +24,24 @@ function setPushStatusFlag(enabled: boolean) {
   window.dispatchEvent(
     new CustomEvent(PUSH_STATUS_EVENT, {
       detail: { enabled }
+    })
+  );
+}
+
+function setPushManuallyDisabledFlag(disabled: boolean) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (disabled) {
+    window.localStorage.setItem(PUSH_MANUALLY_DISABLED_KEY, "true");
+  } else {
+    window.localStorage.removeItem(PUSH_MANUALLY_DISABLED_KEY);
+  }
+
+  window.dispatchEvent(
+    new CustomEvent(PUSH_STATUS_EVENT, {
+      detail: { enabled: !disabled }
     })
   );
 }
@@ -88,6 +107,25 @@ async function persistPushSubscription(subscription: PushSubscription) {
   }
 }
 
+async function removePersistedPushSubscription(endpoint: string) {
+  const response = await fetch("/api/push/subscribe", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ endpoint })
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    throw new Error(
+      payload.error || "No se pudo desactivar las notificaciones push."
+    );
+  }
+}
+
 export function isPushSupported() {
   return (
     typeof window !== "undefined" &&
@@ -111,6 +149,14 @@ export function isPushPromptDismissed() {
   }
 
   return window.localStorage.getItem(PUSH_PROMPT_DISMISSED_KEY) === "true";
+}
+
+export function isPushManuallyDisabled() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.localStorage.getItem(PUSH_MANUALLY_DISABLED_KEY) === "true";
 }
 
 export function dismissPushPrompt() {
@@ -149,6 +195,15 @@ export async function ensurePushSubscription() {
     };
   }
 
+  if (isPushManuallyDisabled()) {
+    setPushStatusFlag(false);
+    return {
+      available: true,
+      enabled: false,
+      permission: Notification.permission
+    };
+  }
+
   const registration = await registerPushServiceWorker();
   let subscription = await registration.pushManager.getSubscription();
 
@@ -169,6 +224,7 @@ export async function ensurePushSubscription() {
   }
 
   await persistPushSubscription(subscription);
+  setPushManuallyDisabledFlag(false);
   clearPushPromptDismissed();
   setPushStatusFlag(true);
 
@@ -204,5 +260,34 @@ export async function requestPushPermissionAndSubscribe() {
     };
   }
 
+  setPushManuallyDisabledFlag(false);
   return ensurePushSubscription();
+}
+
+export async function unsubscribePushNotifications() {
+  if (!isPushSupported()) {
+    return {
+      available: false,
+      enabled: false,
+      permission: "unsupported" as const
+    };
+  }
+
+  const registration = await registerPushServiceWorker();
+  const subscription = await registration.pushManager.getSubscription();
+
+  if (subscription) {
+    await removePersistedPushSubscription(subscription.endpoint);
+    await subscription.unsubscribe();
+  }
+
+  dismissPushPrompt();
+  setPushStatusFlag(false);
+  setPushManuallyDisabledFlag(true);
+
+  return {
+    available: true,
+    enabled: false,
+    permission: Notification.permission
+  };
 }

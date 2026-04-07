@@ -5,6 +5,7 @@ import {
   dismissPushPrompt,
   ensurePushSubscription,
   getPushStatusFlag,
+  isPushManuallyDisabled,
   isPushPromptDismissed,
   isPushSupported,
   PUSH_STATUS_EVENT,
@@ -67,7 +68,7 @@ export function PushNotificationsManager() {
 
       setEnabled(getPushStatusFlag());
       setPermission(Notification.permission);
-      setDismissed(isPushPromptDismissed());
+      setDismissed(isPushPromptDismissed() || isPushManuallyDisabled());
     };
 
     async function bootstrap() {
@@ -83,7 +84,7 @@ export function PushNotificationsManager() {
         setAvailable(result.available);
         setEnabled(result.enabled);
         setPermission(result.permission);
-        setDismissed(isPushPromptDismissed());
+        setDismissed(isPushPromptDismissed() || isPushManuallyDisabled());
       } catch {
         if (cancelled) {
           return;
@@ -112,7 +113,7 @@ export function PushNotificationsManager() {
       setAvailable(result.available);
       setEnabled(result.enabled);
       setPermission(result.permission);
-      setDismissed(isPushPromptDismissed());
+      setDismissed(isPushPromptDismissed() || isPushManuallyDisabled());
 
       if (!result.enabled && result.permission === "denied") {
         setError(
