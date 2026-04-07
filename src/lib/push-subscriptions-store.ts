@@ -117,3 +117,19 @@ export async function getPushSubscriptionsForUsers(userIds: string[]) {
     return Boolean(endpoint && allowedUserIds.has(entry.user_id));
   });
 }
+
+export async function getAllPushSubscribedUserIds() {
+  if (!isPushSubscriptionStoreConfigured()) {
+    return [] as string[];
+  }
+
+  const store = await readPushSubscriptions();
+
+  return Array.from(
+    new Set(
+      Object.values(store)
+        .map((entry) => entry.user_id?.trim() || "")
+        .filter((value): value is string => Boolean(value))
+    )
+  );
+}
