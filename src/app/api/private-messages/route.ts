@@ -4,6 +4,7 @@ import {
   requireAuthenticatedRequest
 } from "@/lib/server-auth";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import { sendWebPushToUserIds } from "@/lib/web-push";
 import {
   fetchProfileCompletionStatus,
   INCOMPLETE_PROFILE_MESSAGES_ERROR
@@ -34,6 +35,13 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function buildMessagePreview(value: string, maxLength = 140) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength
+    ? `${compact.slice(0, maxLength - 3)}...`
+    : compact;
 }
 
 async function fetchAuthUserById(
@@ -236,18 +244,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const senderName =
+    senderProfile.full_name?.trim() || auth.user.email || "Un jugador";
+
+  await sendWebPushToUserIds([body.recipient_id], {
+    title: "Nuevo mensaje privado",
+    body: `${senderName}: ${buildMessagePreview(body.body.trim())}`,
+    url: "/messages",
+    tag: `message-${insertedMessages[0].id || body.recipient_id}`
+  }).catch(() => null);
+
   if (resendApiKey) {
     try {
-        const recipientEmail = await fetchAuthUserById(
-          auth.supabaseUrl,
-          serviceRoleKey,
-          body.recipient_id
-        );
+      const recipientEmail = await fetchAuthUserById(
+        auth.supabaseUrl,
+        serviceRoleKey,
+        body.recipient_id
+      );
 
       if (recipientEmail) {
-        const senderName =
-          senderProfile.full_name?.trim() || auth.user.email || "Un jugador";
-
         await sendNotificationEmail({
           apiKey: resendApiKey,
           from: fromEmail,

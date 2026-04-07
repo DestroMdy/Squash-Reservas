@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { getPushStatusFlag, PUSH_STATUS_EVENT } from "@/lib/push-client";
 import {
   fetchLatestUnreadGroupMessage,
   fetchLatestUnreadIncomingMessage,
@@ -12,7 +13,26 @@ const LAST_MESSAGE_KEY = "sr_last_incoming_message_id";
 const LAST_GROUP_MESSAGE_KEY = "sr_last_group_message_id";
 
 export function MessageNotifier() {
+  const [pushEnabled, setPushEnabled] = useState(false);
+
   useEffect(() => {
+    const syncPushStatus = () => {
+      setPushEnabled(getPushStatusFlag());
+    };
+
+    syncPushStatus();
+    window.addEventListener(PUSH_STATUS_EVENT, syncPushStatus);
+
+    return () => {
+      window.removeEventListener(PUSH_STATUS_EVENT, syncPushStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pushEnabled) {
+      return;
+    }
+
     let cancelled = false;
     let intervalId: number | null = null;
 
@@ -29,14 +49,6 @@ export function MessageNotifier() {
         return;
       }
       const userId = user.id;
-
-      if ("Notification" in window && Notification.permission === "default") {
-        try {
-          await Notification.requestPermission();
-        } catch {
-          // Ignore permission errors.
-        }
-      }
 
       async function checkMessages() {
         const currentToken = getSession()?.access_token;
@@ -118,7 +130,7 @@ export function MessageNotifier() {
         window.clearInterval(intervalId);
       }
     };
-  }, []);
+  }, [pushEnabled]);
 
   return null;
 }

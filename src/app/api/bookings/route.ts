@@ -18,6 +18,7 @@ import {
   isBookingWaitlistStoreConfigured,
   removeUserFromWaitlist
 } from "@/lib/booking-waitlist-store";
+import { sendWebPushToUserIds } from "@/lib/web-push";
 
 function normalizeBookingError(error: unknown) {
   if (error && typeof error === "object") {
@@ -510,6 +511,29 @@ async function fetchAdminEmails(
   return Array.from(
     new Set(emails.filter((email): email is string => Boolean(email)))
   );
+}
+
+async function fetchAdminUserIds(
+  supabaseUrl: string,
+  serviceRoleKey: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/profiles?select=id&role=eq.admin`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    return [] as string[];
+  }
+
+  const rows = (await response.json()) as Array<{ id?: string | null }>;
+  return rows
+    .map((row) => row.id || "")
+    .filter((value): value is string => Boolean(value));
 }
 
 async function fetchAgendaSummaryForDay(
@@ -1010,31 +1034,56 @@ export async function POST(request: NextRequest) {
       ).catch(() => null);
     }
 
+    const [adminUserIds, agenda] = await Promise.all([
+      fetchAdminUserIds(auth.supabaseUrl, serviceRoleKey),
+      fetchAgendaSummaryForDay(
+        auth.supabaseUrl,
+        serviceRoleKey,
+        selectedSlot.slot_date
+      )
+    ]);
+
+    const reservation =
+      agenda.find(
+        (entry) =>
+          entry.timeSlotId === selectedSlot.id && entry.userId === auth.user.id
+      ) || {
+        timeSlotId: selectedSlot.id,
+        userId: auth.user.id,
+        courtName: fallbackCourtName || "Cancha",
+        startTime: selectedSlot.start_time,
+        endTime: selectedSlot.end_time,
+        playerName: auth.user.email || "Jugador",
+        category: null
+      };
+
+    await Promise.all([
+      sendWebPushToUserIds([auth.user.id], {
+        title: "Reserva confirmada",
+        body: `${reservation.courtName} · ${formatShortTime(
+          reservation.startTime
+        )} - ${formatShortTime(reservation.endTime)} · ${formatDayLabel(
+          selectedSlot.slot_date
+        )}`,
+        url: "/my-bookings",
+        tag: `booking-user-${selectedSlot.id}`
+      }).catch(() => null),
+      sendWebPushToUserIds(adminUserIds, {
+        title: "Nueva reserva",
+        body: `${reservation.playerName} · ${reservation.courtName} · ${formatShortTime(
+          reservation.startTime
+        )}`,
+        url: "/admin",
+        tag: `booking-admin-${selectedSlot.id}`
+      }).catch(() => null)
+    ]);
+
     if (resendApiKey) {
       try {
-        const [adminEmails, agenda] = await Promise.all([
-          fetchAdminEmails(auth.supabaseUrl, serviceRoleKey),
-          fetchAgendaSummaryForDay(
-            auth.supabaseUrl,
-            serviceRoleKey,
-            selectedSlot.slot_date
-          )
-        ]);
-
-        const reservation =
-          agenda.find(
-            (entry) =>
-              entry.timeSlotId === selectedSlot.id &&
-              entry.userId === auth.user.id
-          ) || {
-            timeSlotId: selectedSlot.id,
-            userId: auth.user.id,
-            courtName: fallbackCourtName || "Cancha",
-            startTime: selectedSlot.start_time,
-            endTime: selectedSlot.end_time,
-            playerName: auth.user.email || "Jugador",
-            category: null
-          };
+        const adminEmails = await fetchAdminEmails(
+          auth.supabaseUrl,
+          serviceRoleKey
+        );
 
         await sendAdminBookingSummaryEmail({
           apiKey: resendApiKey,

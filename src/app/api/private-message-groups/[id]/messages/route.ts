@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
+import { sendWebPushToUserIds } from "@/lib/web-push";
 import {
   fetchProfileCompletionStatus,
   INCOMPLETE_PROFILE_MESSAGES_ERROR
 } from "@/lib/profile-completion";
+
+function buildMessagePreview(value: string, maxLength = 140) {
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > maxLength
+    ? `${compact.slice(0, maxLength - 3)}...`
+    : compact;
+}
 
 async function requireGroupMember(request: NextRequest, groupId: string) {
   const auth = await requireAuthenticatedRequest(request, {
@@ -245,6 +253,59 @@ export async function POST(
       cache: "no-store"
     }
   );
+
+  const [groupResponse, membersResponse, senderProfileResponse] =
+    await Promise.all([
+      fetch(
+        `${auth.supabaseUrl}/rest/v1/private_message_groups?select=name&id=eq.${params.id}&limit=1`,
+        {
+          method: "GET",
+          headers: adminHeaders(auth.serviceRoleKey),
+          cache: "no-store"
+        }
+      ),
+      fetch(
+        `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${params.id}&user_id=neq.${auth.user.id}`,
+        {
+          method: "GET",
+          headers: adminHeaders(auth.serviceRoleKey),
+          cache: "no-store"
+        }
+      ),
+      fetch(
+        `${auth.supabaseUrl}/rest/v1/profiles?select=full_name&id=eq.${auth.user.id}&limit=1`,
+        {
+          method: "GET",
+          headers: adminHeaders(auth.serviceRoleKey),
+          cache: "no-store"
+        }
+      )
+    ]);
+
+  if (groupResponse.ok && membersResponse.ok && senderProfileResponse.ok) {
+    const [groupRows, memberRows, senderProfiles] = await Promise.all([
+      groupResponse.json() as Promise<Array<{ name?: string | null }>>,
+      membersResponse.json() as Promise<Array<{ user_id?: string | null }>>,
+      senderProfileResponse.json() as Promise<Array<{ full_name?: string | null }>>
+    ]);
+
+    const recipientIds = memberRows
+      .map((member) => member.user_id || "")
+      .filter((value): value is string => Boolean(value));
+
+    if (recipientIds.length) {
+      const senderName =
+        senderProfiles[0]?.full_name?.trim() || auth.user.email || "Un jugador";
+      const groupName = groupRows[0]?.name?.trim() || "grupo privado";
+
+      await sendWebPushToUserIds(recipientIds, {
+        title: `Nuevo mensaje en ${groupName}`,
+        body: `${senderName}: ${buildMessagePreview(messageBody)}`,
+        url: "/messages",
+        tag: `group-message-${insertedRows[0].id || params.id}`
+      }).catch(() => null);
+    }
+  }
 
   return NextResponse.json({
     ok: true,

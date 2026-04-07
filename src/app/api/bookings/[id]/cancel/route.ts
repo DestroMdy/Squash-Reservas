@@ -9,6 +9,7 @@ import { getWaitlistWhatsAppPreferences } from "@/lib/whatsapp-notification-pref
 import { adminHeaders, requireAuthenticatedRequest } from "@/lib/server-auth";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import { canCancelBooking } from "@/lib/time-rules";
+import { sendWebPushToUserIds } from "@/lib/web-push";
 import { isTwilioWhatsAppConfigured, sendWaitlistReleasedWhatsAppNotification } from "@/lib/whatsapp-notifications";
 
 type WaitlistRecipient = {
@@ -21,7 +22,7 @@ type WaitlistRecipient = {
 
 type NotificationFailure = {
   userId: string;
-  channel: "whatsapp" | "email" | "none";
+  channel: "push" | "whatsapp" | "email" | "none";
   reason: string;
 };
 
@@ -257,6 +258,36 @@ async function notifyWaitlistUsers({
   const failures: NotificationFailure[] = [];
   const whatsappSentTo: string[] = [];
   const twilioEnabled = isTwilioWhatsAppConfigured();
+  const pushUserIds = recipients.map((recipient) => recipient.userId);
+
+  if (pushUserIds.length) {
+    const pushResult = await sendWebPushToUserIds(pushUserIds, {
+      title: "Se liberó un turno",
+      body: `${slotLabel}. Entrá a la agenda para intentar reservarlo.`,
+      url: `/schedule?date=${slotDate}`,
+      tag: `waitlist-${slotDate}-${startTime}-${endTime}`
+    }).catch((error) => {
+      failures.push({
+        userId: "broadcast",
+        channel: "push",
+        reason:
+          error instanceof Error
+            ? error.message
+            : "No se pudo enviar la notificación push."
+      });
+
+      return null;
+    });
+
+    if (pushResult && pushResult.failed && pushResult.sent === 0) {
+      failures.push({
+        userId: "broadcast",
+        channel: "push",
+        reason:
+          "No se pudo entregar la notificación push a los dispositivos suscritos."
+      });
+    }
+  }
 
   for (const recipient of recipients) {
     const canUseWhatsApp =

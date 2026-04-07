@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { getPushStatusFlag, PUSH_STATUS_EVENT } from "@/lib/push-client";
 import {
   fetchLatestConfirmedBooking,
   fetchProfileRole,
@@ -11,7 +12,26 @@ import {
 const LAST_BOOKING_KEY = "sr_last_admin_booking_id";
 
 export function AdminBookingNotifier() {
+  const [pushEnabled, setPushEnabled] = useState(false);
+
   useEffect(() => {
+    const syncPushStatus = () => {
+      setPushEnabled(getPushStatusFlag());
+    };
+
+    syncPushStatus();
+    window.addEventListener(PUSH_STATUS_EVENT, syncPushStatus);
+
+    return () => {
+      window.removeEventListener(PUSH_STATUS_EVENT, syncPushStatus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pushEnabled) {
+      return;
+    }
+
     let cancelled = false;
     let intervalId: number | null = null;
 
@@ -31,14 +51,6 @@ export function AdminBookingNotifier() {
       const role = await fetchProfileRole(user.id, token);
       if (role !== "admin" || cancelled) {
         return;
-      }
-
-      if ("Notification" in window && Notification.permission === "default") {
-        try {
-          await Notification.requestPermission();
-        } catch {
-          // Ignore blocked/browser-specific failures.
-        }
       }
 
       async function checkBookings() {
@@ -99,7 +111,7 @@ export function AdminBookingNotifier() {
         window.clearInterval(intervalId);
       }
     };
-  }, []);
+  }, [pushEnabled]);
 
   return null;
 }

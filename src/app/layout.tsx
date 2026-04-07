@@ -3,6 +3,7 @@ import { AdminBookingNotifier } from "@/components/AdminBookingNotifier";
 import { BeginnerRulesGate } from "@/components/BeginnerRulesGate";
 import { MessageNotifier } from "@/components/MessageNotifier";
 import { Navbar } from "@/components/Navbar";
+import { PushNotificationsManager } from "@/components/PushNotificationsManager";
 import { SessionGate } from "@/components/SessionGate";
 import "./globals.css";
 
@@ -51,6 +52,7 @@ export default function RootLayout({
           <AdminBookingNotifier />
           <BeginnerRulesGate />
           <MessageNotifier />
+          <PushNotificationsManager />
           <Navbar />
           <main className="mx-auto max-w-5xl px-4 py-6">{children}</main>
         </SessionGate>
