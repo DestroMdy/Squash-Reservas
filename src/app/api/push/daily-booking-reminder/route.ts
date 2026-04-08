@@ -54,9 +54,25 @@ function isAuthorizedCronRequest(request: NextRequest) {
   return authorization === `Bearer ${cronSecret}`;
 }
 
+function isVercelCronRequest(request: NextRequest) {
+  const userAgent = request.headers.get("user-agent")?.toLowerCase() || "";
+  return userAgent.includes("vercel-cron");
+}
+
 export async function GET(request: NextRequest) {
   if (!isAuthorizedCronRequest(request)) {
     return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
+
+  if (
+    process.env.VERCEL_ENV === "production" &&
+    !isVercelCronRequest(request)
+  ) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: "manual_invocation_blocked"
+    });
   }
 
   if (!isWebPushConfigured() || !isKvConfigured()) {
