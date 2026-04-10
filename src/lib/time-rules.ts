@@ -1,8 +1,26 @@
 import type { ScheduleDayOverride } from "@/types/db";
 
+const ARGENTINA_UTC_OFFSET = "-03:00";
+const ONE_HOUR_IN_MS = 60 * 60 * 1000;
+const ONE_DAY_IN_MS = 24 * ONE_HOUR_IN_MS;
+
+function padTimeValue(value: number) {
+  return String(value).padStart(2, "0");
+}
+
 function buildLocalDate(slotDate: string, hours = 0, minutes = 0, seconds = 0) {
-  const [year, month, day] = slotDate.split("-").map(Number);
-  return new Date(year, month - 1, day, hours, minutes, seconds, 0);
+  const isoDateTime = [
+    slotDate,
+    "T",
+    padTimeValue(hours),
+    ":",
+    padTimeValue(minutes),
+    ":",
+    padTimeValue(seconds),
+    ARGENTINA_UTC_OFFSET
+  ].join("");
+
+  return new Date(isoDateTime);
 }
 
 function buildSlotDateTime(slotDate: string, time: string) {
@@ -11,7 +29,7 @@ function buildSlotDateTime(slotDate: string, time: string) {
 }
 
 function getWeekday(slotDate: string) {
-  return buildLocalDate(slotDate, 12).getDay();
+  return buildLocalDate(slotDate, 12).getUTCDay();
 }
 
 function timeToMinutes(time: string) {
@@ -41,9 +59,7 @@ function isWithinCustomScheduleHours(
 
 export function canBookSlot(slotDate: string): boolean {
   const now = new Date();
-  const openTime = buildLocalDate(slotDate, 22);
-
-  openTime.setDate(openTime.getDate() - 1);
+  const openTime = new Date(buildLocalDate(slotDate, 22).getTime() - ONE_DAY_IN_MS);
 
   return now >= openTime;
 }
@@ -58,7 +74,7 @@ export function canReserveSlot(slotDate: string, startTime: string, endTime: str
 
 export function canCancelBooking(slotDate: string, startTime: string) {
   const bookingStart = buildSlotDateTime(slotDate, startTime);
-  const minimumCancelTime = new Date(bookingStart.getTime() - 60 * 60 * 1000);
+  const minimumCancelTime = new Date(bookingStart.getTime() - ONE_HOUR_IN_MS);
   return new Date() <= minimumCancelTime;
 }
 

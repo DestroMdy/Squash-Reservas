@@ -15,7 +15,7 @@ describe("time-rules", () => {
 
   it("habilita reservas desde las 22:00 del día anterior", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 2, 20, 22, 0, 0));
+    vi.setSystemTime(new Date("2026-03-21T01:00:00Z"));
 
     expect(canBookSlot("2026-03-21")).toBe(true);
     expect(canBookSlot("2026-03-22")).toBe(false);
@@ -23,17 +23,17 @@ describe("time-rules", () => {
 
   it("permite cancelar solo con más de una hora de anticipación", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 2, 20, 18, 59, 59));
+    vi.setSystemTime(new Date("2026-03-20T21:59:59Z"));
 
     expect(canCancelBooking("2026-03-20", "20:00:00")).toBe(true);
 
-    vi.setSystemTime(new Date(2026, 2, 20, 19, 0, 1));
+    vi.setSystemTime(new Date("2026-03-20T22:00:01Z"));
     expect(canCancelBooking("2026-03-20", "20:00:00")).toBe(false);
   });
 
   it("detecta turnos vencidos y evita reservarlos", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date(2026, 2, 20, 21, 5, 0));
+    vi.setSystemTime(new Date("2026-03-21T00:05:00Z"));
 
     expect(isPastSlot("2026-03-20", "21:00:00")).toBe(true);
     expect(canReserveSlot("2026-03-20", "20:00:00", "21:00:00")).toBe(false);
