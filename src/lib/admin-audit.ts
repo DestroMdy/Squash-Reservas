@@ -3,6 +3,7 @@ export type AdminAuditAction =
   | "booking.create_failed"
   | "booking.waitlist_notification_failed"
   | "profile.updated"
+  | "profile.password.updated"
   | "profile.avatar.updated"
   | "profile.avatar.deleted"
   | "profile.deleted"

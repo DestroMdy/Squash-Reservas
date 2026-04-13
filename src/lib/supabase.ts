@@ -781,6 +781,30 @@ export async function updatePlayerProfileAsAdmin(
   return result?.profile || null;
 }
 
+export async function updatePlayerPasswordAsAdmin(
+  profileId: string,
+  token: string,
+  password: string
+) {
+  const response = await authedRouteRequest(
+    `/api/admin/players/${profileId}/password`,
+    {
+      method: "POST",
+      token,
+      requireJsonContentType: true,
+      body: JSON.stringify({ password })
+    }
+  );
+
+  const payload = await parseJsonPayload<{
+    error?: string;
+  }>(response);
+
+  if (!response.ok) {
+    throw new Error(payload?.error || "No se pudo actualizar la contraseña.");
+  }
+}
+
 export async function uploadPlayerAvatarAsAdmin(
   profileId: string,
   token: string,

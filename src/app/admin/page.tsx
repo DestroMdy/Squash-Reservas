@@ -37,6 +37,7 @@ import {
   promoteProfileToAdmin,
   saveAdminBookingAvailability,
   saveAdminScheduleOverride,
+  updatePlayerPasswordAsAdmin,
   updatePlayerProfileAsAdmin,
   updateBookingAsAdmin,
   updateExternalTournament,
@@ -71,6 +72,8 @@ type PlayerEditState = {
   phone: string;
   category: string;
   avatar_url: string;
+  new_password: string;
+  confirm_password: string;
 };
 
 type TournamentFormState = {
@@ -226,6 +229,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingPlayerId, setSavingPlayerId] = useState<string | null>(null);
+  const [updatingPlayerPasswordId, setUpdatingPlayerPasswordId] = useState<string | null>(null);
   const [savingBookingAvailability, setSavingBookingAvailability] =
     useState(false);
   const [savingSchedule, setSavingSchedule] = useState(false);
@@ -722,7 +726,9 @@ export default function AdminPage() {
       full_name: player.full_name || "",
       phone: player.phone || "",
       category: player.category || "",
-      avatar_url: player.avatar_url || ""
+      avatar_url: player.avatar_url || "",
+      new_password: "",
+      confirm_password: ""
     });
   }
 
@@ -801,6 +807,54 @@ export default function AdminPage() {
       setError(err instanceof Error ? err.message : "No se pudo actualizar el perfil.");
     } finally {
       setSavingPlayerId(null);
+    }
+  }
+
+  async function handleUpdatePlayerPassword(player: Profile) {
+    try {
+      if (!playerEditState) {
+        throw new Error("No hay datos de contraseña para guardar.");
+      }
+
+      const newPassword = playerEditState.new_password.trim();
+      const confirmPassword = playerEditState.confirm_password.trim();
+
+      if (!newPassword || !confirmPassword) {
+        throw new Error("Completa la nueva contraseña y su confirmación.");
+      }
+
+      if (newPassword !== confirmPassword) {
+        throw new Error("Las contraseñas no coinciden.");
+      }
+
+      if (newPassword.length < 6) {
+        throw new Error("La contraseña debe tener al menos 6 caracteres.");
+      }
+
+      setUpdatingPlayerPasswordId(player.id);
+      setMessage(null);
+      setError(null);
+
+      await updatePlayerPasswordAsAdmin(player.id, getAdminToken(), newPassword);
+
+      setPlayerEditState((current) =>
+        current
+          ? {
+              ...current,
+              new_password: "",
+              confirm_password: ""
+            }
+          : current
+      );
+      setMessage(`Contraseña actualizada para ${player.full_name || "el jugador"}.`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo actualizar la contraseña."
+      );
+    } finally {
+      setUpdatingPlayerPasswordId(null);
     }
   }
 
@@ -2163,6 +2217,74 @@ export default function AdminPage() {
                                 </option>
                               ))}
                             </select>
+                          </div>
+
+                          <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-900">
+                                  Cambiar contraseña
+                                </p>
+                                <p className="mt-1 text-sm text-slate-500">
+                                  Úsalo cuando el jugador no pueda recuperar la clave por mail.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn-secondary"
+                                onClick={() => void handleUpdatePlayerPassword(player)}
+                                disabled={
+                                  updatingPlayerPasswordId === player.id ||
+                                  isSavingPlayer ||
+                                  isUploadingAvatar ||
+                                  isDeletingAvatar
+                                }
+                              >
+                                {updatingPlayerPasswordId === player.id
+                                  ? "Actualizando..."
+                                  : "Guardar nueva contraseña"}
+                              </button>
+                            </div>
+
+                            <div className="mt-4 grid gap-4 md:grid-cols-2">
+                              <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">
+                                  Nueva contraseña
+                                </label>
+                                <input
+                                  type="password"
+                                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                                  value={playerEditState.new_password}
+                                  onChange={(event) =>
+                                    setPlayerEditState({
+                                      ...playerEditState,
+                                      new_password: event.target.value
+                                    })
+                                  }
+                                  minLength={6}
+                                  autoComplete="new-password"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="mb-1 block text-sm font-medium text-slate-700">
+                                  Repetir nueva contraseña
+                                </label>
+                                <input
+                                  type="password"
+                                  className="w-full rounded-xl border border-slate-300 px-3 py-2 outline-none focus:border-slate-500"
+                                  value={playerEditState.confirm_password}
+                                  onChange={(event) =>
+                                    setPlayerEditState({
+                                      ...playerEditState,
+                                      confirm_password: event.target.value
+                                    })
+                                  }
+                                  minLength={6}
+                                  autoComplete="new-password"
+                                />
+                              </div>
+                            </div>
                           </div>
 
                           <div className="md:col-span-2 flex flex-wrap gap-2">
