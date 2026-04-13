@@ -23,6 +23,7 @@ const baseNavItems = [
   { href: "/players", label: "Jugadores" },
   { href: "/club", label: "Club" }
 ];
+const NAVBAR_REFRESH_INTERVAL_MS = 120000;
 
 export function Navbar() {
   const pathname = usePathname();
@@ -89,8 +90,10 @@ export function Navbar() {
     window.addEventListener("sr-messages-updated", updateAuth);
 
     intervalId = window.setInterval(() => {
-      void updateAuth();
-    }, 30000);
+      if (document.visibilityState === "visible") {
+        void updateAuth();
+      }
+    }, NAVBAR_REFRESH_INTERVAL_MS);
 
     return () => {
       window.removeEventListener("sr-auth-change", updateAuth);

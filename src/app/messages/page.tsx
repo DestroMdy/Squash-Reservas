@@ -35,7 +35,7 @@ import {
 type Tab = "direct" | "group";
 type GroupEditorMode = "create" | "edit";
 type MobilePane = "list" | "chat";
-const MESSAGE_REFRESH_INTERVAL_MS = 3000;
+const MESSAGE_REFRESH_INTERVAL_MS = 10000;
 
 function formatMessageTimestamp(dateValue?: string | null) {
   if (!dateValue) return "";
@@ -208,6 +208,39 @@ export default function MessagesPage() {
     }
   }, []);
 
+  const refreshData = useCallback(async (
+    options?: { preserveSelection?: boolean }
+  ) => {
+    const token = getSession()?.access_token;
+    if (!token || !currentUserId) {
+      return;
+    }
+
+    const [messages, groupData] = await Promise.all([
+      fetchPrivateMessages(currentUserId, token),
+      fetchPrivateMessageGroups(token).catch(() => ({
+        groups: [],
+        unavailable: true
+      }))
+    ]);
+
+    setDirectMessages(messages ?? []);
+    setGroups(groupData.groups ?? []);
+    setGroupsUnavailable(groupData.unavailable === true);
+
+    setSelectedGroupId((current) =>
+      options?.preserveSelection &&
+      current &&
+      (groupData.groups ?? []).some((group) => group.id === current)
+        ? current
+        : groupData.groups?.[0]?.id || ""
+    );
+
+    if (tab === "group" && selectedGroupId) {
+      await loadGroupConversation(selectedGroupId, { silent: true });
+    }
+  }, [currentUserId, loadGroupConversation, selectedGroupId, tab]);
+
   useEffect(() => {
     setLoading(true);
     void loadData(initialRecipientId).catch((err) => {
@@ -314,18 +347,11 @@ export default function MessagesPage() {
     let refreshing = false;
 
     async function refreshMessages() {
-      if (refreshing || !active) return;
+      if (refreshing || !active || document.visibilityState !== "visible") return;
       refreshing = true;
 
       try {
-        await loadData(initialRecipientId, {
-          preserveSelection: true,
-          silent: true
-        });
-
-        if (tab === "group" && selectedGroupId) {
-          await loadGroupConversation(selectedGroupId, { silent: true });
-        }
+        await refreshData({ preserveSelection: true });
       } catch {
         // Ignore silent refresh errors to keep the chat stable.
       } finally {
@@ -358,7 +384,7 @@ export default function MessagesPage() {
       window.removeEventListener("sr-messages-updated", handleFocus);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [currentUserId, initialRecipientId, loadData, loadGroupConversation, selectedGroupId, tab]);
+  }, [currentUserId, refreshData]);
 
   useEffect(() => {
     async function syncRead() {

@@ -11,6 +11,7 @@ import {
 
 const LAST_MESSAGE_KEY = "sr_last_incoming_message_id";
 const LAST_GROUP_MESSAGE_KEY = "sr_last_group_message_id";
+const MESSAGE_NOTIFIER_INTERVAL_MS = 60000;
 
 export function MessageNotifier() {
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -51,6 +52,10 @@ export function MessageNotifier() {
       const userId = user.id;
 
       async function checkMessages() {
+        if (document.visibilityState !== "visible") {
+          return;
+        }
+
         const currentToken = getSession()?.access_token;
         if (!currentToken) {
           return;
@@ -119,7 +124,7 @@ export function MessageNotifier() {
 
       intervalId = window.setInterval(() => {
         void checkMessages();
-      }, 30000);
+      }, MESSAGE_NOTIFIER_INTERVAL_MS);
     }
 
     void init();

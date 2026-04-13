@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabase";
 
 const LAST_BOOKING_KEY = "sr_last_admin_booking_id";
+const ADMIN_BOOKING_NOTIFIER_INTERVAL_MS = 60000;
 
 export function AdminBookingNotifier() {
   const [pushEnabled, setPushEnabled] = useState(false);
@@ -54,6 +55,10 @@ export function AdminBookingNotifier() {
       }
 
       async function checkBookings() {
+        if (document.visibilityState !== "visible") {
+          return;
+        }
+
         const currentSession = getSession();
         const currentToken = currentSession?.access_token;
 
@@ -100,7 +105,7 @@ export function AdminBookingNotifier() {
 
       intervalId = window.setInterval(() => {
         void checkBookings();
-      }, 30000);
+      }, ADMIN_BOOKING_NOTIFIER_INTERVAL_MS);
     }
 
     void init();
