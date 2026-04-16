@@ -66,6 +66,16 @@ function normalizeRecoverError(message: string) {
   return "generic";
 }
 
+function overrideActionLinkRedirect(actionLink: string, redirectTo: string) {
+  try {
+    const actionUrl = new URL(actionLink);
+    actionUrl.searchParams.set("redirect_to", redirectTo);
+    return actionUrl.toString();
+  } catch {
+    return actionLink;
+  }
+}
+
 async function sendRecoveryEmail({
   apiKey,
   from,
@@ -200,14 +210,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rawError }, { status: generateResponse.status });
     }
 
-    const actionLink = generateData.action_link?.trim();
+    const rawActionLink = generateData.action_link?.trim();
 
-    if (!actionLink) {
+    if (!rawActionLink) {
       return NextResponse.json(
         { error: "No se pudo generar el enlace de recuperación." },
         { status: 500 }
       );
     }
+
+    const actionLink = overrideActionLinkRedirect(rawActionLink, redirectTo);
 
     try {
       await sendRecoveryEmail({
