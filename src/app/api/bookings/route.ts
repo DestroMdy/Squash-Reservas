@@ -12,6 +12,7 @@ import {
 import { getStoredBookingAvailabilitySettings } from "@/lib/booking-availability-store";
 import { getBeginnerRulesStatus } from "@/lib/beginner-rules";
 import { getStoredScheduleOverride } from "@/lib/schedule-overrides-store";
+import { ensureBookingSlotHorizon } from "@/lib/time-slot-generation";
 import { canBookSlot, isSlotWithinClubHours } from "@/lib/time-rules";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
 import {
@@ -701,11 +702,18 @@ export async function GET(request: NextRequest) {
   if (date) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !anonKey) {
       return NextResponse.json(
         { error: "Falta configuración de backend." },
         { status: 503 }
+      );
+    }
+
+    if (serviceRoleKey) {
+      await ensureBookingSlotHorizon(supabaseUrl, serviceRoleKey, date).catch(
+        () => null
       );
     }
 
