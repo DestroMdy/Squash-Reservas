@@ -44,6 +44,7 @@ const AVATAR_ALLOWED_MIME_TYPES = new Map([
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const defaultPublicAppOrigin = "https://squashreservas.vercel.app";
 let inMemorySession: SessionData | null = null;
 
 function getCookieValue(name: string) {
@@ -60,6 +61,28 @@ function getCookieValue(name: string) {
 
 function hasUserCookie() {
   return Boolean(getCookieValue(USER_COOKIE_NAME));
+}
+
+function isLocalHostname(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function getPasswordResetRedirectUrl() {
+  if (typeof window === "undefined") {
+    return `${defaultPublicAppOrigin}/reset-password`;
+  }
+
+  try {
+    const originUrl = new URL(window.location.origin);
+
+    if (isLocalHostname(originUrl.hostname.toLowerCase())) {
+      return `${defaultPublicAppOrigin}/reset-password`;
+    }
+
+    return `${originUrl.origin}/reset-password`;
+  } catch {
+    return `${defaultPublicAppOrigin}/reset-password`;
+  }
 }
 
 function setClientUserCookie(user?: SessionData["user"] | null) {
@@ -241,10 +264,7 @@ export async function signUp(
 }
 
 export async function requestPasswordReset(email: string) {
-  const redirectTo =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/reset-password`
-      : undefined;
+  const redirectTo = getPasswordResetRedirectUrl();
 
   const response = await fetch("/api/auth/recover", {
     method: "POST",

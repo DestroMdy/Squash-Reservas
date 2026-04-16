@@ -1,9 +1,127 @@
 import { NextRequest, NextResponse } from "next/server";
 import { checkRateLimit, getRequestIp } from "@/lib/server-rate-limit";
+import { adminHeaders } from "@/lib/server-auth";
+
+const defaultPublicAppOrigin = "https://squashreservas.vercel.app";
+
+function isLocalHostname(hostname: string) {
+  return hostname === "localhost" || hostname === "127.0.0.1";
+}
+
+function resolveRecoveryRedirect(
+  request: NextRequest,
+  providedRedirectTo?: string
+) {
+  const fallback = new URL("/reset-password", request.nextUrl.origin);
+
+  if (!providedRedirectTo) {
+    return fallback.toString();
+  }
+
+  try {
+    const candidate = new URL(providedRedirectTo);
+    const candidateHostname = candidate.hostname.toLowerCase();
+    const requestHostname = request.nextUrl.hostname.toLowerCase();
+
+    if (isLocalHostname(candidateHostname) && !isLocalHostname(requestHostname)) {
+      return fallback.toString();
+    }
+
+    if (candidate.protocol !== "http:" && candidate.protocol !== "https:") {
+      return fallback.toString();
+    }
+
+    candidate.pathname = "/reset-password";
+    candidate.search = "";
+    return candidate.toString();
+  } catch {
+    return fallback.toString();
+  }
+}
+
+function resolveAppOrigin(request: NextRequest, redirectTo: string) {
+  try {
+    const redirectUrl = new URL(redirectTo);
+    if (!isLocalHostname(redirectUrl.hostname.toLowerCase())) {
+      return redirectUrl.origin;
+    }
+  } catch {
+    // Ignore invalid URLs and fall back below.
+  }
+
+  if (!isLocalHostname(request.nextUrl.hostname.toLowerCase())) {
+    return request.nextUrl.origin;
+  }
+
+  return defaultPublicAppOrigin;
+}
+
+function normalizeRecoverError(message: string) {
+  const normalized = message.trim().toLowerCase();
+
+  if (normalized.includes("user not found") || normalized.includes("no user found")) {
+    return "unknown-user";
+  }
+
+  return "generic";
+}
+
+async function sendRecoveryEmail({
+  apiKey,
+  from,
+  to,
+  actionLink,
+  appOrigin
+}: {
+  apiKey: string;
+  from: string;
+  to: string;
+  actionLink: string;
+  appOrigin: string;
+}) {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject: "Recuperá tu contraseña",
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#0f172a">
+          <h2 style="margin-bottom:12px">Cambiar contraseña</h2>
+          <p>Recibimos un pedido para cambiar la contraseña de tu cuenta en Squash.</p>
+          <p>
+            <a href="${actionLink}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#f97316;color:#ffffff;text-decoration:none;font-weight:700">
+              Elegir una nueva contraseña
+            </a>
+          </p>
+          <p>Si el botón no abre, podés usar este enlace:</p>
+          <p><a href="${actionLink}" style="color:#2563eb">${actionLink}</a></p>
+          <p style="margin-top:20px;color:#475569">
+            Después del cambio vas a poder volver a entrar desde
+            <a href="${appOrigin}/login" style="color:#2563eb">${appOrigin}/login</a>.
+          </p>
+        </div>
+      `
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "No se pudo enviar el mail.");
+  }
+}
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const fromEmail =
+    process.env.RESEND_FROM_EMAIL || "Squash Reservas <onboarding@resend.dev>";
 
   if (!supabaseUrl || !anonKey) {
     return NextResponse.json(
@@ -16,8 +134,11 @@ export async function POST(request: NextRequest) {
     email?: string;
     redirectTo?: string;
   };
+  const redirectTo = resolveRecoveryRedirect(request, body.redirectTo);
+  const appOrigin = resolveAppOrigin(request, redirectTo);
+  const normalizedEmail = body.email?.trim().toLowerCase() || "";
 
-  if (!body.email) {
+  if (!normalizedEmail) {
     return NextResponse.json(
       { error: "El email es obligatorio." },
       { status: 400 }
@@ -26,7 +147,7 @@ export async function POST(request: NextRequest) {
 
   const ip = getRequestIp(request);
   const rateLimit = await checkRateLimit({
-    key: `auth-recover:${ip}:${body.email.trim().toLowerCase()}`,
+    key: `auth-recover:${ip}:${normalizedEmail}`,
     max: 5,
     windowMs: 15 * 60 * 1000
   });
@@ -46,6 +167,68 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (serviceRoleKey && resendApiKey) {
+    const generateResponse = await fetch(`${supabaseUrl}/auth/v1/admin/generate_link`, {
+      method: "POST",
+      headers: adminHeaders(serviceRoleKey),
+      body: JSON.stringify({
+        type: "recovery",
+        email: normalizedEmail,
+        redirect_to: redirectTo
+      }),
+      cache: "no-store"
+    });
+
+    const generateData = (await generateResponse.json().catch(() => ({}))) as {
+      action_link?: string;
+      error?: string;
+      msg?: string;
+      error_description?: string;
+    };
+
+    if (!generateResponse.ok) {
+      const rawError =
+        generateData.error_description ||
+        generateData.error ||
+        generateData.msg ||
+        "No se pudo generar el enlace de recuperación.";
+
+      if (normalizeRecoverError(rawError) === "unknown-user") {
+        return NextResponse.json({ ok: true });
+      }
+
+      return NextResponse.json({ error: rawError }, { status: generateResponse.status });
+    }
+
+    const actionLink = generateData.action_link?.trim();
+
+    if (!actionLink) {
+      return NextResponse.json(
+        { error: "No se pudo generar el enlace de recuperación." },
+        { status: 500 }
+      );
+    }
+
+    try {
+      await sendRecoveryEmail({
+        apiKey: resendApiKey,
+        from: fromEmail,
+        to: normalizedEmail,
+        actionLink,
+        appOrigin
+      });
+      return NextResponse.json({ ok: true });
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error ? error.message : "No se pudo enviar el mail."
+        },
+        { status: 502 }
+      );
+    }
+  }
+
   const recoverResponse = await fetch(`${supabaseUrl}/auth/v1/recover`, {
     method: "POST",
     headers: {
@@ -54,8 +237,8 @@ export async function POST(request: NextRequest) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      email: body.email,
-      ...(body.redirectTo ? { redirect_to: body.redirectTo } : {})
+      email: normalizedEmail,
+      redirect_to: redirectTo
     })
   });
 
