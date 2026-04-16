@@ -66,27 +66,17 @@ function normalizeRecoverError(message: string) {
   return "generic";
 }
 
-function overrideActionLinkRedirect(actionLink: string, redirectTo: string) {
-  try {
-    const actionUrl = new URL(actionLink);
-    actionUrl.searchParams.set("redirect_to", redirectTo);
-    return actionUrl.toString();
-  } catch {
-    return actionLink;
-  }
-}
-
 async function sendRecoveryEmail({
   apiKey,
   from,
   to,
-  actionLink,
+  resetLink,
   appOrigin
 }: {
   apiKey: string;
   from: string;
   to: string;
-  actionLink: string;
+  resetLink: string;
   appOrigin: string;
 }) {
   const response = await fetch("https://api.resend.com/emails", {
@@ -104,12 +94,12 @@ async function sendRecoveryEmail({
           <h2 style="margin-bottom:12px">Cambiar contraseña</h2>
           <p>Recibimos un pedido para cambiar la contraseña de tu cuenta en Squash.</p>
           <p>
-            <a href="${actionLink}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#f97316;color:#ffffff;text-decoration:none;font-weight:700">
+            <a href="${resetLink}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#f97316;color:#ffffff;text-decoration:none;font-weight:700">
               Elegir una nueva contraseña
             </a>
           </p>
           <p>Si el botón no abre, podés usar este enlace:</p>
-          <p><a href="${actionLink}" style="color:#2563eb">${actionLink}</a></p>
+          <p><a href="${resetLink}" style="color:#2563eb">${resetLink}</a></p>
           <p style="margin-top:20px;color:#475569">
             Después del cambio vas a poder volver a entrar desde
             <a href="${appOrigin}/login" style="color:#2563eb">${appOrigin}/login</a>.
@@ -191,6 +181,7 @@ export async function POST(request: NextRequest) {
 
     const generateData = (await generateResponse.json().catch(() => ({}))) as {
       action_link?: string;
+      hashed_token?: string;
       error?: string;
       msg?: string;
       error_description?: string;
@@ -210,23 +201,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: rawError }, { status: generateResponse.status });
     }
 
-    const rawActionLink = generateData.action_link?.trim();
+    const tokenHash = generateData.hashed_token?.trim();
 
-    if (!rawActionLink) {
+    if (!tokenHash) {
       return NextResponse.json(
         { error: "No se pudo generar el enlace de recuperación." },
         { status: 500 }
       );
     }
-
-    const actionLink = overrideActionLinkRedirect(rawActionLink, redirectTo);
+    const resetLink = new URL("/reset-password", appOrigin);
+    resetLink.searchParams.set("token_hash", tokenHash);
+    resetLink.searchParams.set("type", "recovery");
 
     try {
       await sendRecoveryEmail({
         apiKey: resendApiKey,
         from: fromEmail,
         to: normalizedEmail,
-        actionLink,
+        resetLink: resetLink.toString(),
         appOrigin
       });
       return NextResponse.json({ ok: true });

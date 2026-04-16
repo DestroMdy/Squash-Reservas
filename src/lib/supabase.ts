@@ -288,6 +288,49 @@ export async function requestPasswordReset(email: string) {
   }
 }
 
+export async function exchangeRecoveryTokenHash(
+  tokenHash: string,
+  type: "recovery" | "email" | "invite" | "email_change" = "recovery"
+) {
+  const response = await fetch(`${supabaseUrl}/auth/v1/verify`, {
+    method: "POST",
+    headers: {
+      apikey: anonKey,
+      Authorization: `Bearer ${anonKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      token_hash: tokenHash,
+      type
+    })
+  });
+
+  const data = (await response.json()) as SessionData & {
+    msg?: string;
+    error?: string;
+    error_description?: string;
+  };
+
+  if (!response.ok) {
+    throw new Error(
+      data.error || data.error_description || data.msg || "El enlace de recuperación no es válido o venció."
+    );
+  }
+
+  if (!data.access_token) {
+    throw new Error("El enlace de recuperación no es válido o venció.");
+  }
+
+  setSession({
+    access_token: data.access_token,
+    token_type: data.token_type,
+    expires_in: data.expires_in,
+    user: data.user
+  });
+
+  return data;
+}
+
 export async function updatePassword(accessToken: string, password: string) {
   const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
     method: "PUT",
