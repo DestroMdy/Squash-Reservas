@@ -21,6 +21,7 @@ import {
 
 export interface SessionData {
   access_token: string;
+  refresh_token?: string;
   token_type?: string;
   expires_in?: number;
   expires_at?: number;
@@ -45,6 +46,7 @@ const AVATAR_ALLOWED_MIME_TYPES = new Map([
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const defaultPublicAppOrigin = "https://squashreservas.vercel.app";
+const SESSION_STORAGE_KEY = "sr_session";
 let inMemorySession: SessionData | null = null;
 
 function getCookieValue(name: string) {
@@ -96,6 +98,41 @@ function setClientUserCookie(user?: SessionData["user"] | null) {
   }
 
   document.cookie = `${USER_COOKIE_NAME}=${encodeUserCookie(user)}; Path=/; SameSite=Lax`;
+}
+
+function readStoredSession() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(SESSION_STORAGE_KEY);
+
+    if (!rawValue) {
+      return null;
+    }
+
+    return JSON.parse(rawValue) as SessionData;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSession(session: SessionData | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (!session) {
+      window.localStorage.removeItem(SESSION_STORAGE_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  } catch {
+    // Ignore storage failures and keep session in memory/cookies.
+  }
 }
 
 function headers(token?: string) {
@@ -150,6 +187,12 @@ export function getSession(): SessionData | null {
     return inMemorySession;
   }
 
+  const storedSession = readStoredSession();
+  if (storedSession?.access_token || storedSession?.refresh_token) {
+    inMemorySession = storedSession;
+    return storedSession;
+  }
+
   const user = decodeUserCookie(getCookieValue(USER_COOKIE_NAME));
   return user
     ? {
@@ -165,9 +208,11 @@ export function setSession(session: SessionData | null) {
   if (!session) {
     inMemorySession = null;
     setClientUserCookie(null);
+    writeStoredSession(null);
   } else {
     inMemorySession = {
       access_token: session.access_token,
+      refresh_token: session.refresh_token,
       token_type: session.token_type,
       expires_in: session.expires_in,
       expires_at:
@@ -178,6 +223,7 @@ export function setSession(session: SessionData | null) {
       user: session.user
     };
     setClientUserCookie(session.user);
+    writeStoredSession(inMemorySession);
   }
 
   window.dispatchEvent(new Event("sr-auth-change"));
@@ -256,6 +302,7 @@ export async function signUp(
   if (data.access_token) {
     setSession({
       access_token: data.access_token,
+      refresh_token: data.refresh_token,
       token_type: data.token_type,
       expires_in: data.expires_in,
       user: data.user
@@ -388,6 +435,7 @@ export async function signInWithPassword(email: string, password: string) {
 
   setSession({
     access_token: data.access_token,
+    refresh_token: data.refresh_token,
     token_type: data.token_type,
     expires_in: data.expires_in,
     user: data.user
@@ -395,11 +443,15 @@ export async function signInWithPassword(email: string, password: string) {
 }
 
 export async function refreshSessionFromCookie() {
+  const session = getSession();
   const response = await fetch("/api/auth/refresh", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
-    }
+    },
+    body: JSON.stringify({
+      refreshToken: session?.refresh_token || undefined
+    })
   });
 
   const data = (await response.json()) as SessionData & {
@@ -412,6 +464,7 @@ export async function refreshSessionFromCookie() {
 
   setSession({
     access_token: data.access_token,
+    refresh_token: data.refresh_token,
     token_type: data.token_type,
     expires_in: data.expires_in,
     user: data.user

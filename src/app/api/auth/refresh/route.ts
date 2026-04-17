@@ -33,7 +33,11 @@ export async function POST(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const cookieStore = cookies();
-  const refreshToken = cookieStore.get(REFRESH_COOKIE_NAME)?.value;
+  const body = (await request.json().catch(() => ({}))) as {
+    refreshToken?: string;
+  };
+  const refreshToken =
+    cookieStore.get(REFRESH_COOKIE_NAME)?.value || body.refreshToken?.trim() || "";
 
   if (!supabaseUrl || !anonKey) {
     return NextResponse.json(
@@ -111,6 +115,7 @@ export async function POST(request: Request) {
   return NextResponse.json(
     {
       access_token: refreshData.access_token,
+      refresh_token: refreshData.refresh_token,
       token_type: refreshData.token_type,
       expires_in: refreshData.expires_in,
       user

@@ -142,6 +142,7 @@ export async function POST(request: NextRequest) {
 
   return NextResponse.json({
     access_token: loginData.access_token,
+    refresh_token: loginData.refresh_token,
     token_type: loginData.token_type,
     expires_in: loginData.expires_in,
     user
