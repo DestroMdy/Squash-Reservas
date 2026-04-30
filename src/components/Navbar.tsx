@@ -19,6 +19,11 @@ const baseNavItems = [
   { href: "/matches", label: "Partidos" },
   { href: "/messages", label: "Mensajes" },
   { href: "/tournaments", label: "Torneos" },
+  {
+    href: "/ranking-patagonico",
+    label: "Ranking Patagonico",
+    mobileLabel: "Ranking"
+  },
   { href: "/profile", label: "Mi perfil" },
   { href: "/players", label: "Jugadores" },
   { href: "/club", label: "Club" }
@@ -162,7 +167,14 @@ export function Navbar() {
                 href={item.href}
                 className="relative flex min-h-9 items-center justify-center rounded-lg border border-white/15 bg-white px-2 py-1.5 text-center text-xs font-medium leading-tight text-slate-800 transition hover:border-orange-400 hover:text-black sm:min-h-11 sm:rounded-xl sm:px-3 sm:py-2 sm:text-sm"
               >
-                {item.label}
+                {"mobileLabel" in item && item.mobileLabel ? (
+                  <>
+                    <span className="sm:hidden">{item.mobileLabel}</span>
+                    <span className="hidden sm:inline">{item.label}</span>
+                  </>
+                ) : (
+                  item.label
+                )}
                 {item.href === "/messages" &&
                 unreadCount > 0 &&
                 pathname !== "/messages" ? (
