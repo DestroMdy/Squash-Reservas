@@ -47,17 +47,18 @@ async function fetchTargetTournament(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const target = await fetchTargetTournament(
     auth.supabaseUrl,
     auth.serviceRoleKey,
-    params.id
+    id
   );
 
   if (!target.ok || !target.tournament) {
@@ -92,14 +93,14 @@ export async function POST(
     );
   }
 
-  const previousFlyerUrl = await getStoredExternalTournamentFlyer(params.id).catch(
+  const previousFlyerUrl = await getStoredExternalTournamentFlyer(id).catch(
     () => null
   );
   const previousFlyerPath = getStoragePathFromPublicUrl(
     TOURNAMENT_FLYER_BUCKET,
     previousFlyerUrl
   );
-  const nextFlyerPath = `tournaments/${params.id}/flyer.${extension}`;
+  const nextFlyerPath = `tournaments/${id}/flyer.${extension}`;
 
   if (previousFlyerPath && previousFlyerPath !== nextFlyerPath) {
     await fetch(
@@ -145,13 +146,13 @@ export async function POST(
     nextFlyerPath
   );
 
-  await setStoredExternalTournamentFlyer(params.id, flyerUrl);
+  await setStoredExternalTournamentFlyer(id, flyerUrl);
 
   await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
     actorId: auth.user.id,
     action: "external_tournament.flyer.updated",
     targetType: "external_tournament",
-    targetId: params.id,
+    targetId: id,
     details: {
       title: target.tournament.title,
       previous_flyer_url: previousFlyerUrl,
@@ -167,17 +168,18 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const target = await fetchTargetTournament(
     auth.supabaseUrl,
     auth.serviceRoleKey,
-    params.id
+    id
   );
 
   if (!target.ok || !target.tournament) {
@@ -187,7 +189,7 @@ export async function DELETE(
     );
   }
 
-  const previousFlyerUrl = await getStoredExternalTournamentFlyer(params.id).catch(
+  const previousFlyerUrl = await getStoredExternalTournamentFlyer(id).catch(
     () => null
   );
 
@@ -214,13 +216,13 @@ export async function DELETE(
     ).catch(() => null);
   }
 
-  await deleteStoredExternalTournamentFlyer(params.id).catch(() => null);
+  await deleteStoredExternalTournamentFlyer(id).catch(() => null);
 
   await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
     actorId: auth.user.id,
     action: "external_tournament.flyer.deleted",
     targetType: "external_tournament",
-    targetId: params.id,
+    targetId: id,
     details: {
       title: target.tournament.title,
       previous_flyer_url: previousFlyerUrl

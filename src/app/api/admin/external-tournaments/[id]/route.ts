@@ -32,23 +32,25 @@ async function fetchTournamentById(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  const { id } = await params;
+
   const currentTournament = await fetchTournamentById(
     auth.supabaseUrl,
     auth.serviceRoleKey,
-    params.id
+    id
   );
 
   const body = await request.json();
 
   const response = await fetch(
-    `${auth.supabaseUrl}/rest/v1/external_tournaments?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/external_tournaments?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -74,7 +76,7 @@ export async function PATCH(
     actorId: auth.user.id,
     action: "external_tournament.updated",
     targetType: "external_tournament",
-    targetId: params.id,
+    targetId: id,
     details: {
       before: currentTournament,
       after: payload[0]
@@ -88,24 +90,26 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  const { id } = await params;
+
   const currentTournament = await fetchTournamentById(
     auth.supabaseUrl,
     auth.serviceRoleKey,
-    params.id
+    id
   );
-  const currentFlyerUrl = await getStoredExternalTournamentFlyer(params.id).catch(
+  const currentFlyerUrl = await getStoredExternalTournamentFlyer(id).catch(
     () => null
   );
 
   const response = await fetch(
-    `${auth.supabaseUrl}/rest/v1/external_tournaments?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/external_tournaments?id=eq.${id}`,
     {
       method: "DELETE",
       headers: {
@@ -142,13 +146,13 @@ export async function DELETE(
     }).catch(() => null);
   }
 
-  await deleteStoredExternalTournamentFlyer(params.id).catch(() => null);
+  await deleteStoredExternalTournamentFlyer(id).catch(() => null);
 
   await logAdminAudit(auth.supabaseUrl, auth.serviceRoleKey, {
     actorId: auth.user.id,
     action: "external_tournament.deleted",
     targetType: "external_tournament",
-    targetId: params.id,
+    targetId: id,
     details: currentTournament ?? payload[0]
   }).catch(() => null);
 

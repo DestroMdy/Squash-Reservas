@@ -27,13 +27,14 @@ function normalizePasswordError(message: string) {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
 
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const body = (await request.json()) as UpdatePasswordPayload;
   const password = body.password?.trim() || "";
@@ -53,7 +54,7 @@ export async function POST(
   }
 
   const targetResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,role&id=eq.${params.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,role&id=eq.${id}&limit=1`,
     {
       method: "GET",
       headers: adminHeaders(auth.serviceRoleKey),
@@ -79,7 +80,7 @@ export async function POST(
   }
 
   const updateResponse = await fetch(
-    `${auth.supabaseUrl}/auth/v1/admin/users/${params.id}`,
+    `${auth.supabaseUrl}/auth/v1/admin/users/${id}`,
     {
       method: "PUT",
       headers: adminHeaders(auth.serviceRoleKey),
@@ -101,7 +102,7 @@ export async function POST(
     actorId: auth.user.id,
     action: "profile.password.updated",
     targetType: "profile",
-    targetId: params.id,
+    targetId: id,
     details: {
       target_full_name: target.full_name ?? null
     }

@@ -32,7 +32,7 @@ const NO_STORE_HEADERS = {
 export async function POST(request: Request) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const body = (await request.json().catch(() => ({}))) as {
     refreshToken?: string;
   };

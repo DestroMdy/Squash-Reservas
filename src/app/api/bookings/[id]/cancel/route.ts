@@ -373,7 +373,7 @@ async function notifyWaitlistUsers({
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuthenticatedRequest(request, {
     requireServiceRole: true
@@ -381,6 +381,7 @@ export async function POST(
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const ip = getRequestIp(request);
   const rateLimit = await checkRateLimit({
@@ -412,7 +413,7 @@ export async function POST(
   const isAdmin = callerRole === "admin";
 
   const bookingResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/bookings?select=id,user_id,time_slot_id,status,time_slots(slot_date,start_time,end_time)&id=eq.${params.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/bookings?select=id,user_id,time_slot_id,status,time_slots(slot_date,start_time,end_time)&id=eq.${id}&limit=1`,
     {
       method: "GET",
       headers: adminHeaders(auth.serviceRoleKey as string),
@@ -477,7 +478,7 @@ export async function POST(
   }
 
   const cancelResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/bookings?id=eq.${params.id}&status=eq.confirmed`,
+    `${auth.supabaseUrl}/rest/v1/bookings?id=eq.${id}&status=eq.confirmed`,
     {
       method: "PATCH",
       headers: {

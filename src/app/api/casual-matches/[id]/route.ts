@@ -108,7 +108,7 @@ function validateScores(scoreSelf: number | undefined, scoreOpponent: number | u
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuthenticatedRequest(request, {
     requireServiceRole: true
@@ -117,6 +117,8 @@ export async function PATCH(
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+
+  const { id } = await params;
 
   const role = await fetchRole(
     auth.supabaseUrl,
@@ -142,7 +144,7 @@ export async function PATCH(
   const currentMatch = await fetchMatchById(
     auth.supabaseUrl,
     auth.serviceRoleKey as string,
-    params.id
+    id
   );
 
   if (!currentMatch) {
@@ -168,7 +170,7 @@ export async function PATCH(
   }
 
   const response = await fetch(
-    `${auth.supabaseUrl}/rest/v1/casual_matches?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/casual_matches?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -197,7 +199,7 @@ export async function PATCH(
   }
 
   if (role !== "admin") {
-    await initializeCasualMatchConfirmationState(params.id, auth.user.id);
+    await initializeCasualMatchConfirmationState(id, auth.user.id);
   }
 
   return NextResponse.json({ ok: true, match: rows[0] });
@@ -205,7 +207,7 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuthenticatedRequest(request, {
     requireServiceRole: true
@@ -215,6 +217,8 @@ export async function DELETE(
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
+  const { id } = await params;
+
   const role = await fetchRole(
     auth.supabaseUrl,
     auth.serviceRoleKey as string,
@@ -223,7 +227,7 @@ export async function DELETE(
   const currentMatch = await fetchMatchById(
     auth.supabaseUrl,
     auth.serviceRoleKey as string,
-    params.id
+    id
   );
 
   if (!currentMatch) {
@@ -238,7 +242,7 @@ export async function DELETE(
   }
 
   const response = await fetch(
-    `${auth.supabaseUrl}/rest/v1/casual_matches?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/casual_matches?id=eq.${id}`,
     {
       method: "DELETE",
       headers: {
@@ -259,7 +263,7 @@ export async function DELETE(
     );
   }
 
-  await clearCasualMatchConfirmationState(params.id);
+  await clearCasualMatchConfirmationState(id);
 
   return NextResponse.json({ ok: true });
 }

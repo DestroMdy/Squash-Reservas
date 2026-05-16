@@ -40,17 +40,18 @@ async function fetchTargetProfile(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const target = await fetchTargetProfile(
     auth.supabaseUrl,
     auth.serviceRoleKey,
-    params.id
+    id
   );
 
   if (!target.ok || !target.profile) {
@@ -85,7 +86,7 @@ export async function POST(
     );
   }
 
-  const filePath = `${params.id}/avatar.${extension}`;
+  const filePath = `${id}/avatar.${extension}`;
   const uploadResponse = await fetch(
     `${auth.supabaseUrl}/storage/v1/object/${AVATAR_BUCKET}/${filePath}`,
     {
@@ -112,7 +113,7 @@ export async function POST(
 
   const avatarUrl = buildAvatarPublicUrl(auth.supabaseUrl, filePath);
   const profileResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -138,7 +139,7 @@ export async function POST(
     actorId: auth.user.id,
     action: "profile.avatar.updated",
     targetType: "profile",
-    targetId: params.id,
+    targetId: id,
     details: {
       previous_avatar_url: target.profile.avatar_url ?? null,
       next_avatar_url: avatarUrl
@@ -154,17 +155,18 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const target = await fetchTargetProfile(
     auth.supabaseUrl,
     auth.serviceRoleKey,
-    params.id
+    id
   );
 
   if (!target.ok || !target.profile) {
@@ -188,7 +190,7 @@ export async function DELETE(
   }
 
   const profileResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -214,7 +216,7 @@ export async function DELETE(
     actorId: auth.user.id,
     action: "profile.avatar.deleted",
     targetType: "profile",
-    targetId: params.id,
+    targetId: id,
     details: {
       previous_avatar_url: target.profile.avatar_url ?? null
     }

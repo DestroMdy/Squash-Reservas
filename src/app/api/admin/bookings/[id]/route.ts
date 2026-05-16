@@ -10,12 +10,13 @@ type BookingPayload = {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const body = (await request.json()) as BookingPayload;
 
@@ -27,7 +28,7 @@ export async function PATCH(
   }
 
   const currentResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/bookings?select=id,user_id,status,notes&id=eq.${params.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/bookings?select=id,user_id,status,notes&id=eq.${id}&limit=1`,
     {
       method: "GET",
       headers: adminHeaders(auth.serviceRoleKey),
@@ -47,7 +48,7 @@ export async function PATCH(
   }
 
   const updateResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/bookings?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/bookings?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -78,7 +79,7 @@ export async function PATCH(
     actorId: auth.user.id,
     action: "booking.updated",
     targetType: "booking",
-    targetId: params.id,
+    targetId: id,
     details: {
       before: {
         user_id: currentBooking.user_id,

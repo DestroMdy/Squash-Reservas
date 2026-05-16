@@ -9,7 +9,7 @@ const NO_STORE_HEADERS = {
 } as const;
 
 export async function POST() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   cookieStore.delete(REFRESH_COOKIE_NAME);
   cookieStore.delete(USER_COOKIE_NAME);
 

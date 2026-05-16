@@ -61,16 +61,17 @@ async function requireGroupMember(request: NextRequest, groupId: string) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireGroupMember(request, params.id);
+  const { id } = await params;
+  const auth = await requireGroupMember(request, id);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
 
   const [messagesResponse, membersResponse] = await Promise.all([
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,body,created_at,updated_at&group_id=eq.${params.id}&order=created_at.asc`,
+      `${auth.supabaseUrl}/rest/v1/private_group_messages?select=id,group_id,sender_id,body,created_at,updated_at&group_id=eq.${id}&order=created_at.asc`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey),
@@ -78,7 +79,7 @@ export async function GET(
       }
     ),
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${params.id}`,
+      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${id}`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey),
@@ -173,9 +174,10 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireGroupMember(request, params.id);
+  const { id } = await params;
+  const auth = await requireGroupMember(request, id);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -221,7 +223,7 @@ export async function POST(
         Prefer: "return=representation"
       },
       body: JSON.stringify({
-        group_id: params.id,
+        group_id: id,
         sender_id: auth.user.id,
         body: messageBody
       }),
@@ -240,7 +242,7 @@ export async function POST(
   }
 
   await fetch(
-    `${auth.supabaseUrl}/rest/v1/private_message_group_members?group_id=eq.${params.id}&user_id=eq.${auth.user.id}`,
+    `${auth.supabaseUrl}/rest/v1/private_message_group_members?group_id=eq.${id}&user_id=eq.${auth.user.id}`,
     {
       method: "PATCH",
       headers: {
@@ -257,7 +259,7 @@ export async function POST(
   const [groupResponse, membersResponse, senderProfileResponse] =
     await Promise.all([
       fetch(
-        `${auth.supabaseUrl}/rest/v1/private_message_groups?select=name&id=eq.${params.id}&limit=1`,
+        `${auth.supabaseUrl}/rest/v1/private_message_groups?select=name&id=eq.${id}&limit=1`,
         {
           method: "GET",
           headers: adminHeaders(auth.serviceRoleKey),
@@ -265,7 +267,7 @@ export async function POST(
         }
       ),
       fetch(
-        `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${params.id}&user_id=neq.${auth.user.id}`,
+        `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${id}&user_id=neq.${auth.user.id}`,
         {
           method: "GET",
           headers: adminHeaders(auth.serviceRoleKey),
@@ -302,7 +304,7 @@ export async function POST(
         title: `Nuevo mensaje en ${groupName}`,
         body: `${senderName}: ${buildMessagePreview(messageBody)}`,
         url: "/messages",
-        tag: `group-message-${insertedRows[0].id || params.id}`
+        tag: `group-message-${insertedRows[0].id || id}`
       }).catch(() => null);
     }
   }

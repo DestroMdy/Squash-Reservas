@@ -32,15 +32,16 @@ function getAvatarStoragePath(avatarUrl: string | null | undefined) {
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const targetResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?select=id,role,avatar_url&id=eq.${params.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,role,avatar_url&id=eq.${id}&limit=1`,
     {
       method: "GET",
       headers: adminHeaders(auth.serviceRoleKey),
@@ -79,7 +80,7 @@ export async function DELETE(
   }
 
   const deleteResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${id}`,
     {
       method: "DELETE",
       headers: {
@@ -115,7 +116,7 @@ export async function DELETE(
   }
 
   const deleteAuthResponse = await fetch(
-    `${auth.supabaseUrl}/auth/v1/admin/users/${params.id}`,
+    `${auth.supabaseUrl}/auth/v1/admin/users/${id}`,
     {
       method: "DELETE",
       headers: adminHeaders(auth.serviceRoleKey),
@@ -125,7 +126,7 @@ export async function DELETE(
 
   if (!deleteAuthResponse.ok && deleteAuthResponse.status !== 404) {
     console.warn(
-      `No se pudo eliminar el usuario auth ${params.id}: ${deleteAuthResponse.status}`
+      `No se pudo eliminar el usuario auth ${id}: ${deleteAuthResponse.status}`
     );
   }
 
@@ -133,7 +134,7 @@ export async function DELETE(
     actorId: auth.user.id,
     action: "profile.deleted",
     targetType: "profile",
-    targetId: params.id,
+    targetId: id,
     details: {
       deleted_profile_id: deletedProfiles[0].id,
       deleted_avatar_url: deletedProfiles[0].avatar_url ?? null
@@ -145,12 +146,13 @@ export async function DELETE(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const body = (await request.json()) as UpdateProfilePayload;
   const payload: UpdateProfilePayload = {};
@@ -167,7 +169,7 @@ export async function PATCH(
   }
 
   const currentResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category,role,avatar_url&id=eq.${params.id}&limit=1`,
+    `${auth.supabaseUrl}/rest/v1/profiles?select=id,full_name,phone,category,role,avatar_url&id=eq.${id}&limit=1`,
     {
       method: "GET",
       headers: adminHeaders(auth.serviceRoleKey),
@@ -186,7 +188,7 @@ export async function PATCH(
   }
 
   const updateResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -212,7 +214,7 @@ export async function PATCH(
     actorId: auth.user.id,
     action: "profile.updated",
     targetType: "profile",
-    targetId: params.id,
+    targetId: id,
     details: {
       before: {
         full_name: currentProfile.full_name ?? null,

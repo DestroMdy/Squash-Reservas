@@ -59,7 +59,7 @@ async function fetchRole(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuthenticatedRequest(request, {
     requireServiceRole: true
@@ -68,11 +68,12 @@ export async function POST(
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const currentMatch = await fetchMatchById(
     auth.supabaseUrl,
     auth.serviceRoleKey as string,
-    params.id
+    id
   );
 
   if (!currentMatch) {
@@ -119,7 +120,7 @@ export async function POST(
     );
   }
 
-  const nextState = await setCasualMatchConfirmationState(params.id, {
+  const nextState = await setCasualMatchConfirmationState(id, {
     status: body.action === "confirm" ? "confirmed" : "revision_requested",
     updated_at: new Date().toISOString(),
     updated_by: auth.user.id,

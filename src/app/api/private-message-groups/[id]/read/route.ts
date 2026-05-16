@@ -7,7 +7,7 @@ import {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAuthenticatedRequest(request, {
     requireServiceRole: true
@@ -16,6 +16,7 @@ export async function POST(
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const profileStatus = await fetchProfileCompletionStatus(
     auth.supabaseUrl,
@@ -31,7 +32,7 @@ export async function POST(
   }
 
   const updateResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/private_message_group_members?group_id=eq.${params.id}&user_id=eq.${auth.user.id}`,
+    `${auth.supabaseUrl}/rest/v1/private_message_group_members?group_id=eq.${id}&user_id=eq.${auth.user.id}`,
     {
       method: "PATCH",
       headers: {

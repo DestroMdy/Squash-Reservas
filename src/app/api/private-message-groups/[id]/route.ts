@@ -73,9 +73,10 @@ async function requireGroupCreator(request: NextRequest, groupId: string) {
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  const auth = await requireGroupCreator(request, params.id);
+  const { id } = await params;
+  const auth = await requireGroupCreator(request, id);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
@@ -113,7 +114,7 @@ export async function PATCH(
 
   const [membersResponse, playersResponse] = await Promise.all([
     fetch(
-      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${params.id}`,
+      `${auth.supabaseUrl}/rest/v1/private_message_group_members?select=user_id&group_id=eq.${id}`,
       {
         method: "GET",
         headers: adminHeaders(auth.serviceRoleKey),
@@ -180,7 +181,7 @@ export async function PATCH(
   const idsToRemove = [...existingIds].filter((memberId) => !desiredIds.has(memberId));
 
   const updateGroupResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/private_message_groups?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/private_message_groups?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -214,7 +215,7 @@ export async function PATCH(
         },
         body: JSON.stringify(
           idsToAdd.map((memberId) => ({
-            group_id: params.id,
+            group_id: id,
             user_id: memberId,
             added_by: auth.user.id
           }))
@@ -234,7 +235,7 @@ export async function PATCH(
   if (idsToRemove.length) {
     const removeFilter = idsToRemove.join(",");
     const removeResponse = await fetch(
-      `${auth.supabaseUrl}/rest/v1/private_message_group_members?group_id=eq.${params.id}&user_id=in.(${removeFilter})`,
+      `${auth.supabaseUrl}/rest/v1/private_message_group_members?group_id=eq.${id}&user_id=in.(${removeFilter})`,
       {
         method: "DELETE",
         headers: {

@@ -8,12 +8,13 @@ type RoleUpdateBody = {
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const auth = await requireAdminRequest(request);
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  const { id } = await params;
 
   const body = (await request.json()) as RoleUpdateBody;
 
@@ -22,7 +23,7 @@ export async function POST(
   }
 
   const updateResponse = await fetch(
-    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${params.id}`,
+    `${auth.supabaseUrl}/rest/v1/profiles?id=eq.${id}`,
     {
       method: "PATCH",
       headers: {
@@ -62,7 +63,7 @@ export async function POST(
     actorId: auth.user.id,
     action: "profile.promoted",
     targetType: "profile",
-    targetId: params.id,
+    targetId: id,
     details: {
       role: "admin"
     }

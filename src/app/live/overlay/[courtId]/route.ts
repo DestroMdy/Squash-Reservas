@@ -226,13 +226,14 @@ function buildOverlayHtml(origin: string, courtId: string) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { courtId: string } }
+  { params }: { params: Promise<{ courtId: string }> }
 ) {
-  if (!isLiveCourtId(params.courtId)) {
+  const { courtId } = await params;
+  if (!isLiveCourtId(courtId)) {
     return new NextResponse("Cancha inválida", { status: 404 });
   }
 
-  return new NextResponse(buildOverlayHtml(new URL(request.url).origin, params.courtId), {
+  return new NextResponse(buildOverlayHtml(new URL(request.url).origin, courtId), {
     status: 200,
     headers: {
       "Content-Type": "text/html; charset=utf-8",

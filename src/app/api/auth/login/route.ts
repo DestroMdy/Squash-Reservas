@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
     : ((loginData.user as unknown as Record<string, unknown> | undefined) ??
       undefined);
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const secure = shouldUseSecureCookies(request);
   const user =
     typeof rawUser?.id === "string"
