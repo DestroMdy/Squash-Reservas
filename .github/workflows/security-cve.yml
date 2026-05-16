@@ -41,7 +41,6 @@ jobs:
           fail-on-severity: high
 
   npm-audit:
-    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
