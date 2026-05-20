@@ -57,7 +57,14 @@ function isWithinCustomScheduleHours(
   return startMinutes >= opensAtMinutes && endMinutes <= closesAtMinutes;
 }
 
-export function canBookSlot(slotDate: string): boolean {
+export function canBookSlot(
+  slotDate: string,
+  options?: { bypassOpeningWindow?: boolean }
+): boolean {
+  if (options?.bypassOpeningWindow) {
+    return true;
+  }
+
   const now = new Date();
   const openTime = new Date(buildLocalDate(slotDate, 22).getTime() - ONE_DAY_IN_MS);
 
@@ -68,8 +75,17 @@ export function isPastSlot(slotDate: string, endTime: string): boolean {
   return buildSlotDateTime(slotDate, endTime) < new Date();
 }
 
-export function canReserveSlot(slotDate: string, startTime: string, endTime: string) {
-  return canBookSlot(slotDate) && !isPastSlot(slotDate, endTime) && Boolean(startTime);
+export function canReserveSlot(
+  slotDate: string,
+  startTime: string,
+  endTime: string,
+  options?: { bypassOpeningWindow?: boolean }
+) {
+  return (
+    canBookSlot(slotDate, options) &&
+    !isPastSlot(slotDate, endTime) &&
+    Boolean(startTime)
+  );
 }
 
 export function canCancelBooking(slotDate: string, startTime: string) {

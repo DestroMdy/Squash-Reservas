@@ -537,6 +537,28 @@ async function fetchAdminUserIds(
     .filter((value): value is string => Boolean(value));
 }
 
+async function fetchUserRoleAdmin(
+  supabaseUrl: string,
+  serviceRoleKey: string,
+  userId: string
+) {
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/profiles?select=role&id=eq.${userId}&limit=1`,
+    {
+      method: "GET",
+      headers: adminHeaders(serviceRoleKey),
+      cache: "no-store"
+    }
+  );
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const rows = await parseRestPayload<Array<{ role?: string | null }>>(response, []);
+  return rows[0]?.role || null;
+}
+
 async function fetchAgendaSummaryForDay(
   supabaseUrl: string,
   serviceRoleKey: string,
@@ -908,6 +930,12 @@ export async function POST(request: NextRequest) {
   const bookingAvailability = await getStoredBookingAvailabilitySettings().catch(
     () => null
   );
+  const userRole = await fetchUserRoleAdmin(
+    auth.supabaseUrl,
+    serviceRoleKey,
+    auth.user.id
+  );
+  const bypassOpeningWindow = userRole === "admin";
 
   if (!body.slotId) {
     return NextResponse.json({ error: "slotId es requerido" }, { status: 400 });
@@ -971,7 +999,7 @@ export async function POST(request: NextRequest) {
     () => null
   );
 
-  if (!canBookSlot(slot.slot_date)) {
+  if (!canBookSlot(slot.slot_date, { bypassOpeningWindow })) {
     return NextResponse.json(
       { error: "Disponible desde las 22:00 del día anterior" },
       { status: 400 }

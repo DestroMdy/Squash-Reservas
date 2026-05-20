@@ -21,6 +21,20 @@ describe("time-rules", () => {
     expect(canBookSlot("2026-03-22")).toBe(false);
   });
 
+  it("permite a admins saltear la apertura general de las 22:00", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-21T01:00:00Z"));
+
+    expect(
+      canBookSlot("2026-03-22", { bypassOpeningWindow: true })
+    ).toBe(true);
+    expect(
+      canReserveSlot("2026-03-22", "20:00:00", "21:00:00", {
+        bypassOpeningWindow: true
+      })
+    ).toBe(true);
+  });
+
   it("permite cancelar solo con más de una hora de anticipación", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-20T21:59:59Z"));

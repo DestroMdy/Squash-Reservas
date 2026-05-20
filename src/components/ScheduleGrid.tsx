@@ -273,11 +273,15 @@ export function ScheduleGrid({
           const isMine =
             Boolean(currentUserId) && confirmedBooking?.user_id === currentUserId;
           const isExpired = isPastSlot(slot.slot_date, slot.end_time);
-          const bookingWindowOpen = canBookSlot(selectedDate);
+          const bypassOpeningWindow = currentUserRole === "admin";
+          const bookingWindowOpen = canBookSlot(selectedDate, {
+            bypassOpeningWindow
+          });
           const canReserveThisSlot = canReserveSlot(
             slot.slot_date,
             slot.start_time,
-            slot.end_time
+            slot.end_time,
+            { bypassOpeningWindow }
           );
           const canCancelThisBooking =
             currentUserRole === "admin"
@@ -378,7 +382,10 @@ export function ScheduleGrid({
                     </div>
                   ) : null}
 
-                  {!bookingWindowOpen && !isReserved && !isExpired ? (
+                  {!bookingWindowOpen &&
+                  !isReserved &&
+                  !isExpired &&
+                  currentUserRole !== "admin" ? (
                     <p className="text-sm text-amber-700">
                       Disponible desde las 22:00 del día anterior
                     </p>
