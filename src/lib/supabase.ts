@@ -1,3 +1,5 @@
+import type { Booking, Court, Profile, TimeSlot } from "@/types/db";
+
 export interface SessionData {
   access_token: string;
   refresh_token?: string;
@@ -10,6 +12,16 @@ const STORAGE_KEY = "sr_session";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+type SlotWithRelations = TimeSlot & {
+  courts?: Court;
+  bookings?: Pick<Booking, "id" | "status" | "user_id">[] | null;
+};
+
+type BookingWithRelations = Booking & {
+  time_slots?: TimeSlot & { courts?: Court };
+  courts?: Court;
+};
 
 function headers(token?: string) {
   return {
@@ -153,13 +165,13 @@ async function rest<T>(
 }
 
 export async function fetchSlotsByDate(date: string) {
-  return rest<any[]>(
+  return rest<SlotWithRelations[]>(
     `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active),bookings(id,status,user_id)&slot_date=eq.${date}&order=start_time.asc`
   );
 }
 
 export async function fetchMyBookings(userId: string, token: string) {
-  return rest<any[]>(
+  return rest<BookingWithRelations[]>(
     `bookings?select=id,user_id,court_id,time_slot_id,status,notes,created_at,time_slots(id,court_id,slot_date,start_time,end_time,status,price,created_at,courts(id,name,is_active)),courts(id,name,is_active)&user_id=eq.${userId}&order=created_at.desc`,
     { token }
   );
@@ -175,7 +187,7 @@ export async function cancelBooking(bookingId: string, token: string) {
 }
 
 export async function fetchProfileRole(userId: string, token: string) {
-  const data = await rest<any[]>(
+  const data = await rest<Pick<Profile, "role">[]>(
     `profiles?select=role&id=eq.${userId}&limit=1`,
     { token }
   );
@@ -183,12 +195,12 @@ export async function fetchProfileRole(userId: string, token: string) {
 }
 
 export async function fetchBookingStats(token: string) {
-  const all = await rest<any[]>("bookings?select=id", { token });
-  const confirmed = await rest<any[]>(
+  const all = await rest<Pick<Booking, "id">[]>("bookings?select=id", { token });
+  const confirmed = await rest<Pick<Booking, "id">[]>(
     "bookings?select=id&status=eq.confirmed",
     { token }
   );
-  const cancelled = await rest<any[]>(
+  const cancelled = await rest<Pick<Booking, "id">[]>(
     "bookings?select=id&status=eq.cancelled",
     { token }
   );
@@ -201,7 +213,7 @@ export async function fetchBookingStats(token: string) {
 }
 
 export async function fetchCourts(token?: string) {
-  return rest<any[]>(
+  return rest<Court[]>(
     "courts?select=id,name,is_active&order=name.asc",
     token ? { token } : undefined
   );
@@ -217,7 +229,7 @@ export async function createCourt(name: string, token: string) {
 }
 
 export async function fetchSlot(slotId: string, token: string) {
-  const data = await rest<any[]>(
+  const data = await rest<TimeSlot[]>(
     `time_slots?select=id,court_id,slot_date,start_time,end_time,status,price,created_at&id=eq.${slotId}&limit=1`,
     { token }
   );
@@ -225,7 +237,7 @@ export async function fetchSlot(slotId: string, token: string) {
 }
 
 export async function hasConfirmedBooking(timeSlotId: string, token: string) {
-  const data = await rest<any[]>(
+  const data = await rest<Pick<Booking, "id">[]>(
     `bookings?select=id&time_slot_id=eq.${timeSlotId}&status=eq.confirmed&limit=1`,
     { token }
   );
@@ -252,7 +264,7 @@ export async function createBooking(
 }
 
 export async function fetchProfile(userId: string, token: string) {
-  const data = await rest<any[]>(
+  const data = await rest<Profile[]>(
     `profiles?select=id,full_name,phone,category,role&id=eq.${userId}&limit=1`,
     { token }
   );
@@ -290,7 +302,7 @@ export async function isProfileComplete(userId: string, token: string) {
 }
 
 export async function fetchPlayers(token: string) {
-  return rest<any[]>(
+  return rest<Profile[]>(
     "profiles?select=id,full_name,phone,category,role&order=category.asc,full_name.asc",
     { token }
   );

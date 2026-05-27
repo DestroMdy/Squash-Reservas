@@ -1,27 +1,25 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import Image from "next/image";
+import { useSyncExternalStore } from "react";
 import { getSession, signOut } from "@/lib/supabase";
 
+function subscribeToAuthChange(onStoreChange: () => void) {
+  window.addEventListener("sr-auth-change", onStoreChange);
+  return () => window.removeEventListener("sr-auth-change", onStoreChange);
+}
+
+function getAuthSnapshot() {
+  return Boolean(getSession()?.access_token);
+}
+
 export function Navbar() {
-  const [mounted, setMounted] = useState(false);
-  const [isLogged, setIsLogged] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-
-    function updateAuth() {
-      setIsLogged(Boolean(getSession()?.access_token));
-    }
-
-    updateAuth();
-    window.addEventListener("sr-auth-change", updateAuth);
-
-    return () => {
-      window.removeEventListener("sr-auth-change", updateAuth);
-    };
-  }, []);
+  const isLogged = useSyncExternalStore(
+    subscribeToAuthChange,
+    getAuthSnapshot,
+    () => false
+  );
 
   async function handleLogout() {
     await signOut();
@@ -32,7 +30,14 @@ export function Navbar() {
     <header className="border-b border-slate-200 bg-white/90 backdrop-blur">
       <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
         <Link href="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="Squash Reservas" className="h-12 w-auto" />
+          <Image
+            src="/logo.png"
+            alt="Squash Reservas"
+            width={43}
+            height={48}
+            className="h-12 w-auto"
+            priority
+          />
           <span className="text-lg font-bold text-slate-900">
             Squash Reservas
           </span>
@@ -44,9 +49,7 @@ export function Navbar() {
           <Link href="/courts">Canchas</Link>
           <Link href="/admin">Admin</Link>
 
-          {!mounted ? (
-            <span className="btn-secondary">Cargando...</span>
-          ) : isLogged ? (
+          {isLogged ? (
             <button onClick={handleLogout} className="btn-secondary">
               Salir
             </button>

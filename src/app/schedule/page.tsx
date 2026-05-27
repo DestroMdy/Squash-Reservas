@@ -9,7 +9,7 @@ import { Booking, Court, TimeSlot } from "../../types/db";
 
 type SlotWithRelations = TimeSlot & {
   courts?: Court;
-  bookings?: Pick<Booking, "id" | "status" | "user_id">[];
+  bookings?: Pick<Booking, "id" | "status" | "user_id">[] | null;
 };
 
 function todayLocalDate() {
@@ -20,19 +20,13 @@ function todayLocalDate() {
 }
 
 export default function SchedulePage() {
-  const [mounted, setMounted] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [selectedDate, setSelectedDate] = useState(() => todayLocalDate());
   const [slots, setSlots] = useState<SlotWithRelations[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setMounted(true);
-    setSelectedDate(todayLocalDate());
-  }, []);
-
-  useEffect(() => {
-    if (!mounted || !selectedDate) return;
+    if (!selectedDate) return;
 
     async function load() {
       try {
@@ -48,7 +42,7 @@ export default function SchedulePage() {
     }
 
     load();
-  }, [mounted, selectedDate]);
+  }, [selectedDate]);
 
   const sortedSlots = useMemo(() => {
     return [...slots].sort((a, b) => {
@@ -60,8 +54,6 @@ export default function SchedulePage() {
       return courtA.localeCompare(courtB);
     });
   }, [slots]);
-
-  if (!mounted) return null;
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
