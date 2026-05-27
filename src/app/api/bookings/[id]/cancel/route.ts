@@ -467,11 +467,10 @@ export async function POST(
     );
   }
 
-  if (!isAdmin && !canCancelBooking(slotDate, startTime)) {
+  if (!canCancelBooking(slotDate, startTime)) {
     return NextResponse.json(
       {
-        error:
-          "Solo puedes cancelar una reserva con más de 1 hora de anticipación."
+        error: "Solo puedes cancelar una reserva antes de que empiece el turno."
       },
       { status: 400 }
     );

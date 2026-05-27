@@ -283,13 +283,9 @@ export function ScheduleGrid({
             slot.end_time,
             { bypassOpeningWindow }
           );
-          const canCancelThisBooking =
-            currentUserRole === "admin"
-              ? Boolean(confirmedBooking)
-              : Boolean(
-                  confirmedBooking &&
-                    canCancelBooking(slot.slot_date, slot.start_time)
-                );
+          const canCancelThisBooking = Boolean(
+            confirmedBooking && canCancelBooking(slot.slot_date, slot.start_time)
+          );
 
           const disabled =
             isReserved ||
@@ -400,15 +396,6 @@ export function ScheduleGrid({
                   {profileComplete === false ? (
                     <p className="text-sm text-amber-700">
                       Completa tu perfil para poder reservar.
-                    </p>
-                  ) : null}
-
-                  {isMine &&
-                  confirmedBooking &&
-                  !canCancelThisBooking &&
-                  currentUserRole !== "admin" ? (
-                    <p className="text-sm text-amber-700">
-                      Solo puedes cancelar con más de 1 hora de anticipación.
                     </p>
                   ) : null}
 

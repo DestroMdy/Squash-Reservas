@@ -10,9 +10,9 @@ export const clubRules = [
       "La agenda prioriza rotacion entre jugadores. Si necesitas mas de un turno, el admin puede ayudarte segun disponibilidad."
   },
   {
-    title: "Cancelacion con 1 hora de anticipacion",
+    title: "Cancelacion hasta el inicio",
     description:
-      "Los jugadores pueden cancelar solo si faltan mas de 60 minutos para el inicio. El admin conserva excepciones."
+      "Los jugadores pueden cancelar una reserva confirmada hasta el momento en que empieza el turno."
   },
   {
     title: "Torneos, vivos y comunidad",

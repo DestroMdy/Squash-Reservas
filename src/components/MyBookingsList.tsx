@@ -62,29 +62,24 @@ function getBookingState(booking: Booking) {
 
 function BookingCard({
   booking,
-  role,
   loadingId,
   onCancel
 }: {
   booking: Booking;
-  role: Profile["role"] | undefined;
   loadingId: string | null;
   onCancel: (bookingId: string) => void;
 }) {
   const state = getBookingState(booking);
   const isUpcoming = state === "upcoming";
-  const canCancelCurrentBooking =
-    role === "admin"
-      ? isUpcoming
-      : Boolean(
-          isUpcoming &&
-            booking.time_slots?.slot_date &&
-            booking.time_slots?.start_time &&
-            canCancelBooking(
-              booking.time_slots.slot_date,
-              booking.time_slots.start_time
-            )
-        );
+  const canCancelCurrentBooking = Boolean(
+    isUpcoming &&
+      booking.time_slots?.slot_date &&
+      booking.time_slots?.start_time &&
+      canCancelBooking(
+        booking.time_slots.slot_date,
+        booking.time_slots.start_time
+      )
+  );
 
   const cardClass =
     state === "upcoming"
@@ -120,12 +115,6 @@ function BookingCard({
             {formatBookingDate(booking.time_slots?.slot_date)}
           </p>
           <p className="text-sm text-slate-600">{formatBookingTime(booking)}</p>
-
-          {isUpcoming && !canCancelCurrentBooking && role !== "admin" ? (
-            <p className="text-sm text-amber-700">
-              La cancelación solo se permite con más de 1 hora de anticipación.
-            </p>
-          ) : null}
         </div>
 
         {canCancelCurrentBooking ? (
@@ -232,7 +221,6 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
 
             <BookingCard
               booking={nextBooking}
-              role={profile?.role}
               loadingId={loadingId}
               onCancel={cancel}
             />
@@ -255,7 +243,6 @@ export function MyBookingsList({ bookings }: { bookings: Booking[] }) {
                 <BookingCard
                   key={booking.id}
                   booking={booking}
-                  role={profile?.role}
                   loadingId={loadingId}
                   onCancel={cancel}
                 />

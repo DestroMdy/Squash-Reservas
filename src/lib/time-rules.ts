@@ -1,8 +1,7 @@
 import type { ScheduleDayOverride } from "@/types/db";
 
 const ARGENTINA_UTC_OFFSET = "-03:00";
-const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const ONE_DAY_IN_MS = 24 * ONE_HOUR_IN_MS;
+const ONE_DAY_IN_MS = 24 * 60 * 60 * 1000;
 
 function padTimeValue(value: number) {
   return String(value).padStart(2, "0");
@@ -90,8 +89,7 @@ export function canReserveSlot(
 
 export function canCancelBooking(slotDate: string, startTime: string) {
   const bookingStart = buildSlotDateTime(slotDate, startTime);
-  const minimumCancelTime = new Date(bookingStart.getTime() - ONE_HOUR_IN_MS);
-  return new Date() <= minimumCancelTime;
+  return new Date() <= bookingStart;
 }
 
 export function isSlotWithinClubHours(

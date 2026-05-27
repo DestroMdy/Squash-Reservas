@@ -35,13 +35,13 @@ describe("time-rules", () => {
     ).toBe(true);
   });
 
-  it("permite cancelar solo con más de una hora de anticipación", () => {
+  it("permite cancelar hasta el momento de inicio del turno", () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-20T21:59:59Z"));
+    vi.setSystemTime(new Date("2026-03-20T22:59:59Z"));
 
     expect(canCancelBooking("2026-03-20", "20:00:00")).toBe(true);
 
-    vi.setSystemTime(new Date("2026-03-20T22:00:01Z"));
+    vi.setSystemTime(new Date("2026-03-20T23:00:01Z"));
     expect(canCancelBooking("2026-03-20", "20:00:00")).toBe(false);
   });
 
